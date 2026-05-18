@@ -1,4 +1,9 @@
 import 'reflect-metadata';
+import { config } from 'dotenv';
+import { resolve } from 'path';
+// 從 monorepo root 載入 .env
+config({ path: resolve(__dirname, '../../../.env') });
+
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
