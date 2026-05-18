@@ -1,9 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { db } from '../../db';
-import { users } from '../../db/schema';
 import { eq } from 'drizzle-orm';
+import { DB } from '../../db';
+import type { AppDb } from '../../db';
+import { users } from '../../db/schema';
 
 export interface JwtPayload {
   sub: string;
@@ -13,7 +14,7 @@ export interface JwtPayload {
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
-  constructor() {
+  constructor(@Inject(DB) private readonly db: AppDb) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
       ignoreExpiration: false,
@@ -22,21 +23,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   async validate(payload: JwtPayload) {
-    const [user] = await db
-      .select({
-        id: users.id,
-        email: users.email,
-        role: users.role,
-        status: users.status,
-      })
+    const rows = await this.db
+      .select({ id: users.id, email: users.email, role: users.role, status: users.status })
       .from(users)
       .where(eq(users.id, payload.sub))
       .limit(1);
 
+    const user = rows[0];
     if (!user || user.status !== 'active') {
       throw new UnauthorizedException('帳號不存在或已停用');
     }
-
     return user;
   }
 }

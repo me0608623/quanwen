@@ -2,12 +2,15 @@ import {
   Injectable,
   ConflictException,
   UnauthorizedException,
+  Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { db } from '../db';
-import { users, oauthAccounts, NewUser } from '../db/schema';
 import { eq } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
+import { DB } from '../db';
+import type { AppDb } from '../db';
+import { users, oauthAccounts } from '../db/schema';
+import type { NewUser } from '../db/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
 import type { JwtPayload } from './strategies/jwt.strategy';
@@ -16,29 +19,32 @@ const BCRYPT_ROUNDS = 12;
 
 @Injectable()
 export class AuthService {
-  constructor(private readonly jwtService: JwtService) {}
+  constructor(
+    @Inject(DB) private readonly db: AppDb,
+    private readonly jwtService: JwtService,
+  ) {}
 
   async register(dto: RegisterDto) {
-    const [existing] = await db
+    const existing = await this.db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, dto.email))
       .limit(1);
 
-    if (existing) {
+    if (existing.length > 0) {
       throw new ConflictException('此電子郵件已被使用');
     }
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
-    const [user] = await db
+    const inserted = await this.db
       .insert(users)
       .values({
         email: dto.email,
         passwordHash,
         displayName: dto.displayName,
         role: dto.role,
-      } satisfies Partial<NewUser> as NewUser)
+      } as NewUser)
       .returning({
         id: users.id,
         email: users.email,
@@ -46,24 +52,26 @@ export class AuthService {
         role: users.role,
       });
 
+    const user = inserted[0];
     const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
-
     return { user, token };
   }
 
   async login(dto: LoginDto) {
-    const [user] = await db
+    const rows = await this.db
       .select()
       .from(users)
       .where(eq(users.email, dto.email))
       .limit(1);
 
+    const user = rows[0];
+
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException('電子郵件或密碼錯誤');
     }
 
-    const passwordValid = await bcrypt.compare(dto.password, user.passwordHash);
-    if (!passwordValid) {
+    const valid = await bcrypt.compare(dto.password, user.passwordHash);
+    if (!valid) {
       throw new UnauthorizedException('電子郵件或密碼錯誤');
     }
 
@@ -72,14 +80,8 @@ export class AuthService {
     }
 
     const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
-
     return {
-      user: {
-        id: user.id,
-        email: user.email,
-        displayName: user.displayName,
-        role: user.role,
-      },
+      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role },
       token,
     };
   }
@@ -91,60 +93,47 @@ export class AuthService {
     displayName: string;
     avatarUrl?: string;
   }) {
-    // Check if OAuth account already exists
-    const [existingOAuth] = await db
+    const existingOAuth = await this.db
       .select({ userId: oauthAccounts.userId })
       .from(oauthAccounts)
       .where(eq(oauthAccounts.providerAccountId, profile.providerAccountId))
       .limit(1);
 
-    if (existingOAuth) {
-      const [user] = await db
+    if (existingOAuth.length > 0) {
+      const rows = await this.db
         .select({ id: users.id, email: users.email, displayName: users.displayName, role: users.role })
         .from(users)
-        .where(eq(users.id, existingOAuth.userId))
+        .where(eq(users.id, existingOAuth[0].userId))
         .limit(1);
-
+      const user = rows[0];
       return { user, token: this.signToken({ sub: user.id, email: user.email, role: user.role }) };
     }
 
-    // Check if user with this email already exists
     let userId: string;
-    const [existingUser] = await db
+    const existingUser = await this.db
       .select({ id: users.id })
       .from(users)
       .where(eq(users.email, profile.email))
       .limit(1);
 
-    if (existingUser) {
-      userId = existingUser.id;
+    if (existingUser.length > 0) {
+      userId = existingUser[0].id;
     } else {
-      const [newUser] = await db
+      const newUser = await this.db
         .insert(users)
-        .values({
-          email: profile.email,
-          displayName: profile.displayName,
-          avatarUrl: profile.avatarUrl,
-          role: 'respondent', // Google OAuth 預設為受試者
-          emailVerified: true,
-        })
+        .values({ email: profile.email, displayName: profile.displayName, avatarUrl: profile.avatarUrl, role: 'respondent', emailVerified: true } as NewUser)
         .returning({ id: users.id });
-
-      userId = newUser.id;
+      userId = newUser[0].id;
     }
 
-    await db.insert(oauthAccounts).values({
-      userId,
-      provider: profile.provider,
-      providerAccountId: profile.providerAccountId,
-    });
+    await this.db.insert(oauthAccounts).values({ userId, provider: profile.provider, providerAccountId: profile.providerAccountId });
 
-    const [user] = await db
+    const rows = await this.db
       .select({ id: users.id, email: users.email, displayName: users.displayName, role: users.role })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1);
-
+    const user = rows[0];
     return { user, token: this.signToken({ sub: user.id, email: user.email, role: user.role }) };
   }
 
