@@ -124,6 +124,11 @@ export function QuestionEditor({
         </div>
       )}
 
+      {/* Matrix config — Phase N.1 */}
+      {question.type === 'matrix' && (
+        <MatrixConfig question={question} onChange={onChange} />
+      )}
+
       {/* Rating config */}
       {question.type === 'rating' && (
         <div className="space-y-2 pl-2">
@@ -172,6 +177,111 @@ export function QuestionEditor({
             </div>
           )}
         </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Phase N.1：矩陣題編輯
+ * config.matrix = { rows: string[]; columns: string[]; scale?: 'rating' | 'single' | 'multiple' }
+ *   - rows：左側問題列（例如「品質」「價格」「服務」）
+ *   - columns：頂部選項（例如「很滿意」「滿意」「普通」「不滿意」）
+ *   - scale: 行的作答方式（單選 / 多選 / 評分）
+ */
+function MatrixConfig({ question, onChange }: { question: SurveyQuestion; onChange: (q: SurveyQuestion) => void }) {
+  const matrix = (question.config?.matrix as { rows?: string[]; columns?: string[]; scale?: string } | undefined) ?? {};
+  const rows = matrix.rows ?? [''];
+  const columns = matrix.columns ?? [''];
+  const scale = matrix.scale ?? 'single';
+
+  const update = (patch: Partial<{ rows: string[]; columns: string[]; scale: string }>) => {
+    onChange({
+      ...question,
+      config: {
+        ...(question.config ?? {}),
+        matrix: { rows, columns, scale, ...matrix, ...patch },
+      },
+    });
+  };
+
+  const setRow = (i: number, v: string) =>
+    update({ rows: rows.map((r, idx) => (idx === i ? v : r)) });
+  const setCol = (i: number, v: string) =>
+    update({ columns: columns.map((c, idx) => (idx === i ? v : c)) });
+
+  return (
+    <div className="space-y-2 pl-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs text-muted-foreground">作答方式：</span>
+        <select
+          value={scale}
+          onChange={(e) => update({ scale: e.target.value })}
+          className="rounded border border-input bg-background px-2 py-1 text-xs"
+        >
+          <option value="single">每列單選</option>
+          <option value="multiple">每列多選</option>
+        </select>
+      </div>
+
+      {/* Rows */}
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">列（問題項目）</p>
+        {rows.map((r, i) => (
+          <div key={i} className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-muted-foreground w-5">R{i + 1}.</span>
+            <input
+              type="text"
+              value={r}
+              onChange={(e) => setRow(i, e.target.value)}
+              placeholder={`列 ${i + 1}（例如「品質」「價格」）`}
+              className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => update({ rows: rows.filter((_, idx) => idx !== i) })}
+              className="text-xs text-muted-foreground hover:text-destructive"
+            >×</button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => update({ rows: [...rows, ''] })}
+          className="text-xs text-primary hover:underline"
+        >+ 新增列</button>
+      </div>
+
+      {/* Columns */}
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-slate-500 mb-1">欄（選項）</p>
+        {columns.map((c, i) => (
+          <div key={i} className="flex items-center gap-2 mb-1">
+            <span className="text-xs text-muted-foreground w-5">C{i + 1}.</span>
+            <input
+              type="text"
+              value={c}
+              onChange={(e) => setCol(i, e.target.value)}
+              placeholder={`欄 ${i + 1}（例如「很滿意」「不滿意」）`}
+              className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+            />
+            <button
+              type="button"
+              onClick={() => update({ columns: columns.filter((_, idx) => idx !== i) })}
+              className="text-xs text-muted-foreground hover:text-destructive"
+            >×</button>
+          </div>
+        ))}
+        <button
+          type="button"
+          onClick={() => update({ columns: [...columns, ''] })}
+          className="text-xs text-primary hover:underline"
+        >+ 新增欄</button>
+      </div>
+
+      {rows.filter(Boolean).length > 0 && columns.filter(Boolean).length > 0 && (
+        <p className="text-[10px] text-slate-400">
+          將產生 {rows.filter(Boolean).length} × {columns.filter(Boolean).length} 的矩陣
+        </p>
       )}
     </div>
   );

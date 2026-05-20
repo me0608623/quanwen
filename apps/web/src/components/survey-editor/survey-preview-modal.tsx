@@ -185,9 +185,66 @@ export function SurveyPreviewModal({ title, description, questions, open, onClos
             </div>
           )}
 
-          {q.type === 'matrix' && (
-            <p className="rounded bg-amber-50 p-2 text-xs text-amber-700">⚠️ 矩陣題預覽尚未實作（schema 有但 UI 未做）</p>
-          )}
+          {q.type === 'matrix' && (() => {
+            const m = (q.config?.matrix as { rows?: string[]; columns?: string[]; scale?: string } | undefined) ?? {};
+            const rows = (m.rows ?? []).filter(Boolean);
+            const cols = (m.columns ?? []).filter(Boolean);
+            const scale = m.scale ?? 'single';
+            if (rows.length === 0 || cols.length === 0) {
+              return <p className="rounded bg-amber-50 p-2 text-xs text-amber-700">矩陣題尚未設定列/欄</p>;
+            }
+            const matrixAnswer = (a.textAnswer ? JSON.parse(a.textAnswer) : {}) as Record<string, string | string[]>;
+            const setCell = (rowIdx: number, colIdx: number) => {
+              const next = { ...matrixAnswer };
+              const rowKey = `r${rowIdx}`;
+              const colVal = `c${colIdx}`;
+              if (scale === 'multiple') {
+                const arr = Array.isArray(next[rowKey]) ? (next[rowKey] as string[]) : [];
+                next[rowKey] = arr.includes(colVal) ? arr.filter((x) => x !== colVal) : [...arr, colVal];
+              } else {
+                next[rowKey] = colVal;
+              }
+              setAns({ textAnswer: JSON.stringify(next) });
+            };
+            const isPicked = (rowIdx: number, colIdx: number) => {
+              const v = matrixAnswer[`r${rowIdx}`];
+              if (!v) return false;
+              if (Array.isArray(v)) return v.includes(`c${colIdx}`);
+              return v === `c${colIdx}`;
+            };
+            return (
+              <div className="overflow-x-auto">
+                <table className="text-xs border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-1.5"></th>
+                      {cols.map((c, i) => (
+                        <th key={i} className="p-1.5 font-medium text-slate-600 border-b border-slate-200 min-w-[50px]">{c}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((r, ri) => (
+                      <tr key={ri}>
+                        <td className="p-1.5 text-slate-700 border-r border-slate-200 pr-2">{r}</td>
+                        {cols.map((_, ci) => (
+                          <td key={ci} className="p-1.5 text-center">
+                            <input
+                              type={scale === 'multiple' ? 'checkbox' : 'radio'}
+                              name={`matrix_${currentIdx}_r${ri}`}
+                              checked={isPicked(ri, ci)}
+                              onChange={() => setCell(ri, ci)}
+                              className="cursor-pointer"
+                            />
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })()}
         </div>
 
         {/* Actions */}

@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { usePublicSurvey, useSubmitResponse, AnswerInput, PublicQuestion } from '@/hooks/use-responses';
+import { usePublicSurvey, useSubmitResponse, AnswerInput, PublicQuestion, PublicSurvey } from '@/hooks/use-responses';
 import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
 
 export default function SurveyFillPage() {
@@ -36,6 +36,7 @@ export default function SurveyFillPage() {
   }, []);
 
   const [answers, setAnswers] = useState<Record<string, AnswerInput>>({});
+  const [pageIdx, setPageIdx] = useState(0);  // Phase N.2: 分頁狀態
   const [submitted, setSubmitted] = useState(false);
   const [flagged, setFlagged] = useState(false);
 
@@ -57,6 +58,15 @@ export default function SurveyFillPage() {
       if (q.type === 'text' && !ans.textAnswer?.trim()) return false;
       if ((q.type === 'single_choice' || q.type === 'multiple_choice') && !ans.selectedOptionIds?.length) return false;
       if (q.type === 'rating' && ans.ratingValue == null) return false;
+      // Phase N.1: matrix 至少要每列都答（如果 required）
+      if (q.type === 'matrix') {
+        try {
+          const m = (q.config?.matrix as { rows?: string[] } | undefined) ?? {};
+          const rowCount = (m.rows ?? []).filter(Boolean).length;
+          const ma = ans.textAnswer ? JSON.parse(ans.textAnswer) as Record<string, unknown> : {};
+          if (Object.keys(ma).length < rowCount) return false;
+        } catch { return false; }
+      }
     }
     return true;
   };
@@ -154,9 +164,86 @@ export default function SurveyFillPage() {
         </div>
       )}
 
-      {/* Form */}
-      <form onSubmit={handleSubmit} className="space-y-8">
-        {survey.questions.map((q, i) => (
+      {/* Phase N.2: 分頁 form — 題數 > 6 才啟動分頁 */}
+      <PaginatedSurveyForm
+        survey={survey}
+        answers={answers}
+        setAnswer={setAnswer}
+        pageIdx={pageIdx}
+        setPageIdx={setPageIdx}
+        validate={validate}
+        onSubmit={handleSubmit}
+        submitting={submitResponse.isPending}
+        submitError={submitResponse.error}
+      />
+    </main>
+  );
+}
+
+// ─── Phase N.2 分頁表單 ─────────────────────────────────────────────────────
+
+function PaginatedSurveyForm({
+  survey,
+  answers,
+  setAnswer,
+  pageIdx,
+  setPageIdx,
+  validate,
+  onSubmit,
+  submitting,
+  submitError,
+}: {
+  survey: PublicSurvey;
+  answers: Record<string, AnswerInput>;
+  setAnswer: (id: string, partial: Partial<AnswerInput>) => void;
+  pageIdx: number;
+  setPageIdx: (n: number) => void;
+  validate: () => boolean;
+  onSubmit: (e: React.FormEvent) => void;
+  submitting: boolean;
+  submitError: unknown;
+}) {
+  const PAGE_SIZE = 5;
+  const total = survey.questions.length;
+  const paginated = total > 6;
+  const totalPages = paginated ? Math.ceil(total / PAGE_SIZE) : 1;
+  const pageQuestions = paginated
+    ? survey.questions.slice(pageIdx * PAGE_SIZE, (pageIdx + 1) * PAGE_SIZE)
+    : survey.questions;
+  const isLastPage = pageIdx >= totalPages - 1;
+
+  const pageCanProceed = pageQuestions.every((q) => {
+    if (!q.isRequired) return true;
+    const ans = answers[q.id];
+    if (!ans) return false;
+    if (q.type === 'text') return !!ans.textAnswer?.trim();
+    if (q.type === 'single_choice' || q.type === 'multiple_choice') return !!ans.selectedOptionIds?.length;
+    if (q.type === 'rating') return ans.ratingValue != null;
+    if (q.type === 'matrix') {
+      try {
+        const m = (q.config?.matrix as { rows?: string[] } | undefined) ?? {};
+        const rowCount = (m.rows ?? []).filter(Boolean).length;
+        const ma = ans.textAnswer ? JSON.parse(ans.textAnswer) as Record<string, unknown> : {};
+        return Object.keys(ma).length >= rowCount;
+      } catch { return false; }
+    }
+    return true;
+  });
+
+  return (
+    <form onSubmit={onSubmit} className="space-y-8">
+      {paginated && (
+        <div className="-mt-4">
+          <div className="h-1 rounded bg-slate-100">
+            <div className="h-1 rounded bg-primary transition-all" style={{ width: `${((pageIdx + 1) / totalPages) * 100}%` }} />
+          </div>
+          <p className="mt-1 text-[10px] text-slate-400">第 {pageIdx + 1} / {totalPages} 頁 · 共 {total} 題</p>
+        </div>
+      )}
+
+      {pageQuestions.map((q) => {
+        const i = survey.questions.indexOf(q);
+        return (
           <QuestionInput
             key={q.id}
             question={q}
@@ -164,32 +251,62 @@ export default function SurveyFillPage() {
             answer={answers[q.id]}
             onChange={(partial) => setAnswer(q.id, partial)}
           />
-        ))}
+        );
+      })}
 
-        {submitResponse.error && (() => {
-          const err = submitResponse.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
-          const backendMsg = err?.response?.data?.message;
-          const status = err?.response?.status;
-          return (
-            <p className="text-sm text-destructive">
-              {status === 409 ? '⚠️ 您已填寫過此問卷'
-                : status === 401 ? '⚠️ 請重新登入'
-                : status === 403 ? '⚠️ ' + (backendMsg ?? '權限不足')
-                : status === 400 ? '⚠️ ' + (backendMsg ?? '送出資料有誤')
-                : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
-            </p>
-          );
-        })()}
+      {/* 分頁導覽 */}
+      {paginated && !isLastPage && (
+        <div className="flex justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setPageIdx(Math.max(0, pageIdx - 1))}
+            disabled={pageIdx === 0}
+            className="rounded-md border border-border px-4 py-2 text-sm disabled:opacity-40 hover:bg-muted"
+          >← 上一頁</button>
+          <button
+            type="button"
+            onClick={() => setPageIdx(pageIdx + 1)}
+            disabled={!pageCanProceed}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >下一頁 →</button>
+        </div>
+      )}
 
+      {paginated && isLastPage && pageIdx > 0 && (
         <button
-          type="submit"
-          disabled={submitResponse.isPending || !validate()}
-          className="w-full rounded-md bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-        >
-          {submitResponse.isPending ? '提交中…' : '送出填答'}
-        </button>
-      </form>
-    </main>
+          type="button"
+          onClick={() => setPageIdx(pageIdx - 1)}
+          className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
+        >← 上一頁</button>
+      )}
+
+      {/* 最後一頁（或無分頁）才顯示送出 + 錯誤訊息 */}
+      {(!paginated || isLastPage) && (
+        <>
+          {!!submitError && (() => {
+            const err = submitError as { response?: { data?: { message?: string }; status?: number }; message?: string };
+            const backendMsg = err?.response?.data?.message;
+            const status = err?.response?.status;
+            return (
+              <p className="text-sm text-destructive">
+                {status === 409 ? '⚠️ 您已填寫過此問卷'
+                  : status === 401 ? '⚠️ 請重新登入'
+                  : status === 403 ? '⚠️ ' + (backendMsg ?? '權限不足')
+                  : status === 400 ? '⚠️ ' + (backendMsg ?? '送出資料有誤')
+                  : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
+              </p>
+            );
+          })()}
+          <button
+            type="submit"
+            disabled={submitting || !validate()}
+            className="w-full rounded-md bg-primary py-3 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {submitting ? '提交中…' : '送出填答'}
+          </button>
+        </>
+      )}
+    </form>
   );
 }
 
@@ -300,6 +417,71 @@ function QuestionInput({
           )}
         </div>
       )}
+
+      {/* Phase N.1: Matrix */}
+      {question.type === 'matrix' && (() => {
+        const m = (question.config?.matrix as { rows?: string[]; columns?: string[]; scale?: string } | undefined) ?? {};
+        const rows = (m.rows ?? []).filter(Boolean);
+        const cols = (m.columns ?? []).filter(Boolean);
+        const scale = m.scale ?? 'single';
+        if (rows.length === 0 || cols.length === 0) {
+          return <p className="text-xs text-amber-700">⚠️ 此矩陣題尚未設定</p>;
+        }
+        const matrixAnswer = (() => {
+          try { return answer?.textAnswer ? (JSON.parse(answer.textAnswer) as Record<string, string | string[]>) : {}; }
+          catch { return {}; }
+        })();
+        const setCell = (rowIdx: number, colIdx: number) => {
+          const next = { ...matrixAnswer };
+          const rowKey = `r${rowIdx}`;
+          const colVal = `c${colIdx}`;
+          if (scale === 'multiple') {
+            const arr = Array.isArray(next[rowKey]) ? (next[rowKey] as string[]) : [];
+            next[rowKey] = arr.includes(colVal) ? arr.filter((x) => x !== colVal) : [...arr, colVal];
+          } else {
+            next[rowKey] = colVal;
+          }
+          onChange({ textAnswer: JSON.stringify(next) });
+        };
+        const isPicked = (rowIdx: number, colIdx: number) => {
+          const v = matrixAnswer[`r${rowIdx}`];
+          if (!v) return false;
+          if (Array.isArray(v)) return v.includes(`c${colIdx}`);
+          return v === `c${colIdx}`;
+        };
+        return (
+          <div className="overflow-x-auto">
+            <table className="text-sm border-collapse">
+              <thead>
+                <tr>
+                  <th></th>
+                  {cols.map((c, i) => (
+                    <th key={i} className="px-3 py-2 font-medium text-muted-foreground border-b border-border min-w-[60px]">{c}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((r, ri) => (
+                  <tr key={ri}>
+                    <td className="pr-3 py-2 border-r border-border text-sm">{r}</td>
+                    {cols.map((_, ci) => (
+                      <td key={ci} className="px-3 py-2 text-center">
+                        <input
+                          type={scale === 'multiple' ? 'checkbox' : 'radio'}
+                          name={`${question.id}_r${ri}`}
+                          checked={isPicked(ri, ci)}
+                          onChange={() => setCell(ri, ci)}
+                          className="h-4 w-4 cursor-pointer accent-primary"
+                        />
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
     </div>
   );
 }
