@@ -7,42 +7,14 @@ on:
     branches: [main, develop]
 
 jobs:
-  ci:
-    name: Type-check / Lint / Test
+  static:
+    name: Type-check / Lint / Audit
     runs-on: ubuntu-latest
-
-    services:
-      postgres:
-        image: pgvector/pgvector:pg16
-        env:
-          POSTGRES_USER: quanwen
-          POSTGRES_PASSWORD: quanwen
-          POSTGRES_DB: quanwen_test
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: pnpm/action-setup@v4
         with:
           version: 9
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
@@ -57,11 +29,134 @@ jobs:
       - name: Lint
         run: pnpm lint
 
+      - name: Security audit (high+ severity)
+        run: pnpm audit --audit-level high
+        continue-on-error: true  # 暫不阻擋；prod 上線前要改 hard fail
+
+  test:
+    name: Unit + Integration tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: quanwen
+          POSTGRES_PASSWORD: quanwen
+          POSTGRES_DB: quanwen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Test
         run: pnpm test
         env:
           DATABASE_URL: postgresql://quanwen:quanwen@localhost:5432/quanwen_test
           REDIS_URL: redis://localhost:6379
-          JWT_SECRET: ci_test_secret_not_for_production
+          JWT_SECRET: ci_test_secret_not_for_production_at_least_32_chars
           JWT_EXPIRES_IN: 7d
+          PII_ENCRYPTION_KEY: ci_test_pii_encryption_key_not_for_prod
+          PII_KDF_SALT: ci_test_salt
           NODE_ENV: test
+
+  build:
+    name: Build (api + web)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build all
+        run: pnpm build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+
+  e2e:
+    name: Playwright E2E
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: quanwen
+          POSTGRES_PASSWORD: quanwen
+          POSTGRES_DB: quanwen_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browsers
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Build api (for production-like e2e)
+        run: pnpm --filter api build
+
+      - name: Run E2E
+        run: pnpm --filter web test:e2e
+        env:
+          CI: 'true'
+          DATABASE_URL: postgresql://quanwen:quanwen@localhost:5432/quanwen_test
+          JWT_SECRET: ci_test_secret_not_for_production_at_least_32_chars
+          PII_ENCRYPTION_KEY: ci_test_pii_encryption_key
+          PII_KDF_SALT: ci_test_salt
+          WEB_URL: http://localhost:3000
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+          NODE_ENV: development
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: apps/web/playwright-report/
+          retention-days: 14

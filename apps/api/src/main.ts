@@ -13,6 +13,14 @@ const isPlaceholder = (v: string | undefined) =>
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  NODE_ENV: z.enum(['development', 'test', 'production']).optional().default('development'),
+  PORT: z.string().regex(/^\d+$/).optional(),
+  WEB_URL: z.string().url().optional(),
+
+  // Phase B: PII 加密金鑰（prod 必設，dev 用 fallback）
+  PII_ENCRYPTION_KEY: z.string().min(16).optional(),
+  PII_KDF_SALT: z.string().min(8).optional(),
+
   // OAuth providers are all optional — each is enabled when its required vars are set
   GOOGLE_CLIENT_ID: z.string().optional(),
   GOOGLE_CLIENT_SECRET: z.string().optional(),
@@ -25,11 +33,26 @@ const envSchema = z.object({
   APPLE_KEY_ID: z.string().optional(),
   APPLE_PRIVATE_KEY: z.string().optional(),
   APPLE_CALLBACK_URL: z.string().optional(),
+
   // SMTP is optional (falls back to defaults); warn in production if missing
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.string().regex(/^\d+$/).optional(),
   SMTP_USER: z.string().optional(),
   SMTP_PASS: z.string().optional(),
+
+  // ECPay（prod 才啟用）
+  ECPAY_MERCHANT_ID: z.string().optional(),
+  ECPAY_HASH_KEY: z.string().optional(),
+  ECPAY_HASH_IV: z.string().optional(),
+  ECPAY_PAYMENT_URL: z.string().url().optional(),
+
+  // Z.ai LLM
+  ZAI_API_KEY: z.string().optional(),
+  ZAI_BASE_URL: z.string().url().optional(),
+
+  // Sentry observability
+  SENTRY_DSN: z.string().url().optional(),
+  SENTRY_TRACES_SAMPLE_RATE: z.string().regex(/^0(\.\d+)?|1(\.0)?$/).optional(),
 });
 
 const envResult = envSchema.safeParse(process.env);
@@ -39,6 +62,34 @@ if (!envResult.success) {
     console.error(`  • ${issue.path[0]}: ${issue.message}`);
   }
   process.exit(1);
+}
+
+// Phase O.2: Production 強制檢查（dev 只警告，prod 直接 fail）
+const isProd = process.env.NODE_ENV === 'production';
+const prodRequired: Array<[string, string]> = [
+  ['PII_ENCRYPTION_KEY', 'PII 加密金鑰必設，否則身分證 / 銀行帳號無法安全儲存'],
+  ['WEB_URL', 'CORS 需要 WEB_URL；prod 缺會 fallback localhost'],
+  ['ECPAY_MERCHANT_ID', '金流不能工作；綠界 webhook 也無法驗簽'],
+  ['ECPAY_HASH_KEY', '同上'],
+  ['ECPAY_HASH_IV', '同上'],
+];
+const prodRecommended: Array<[string, string]> = [
+  ['PII_KDF_SALT', '建議設一個隨機 16-byte hex 加強 scrypt KDF'],
+  ['SENTRY_DSN', '建議接 Sentry 才能在 prod 看 error stack'],
+  ['SMTP_HOST', '通知 / 忘記密碼 email 無法寄出'],
+  ['ZAI_API_KEY', 'AI 品質審核 / 反作弊建議將 fail-open'],
+];
+if (isProd) {
+  const missing = prodRequired.filter(([k]) => !process.env[k] || (process.env[k] as string).trim() === '');
+  if (missing.length > 0) {
+    console.error('❌ Production 缺少必要環境變數：');
+    for (const [k, why] of missing) console.error(`  • ${k}: ${why}`);
+    process.exit(1);
+  }
+  const missingRec = prodRecommended.filter(([k]) => !process.env[k]);
+  for (const [k, why] of missingRec) {
+    console.warn(`⚠️  Production 建議設 ${k}：${why}`);
+  }
 }
 
 const googleReady =
