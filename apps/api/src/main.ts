@@ -4,10 +4,92 @@ import { resolve } from 'path';
 // 從 monorepo root 載入 .env
 config({ path: resolve(__dirname, '../../../.env') });
 
+import { z } from 'zod';
+
+// Treat placeholder values from .env.example as "not set"
+const isPlaceholder = (v: string | undefined) =>
+  !v || v.startsWith('your_') || v === '';
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().min(1),
+  JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
+  // OAuth providers are all optional — each is enabled when its required vars are set
+  GOOGLE_CLIENT_ID: z.string().optional(),
+  GOOGLE_CLIENT_SECRET: z.string().optional(),
+  GOOGLE_CALLBACK_URL: z.string().optional(),
+  LINE_CHANNEL_ID: z.string().optional(),
+  LINE_CHANNEL_SECRET: z.string().optional(),
+  LINE_CALLBACK_URL: z.string().optional(),
+  APPLE_CLIENT_ID: z.string().optional(),
+  APPLE_TEAM_ID: z.string().optional(),
+  APPLE_KEY_ID: z.string().optional(),
+  APPLE_PRIVATE_KEY: z.string().optional(),
+  APPLE_CALLBACK_URL: z.string().optional(),
+  // SMTP is optional (falls back to defaults); warn in production if missing
+  SMTP_HOST: z.string().optional(),
+  SMTP_PORT: z.string().regex(/^\d+$/).optional(),
+  SMTP_USER: z.string().optional(),
+  SMTP_PASS: z.string().optional(),
+});
+
+const envResult = envSchema.safeParse(process.env);
+if (!envResult.success) {
+  console.error('❌ 缺少必要的環境變數，請檢查 .env 設定：');
+  for (const issue of envResult.error.issues) {
+    console.error(`  • ${issue.path[0]}: ${issue.message}`);
+  }
+  process.exit(1);
+}
+
+const googleReady =
+  !isPlaceholder(process.env.GOOGLE_CLIENT_ID) &&
+  !isPlaceholder(process.env.GOOGLE_CLIENT_SECRET);
+const lineReady =
+  !isPlaceholder(process.env.LINE_CHANNEL_ID) &&
+  !isPlaceholder(process.env.LINE_CHANNEL_SECRET);
+const appleReady =
+  !isPlaceholder(process.env.APPLE_CLIENT_ID) &&
+  !isPlaceholder(process.env.APPLE_PRIVATE_KEY);
+console.log('🔐 OAuth providers:',
+  googleReady ? '✅ Google' : '⚠️ Google (未設定)',
+  lineReady ? '✅ LINE' : '⚠️ LINE (未設定)',
+  appleReady ? '✅ Apple' : '⚠️ Apple (未設定)',
+);
+
+if (process.env.NODE_ENV === 'production' && !process.env.SMTP_HOST) {
+  console.warn('⚠️  SMTP_HOST 未設定，忘記密碼郵件功能將無法使用');
+}
+if (process.env.NODE_ENV === 'production' && !process.env.ECPAY_MERCHANT_ID) {
+  console.warn('⚠️  ECPAY_MERCHANT_ID 未設定，ECPay 儲值功能將無法使用');
+}
+
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+
+// Phase F.2: Sentry SDK skeleton（env-gated；安裝 @sentry/node 後解開 require）
+function initSentry() {
+  const dsn = process.env.SENTRY_DSN;
+  if (!dsn) return;
+  try {
+    // 套件需要 pnpm install @sentry/node @sentry/profiling-node 才會解析；
+    // 用 dynamic require 避開靜態 import 解析錯誤
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const Sentry = require('@sentry/node');
+    Sentry.init({
+      dsn,
+      environment: process.env.NODE_ENV ?? 'development',
+      tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
+      // 把 PII 預設關掉（已加密）— 用戶 ID 仍會被送但 email 等不會
+      sendDefaultPii: false,
+    });
+    console.log('✅ Sentry 已啟用');
+  } catch {
+    console.warn('⚠️ SENTRY_DSN 已設定但 @sentry/node 未安裝，跳過');
+  }
+}
+initSentry();
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
@@ -16,6 +98,21 @@ async function bootstrap() {
 
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
+
+  // Enable URL-encoded body parsing (needed for Apple Sign In form_post callback)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const expressApp = app.getHttpAdapter().getInstance() as { use: (...args: unknown[]) => void };
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  expressApp.use(require('express').urlencoded({ extended: true }));
+
+  // Phase K.1: Helmet 安全 headers（X-Frame-Options/HSTS/X-Content-Type-Options 等）
+  // contentSecurityPolicy 在 dev 關掉以免擋 Swagger/Next.js dev assets；prod 開啟
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const helmet = require('helmet');
+  expressApp.use(helmet({
+    contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
+    crossOriginEmbedderPolicy: false, // 避免擋外部 OAuth iframe
+  }));
 
   // CORS
   app.enableCors({
@@ -26,8 +123,8 @@ async function bootstrap() {
   // API prefix
   app.setGlobalPrefix('api/v1');
 
-  // Swagger (開發環境)
-  if (process.env.NODE_ENV !== 'production') {
+  // Swagger (開發環境，opt-in 避免某些 controller 參數元資料缺失導致掃描失敗)
+  if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_SWAGGER === '1') {
     const config = new DocumentBuilder()
       .setTitle('券問 QuanWen API')
       .setDescription('雙邊問卷媒合平台 API')

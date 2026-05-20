@@ -2,6 +2,249 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ============================================================
+ * Login Page (/login) — 與 10-附件與素材/登入畫面.html 視覺一致
+ * 命名空間: lp- (Login Page)
+ * ============================================================ */
+.lp-shell {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  min-height: 100vh;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
+  color: #0F172A;
+  background: #FFFFFF;
+  -webkit-font-smoothing: antialiased;
+  line-height: 1.5;
+}
+
+.lp-brandPanel {
+  background: linear-gradient(135deg, #0F2A5C 0%, #1F6FEB 50%, #8B5CF6 100%);
+  color: white;
+  padding: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  position: relative;
+  overflow: hidden;
+}
+.lp-brandPanel::before {
+  content: '';
+  position: absolute;
+  top: -200px; right: -200px;
+  width: 500px; height: 500px;
+  background: radial-gradient(circle, rgba(251,191,36,0.15) 0%, transparent 70%);
+  pointer-events: none;
+}
+.lp-brandPanel::after {
+  content: '';
+  position: absolute;
+  bottom: -150px; left: -150px;
+  width: 400px; height: 400px;
+  background: radial-gradient(circle, rgba(16,185,129,0.12) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.lp-brandTop { display: flex; align-items: center; gap: 12px; position: relative; z-index: 1; }
+.lp-brandMark {
+  width: 40px; height: 40px; border-radius: 10px;
+  background: white; color: #1F6FEB;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 18px; letter-spacing: -1px;
+}
+.lp-brandName { font-weight: 700; font-size: 18px; }
+.lp-brandSub { font-size: 11px; font-weight: 400; opacity: 0.75; display: block; margin-top: 1px; letter-spacing: 1.5px; }
+
+.lp-brandHero { position: relative; z-index: 1; max-width: 480px; }
+.lp-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: rgba(255,255,255,0.12);
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 6px 12px; border-radius: 100px;
+  font-size: 12px; font-weight: 500; margin-bottom: 28px;
+  backdrop-filter: blur(8px);
+}
+.lp-dot {
+  width: 6px; height: 6px; background: #FBBF24;
+  border-radius: 50%; animation: lp-pulse 2s infinite;
+}
+@keyframes lp-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+.lp-heroTitle {
+  font-size: 44px; font-weight: 800; line-height: 1.15;
+  letter-spacing: -1.5px; margin-bottom: 20px;
+}
+.lp-accent { color: #FBBF24; }
+.lp-heroDesc {
+  font-size: 16px; line-height: 1.7;
+  color: rgba(255,255,255,0.85);
+  margin-bottom: 32px;
+}
+
+.lp-brandFeatures { display: flex; flex-direction: column; gap: 14px; position: relative; z-index: 1; }
+.lp-featureItem {
+  display: flex; align-items: center; gap: 14px;
+  background: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.12);
+  padding: 14px 18px; border-radius: 12px;
+  backdrop-filter: blur(8px);
+  max-width: 480px;
+}
+.lp-featureIcon {
+  width: 36px; height: 36px; border-radius: 8px; flex-shrink: 0;
+  background: rgba(255,255,255,0.15);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+}
+.lp-featureTitle { font-weight: 600; font-size: 14px; }
+.lp-featureDesc { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+
+.lp-brandFoot { font-size: 12px; opacity: 0.6; position: relative; z-index: 1; }
+
+.lp-formPanel {
+  display: flex; flex-direction: column;
+  padding: 56px; justify-content: center;
+  background: #FFFFFF;
+}
+.lp-formWrap { width: 100%; max-width: 380px; margin: 0 auto; }
+
+.lp-formHead { margin-bottom: 32px; }
+.lp-formHead h2 {
+  font-size: 28px; font-weight: 700; color: #0F172A;
+  letter-spacing: -0.5px; margin-bottom: 6px;
+}
+.lp-formHead p { font-size: 14px; color: #64748B; }
+.lp-formHead a { color: #1F6FEB; text-decoration: none; font-weight: 600; }
+.lp-formHead a:hover { text-decoration: underline; }
+
+.lp-roleToggle {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 4px;
+  background: #F8FAFC;
+  padding: 4px; border-radius: 10px;
+  margin-bottom: 24px;
+}
+.lp-roleBtn {
+  background: transparent; border: none;
+  padding: 9px 12px; border-radius: 7px;
+  font-size: 13px; font-weight: 600; color: #64748B;
+  cursor: pointer; transition: all 0.15s;
+  font-family: inherit;
+}
+.lp-roleBtnActive {
+  background: white; color: #0F172A;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+}
+
+.lp-oauthGroup { display: flex; flex-direction: column; gap: 10px; margin-bottom: 24px; }
+.lp-oauthBtn {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  height: 44px; border-radius: 10px; cursor: pointer;
+  font-size: 14px; font-weight: 600; transition: all 0.15s;
+  border: 1px solid #DADCE0;
+  background: white; color: #3C4043;
+  font-family: inherit;
+}
+.lp-oauthBtn:hover { background: #F8F9FA; border-color: #CBD5E1; }
+.lp-oauthIcon { width: 18px; height: 18px; flex-shrink: 0; }
+
+.lp-oauthApple { background: #000000; color: white; border-color: #000000; }
+.lp-oauthApple:hover { background: #1A1A1A; }
+
+.lp-oauthLine { background: #06C755; color: white; border-color: #06C755; }
+.lp-oauthLine:hover { background: #05B14B; }
+
+.lp-divider {
+  display: flex; align-items: center; gap: 14px;
+  color: #94A3B8; font-size: 12px;
+  margin: 4px 0 24px; letter-spacing: 1px;
+}
+.lp-divider::before, .lp-divider::after {
+  content: ''; flex: 1; height: 1px; background: #E2E8F0;
+}
+
+.lp-formField { margin-bottom: 16px; }
+.lp-formField label {
+  display: block; font-size: 12px; font-weight: 600;
+  color: #0F172A; margin-bottom: 6px;
+}
+.lp-formField input {
+  width: 100%; height: 44px; padding: 0 14px;
+  border: 1.5px solid #E2E8F0; border-radius: 10px;
+  font-size: 14px; color: #0F172A; background: #FFFFFF;
+  transition: border-color 0.15s, box-shadow 0.15s;
+  font-family: inherit; box-sizing: border-box;
+}
+.lp-formField input::placeholder { color: #94A3B8; }
+.lp-formField input:focus {
+  outline: none; border-color: #1F6FEB;
+  box-shadow: 0 0 0 3px rgba(31,111,235,0.15);
+}
+.lp-withIcon { position: relative; }
+.lp-withIcon input { padding-left: 42px; }
+.lp-fieldIcon {
+  position: absolute; left: 14px; top: 50%;
+  transform: translateY(calc(-50% + 13px));
+  width: 18px; height: 18px; color: #94A3B8;
+  pointer-events: none;
+}
+.lp-fieldToggle {
+  position: absolute; right: 12px; top: 50%;
+  transform: translateY(calc(-50% + 13px));
+  width: 32px; height: 32px;
+  background: transparent; border: none;
+  cursor: pointer; color: #94A3B8;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 6px;
+}
+.lp-fieldToggle:hover { color: #0F172A; background: #F8FAFC; }
+
+.lp-rowBetween {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 20px;
+}
+.lp-checkboxWrap {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-size: 13px; color: #64748B; cursor: pointer;
+}
+.lp-checkboxWrap input { width: 16px; height: 16px; accent-color: #1F6FEB; }
+.lp-forgotLink { font-size: 13px; color: #1F6FEB; text-decoration: none; font-weight: 600; }
+.lp-forgotLink:hover { text-decoration: underline; }
+
+.lp-btnSubmit {
+  width: 100%; height: 46px;
+  background: #1F6FEB; color: white; border: none;
+  border-radius: 10px; font-size: 15px; font-weight: 700;
+  cursor: pointer; transition: all 0.15s;
+  box-shadow: 0 1px 2px rgba(15,42,92,0.1);
+  font-family: inherit;
+}
+.lp-btnSubmit:hover { background: #0F2A5C; box-shadow: 0 4px 12px rgba(31,111,235,0.25); }
+.lp-btnSubmit:active { transform: translateY(1px); }
+.lp-btnSubmit:disabled { background: #94A3B8; cursor: not-allowed; box-shadow: none; }
+
+.lp-errorMsg { font-size: 12px; color: #DC2626; margin-top: 4px; margin-bottom: 8px; }
+
+.lp-footNote {
+  margin-top: 32px; font-size: 11px; color: #94A3B8;
+  text-align: center; line-height: 1.7;
+}
+.lp-footNote a { color: #64748B; text-decoration: underline; }
+
+@media (max-width: 960px) {
+  .lp-shell { grid-template-columns: 1fr; }
+  .lp-brandPanel { padding: 40px 32px 60px; min-height: auto; }
+  .lp-brandHero { max-width: none; }
+  .lp-heroTitle { font-size: 32px; }
+  .lp-brandFeatures { display: none; }
+  .lp-formPanel { padding: 40px 24px; }
+}
+@media (max-width: 480px) {
+  .lp-brandPanel { padding: 32px 24px 48px; }
+  .lp-heroTitle { font-size: 28px; }
+  .lp-heroDesc { font-size: 14px; }
+  .lp-formPanel { padding: 32px 20px; }
+  .lp-formHead h2 { font-size: 24px; }
+}
+
 @layer base {
   :root {
     --background: 0 0% 100%;
@@ -24,5 +267,37 @@
 
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+@keyframes q-home-drift {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(0, -18px, 0) scale(1.015);
+  }
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes q-home-float {
+  0%,
+  100% {
+    transform: translateY(0px) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
+  }
+}
+
+@keyframes q-home-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+  }
+  50% {
+    opacity: 0.9;
   }
 }

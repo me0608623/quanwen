@@ -13,7 +13,7 @@ import {
 
 export const userRoleEnum = pgEnum('user_role', ['surveyor', 'respondent', 'admin']);
 
-export const authProviderEnum = pgEnum('auth_provider', ['email', 'google', 'line']);
+export const authProviderEnum = pgEnum('auth_provider', ['email', 'google', 'line', 'apple']);
 
 export const userStatusEnum = pgEnum('user_status', ['active', 'suspended', 'pending_verify']);
 
@@ -30,6 +30,11 @@ export const users = pgTable(
     displayName: varchar('display_name', { length: 100 }).notNull(),
     avatarUrl: text('avatar_url'),
     emailVerified: boolean('email_verified').notNull().default(false),
+    passwordResetToken: varchar('password_reset_token', { length: 128 }),
+    passwordResetExpiresAt: timestamp('password_reset_expires_at', { withTimezone: true }),
+    emailVerificationToken: varchar('email_verification_token', { length: 128 }),
+    emailVerificationExpiresAt: timestamp('email_verification_expires_at', { withTimezone: true }),
+    roleSelectedAt: timestamp('role_selected_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),
@@ -38,6 +43,8 @@ export const users = pgTable(
     emailIdx: index('users_email_idx').on(t.email),
     roleIdx: index('users_role_idx').on(t.role),
     statusIdx: index('users_status_idx').on(t.status),
+    resetTokenIdx: index('users_password_reset_token_idx').on(t.passwordResetToken),
+    verifyTokenIdx: index('users_email_verification_token_idx').on(t.emailVerificationToken),
   }),
 );
 
@@ -52,6 +59,8 @@ export const oauthAccounts = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     provider: authProviderEnum('provider').notNull(),
     providerAccountId: varchar('provider_account_id', { length: 255 }).notNull(),
+    providerEmail: varchar('provider_email', { length: 255 }),
+    providerAvatarUrl: text('provider_avatar_url'),
     accessToken: text('access_token'),
     refreshToken: text('refresh_token'),
     tokenExpiresAt: timestamp('token_expires_at', { withTimezone: true }),

@@ -1,0 +1,63 @@
+# Phase F.5: 完整 stack（api + web + db + redis）
+#
+# 用法：
+#   docker compose -f docker-compose.yml -f docker-compose.full.yml up -d
+#
+# 預設值適合 demo / staging。Production 請改用 env_file 與 secret 管理。
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    container_name: quanwen_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgres://quanwen:quanwen@postgres:5432/quanwen_dev
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-change-me-in-production}
+      WEB_URL: ${WEB_URL:-http://localhost:3000}
+      # 以下需在 .env 設定才能啟用對應功能
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      LINE_CHANNEL_ID: ${LINE_CHANNEL_ID:-}
+      LINE_CHANNEL_SECRET: ${LINE_CHANNEL_SECRET:-}
+      APPLE_CLIENT_ID: ${APPLE_CLIENT_ID:-}
+      ECPAY_MERCHANT_ID: ${ECPAY_MERCHANT_ID:-}
+      ECPAY_HASH_KEY: ${ECPAY_HASH_KEY:-}
+      ECPAY_HASH_IV: ${ECPAY_HASH_IV:-}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      ZAI_API_KEY: ${ZAI_API_KEY:-}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+    ports:
+      - '3001:3001'
+    healthcheck:
+      test: ['CMD', 'wget', '-qO-', 'http://localhost:3001/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    container_name: quanwen_web
+    restart: unless-stopped
+    depends_on:
+      - api
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+      NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
+      NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
+    ports:
+      - '3000:3000'

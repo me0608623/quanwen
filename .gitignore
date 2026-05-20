@@ -32,3 +32,9 @@ coverage/
 
 # Drizzle
 drizzle/migrations/*.snap
+
+# Phase L 追加
+*.tsbuildinfo
+playwright-report/
+test-results/
+boot.log

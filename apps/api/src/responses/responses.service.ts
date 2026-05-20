@@ -1,0 +1,834 @@
+import {
+  Injectable,
+  Inject,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  ForbiddenException,
+  Logger,
+} from '@nestjs/common';
+import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { DB } from '../db';
+import type { AppDb } from '../db';
+import {
+  surveys,
+  surveyQuestions,
+  questionOptions,
+  surveyResponses,
+  responseAnswers,
+  respondentProfiles,
+  respondentTags,
+} from '../db/schema';
+import type { SubmitResponseDto } from './dto/submit-response.dto';
+import { AntiCheatService } from './anti-cheat.service';
+import { QualityAuditService } from './quality-audit.service';
+import { ReputationService } from './reputation.service';
+import { WalletService } from '../wallet/wallet.service';
+import { NotificationsService } from '../notifications/notifications.service';
+
+@Injectable()
+export class ResponsesService {
+  private readonly logger = new Logger(ResponsesService.name);
+
+  constructor(
+    @Inject(DB) private readonly db: AppDb,
+    private readonly antiCheat: AntiCheatService,
+    private readonly walletService: WalletService,
+    private readonly notifications: NotificationsService,
+    private readonly qualityAudit: QualityAuditService,
+    private readonly reputation: ReputationService,
+  ) {}
+
+  // ─── 受試者：取得可填的問卷列表（媒合篩選）──────────────────────────────────
+
+  async getAvailableSurveys(respondentId: string) {
+    // 取出受試者 profile（用於媒合篩選）
+    const profileRows = await this.db
+      .select()
+      .from(respondentProfiles)
+      .where(eq(respondentProfiles.userId, respondentId))
+      .limit(1);
+    const profile = profileRows[0] ?? null;
+
+    // Phase G.6: 取出受試者的興趣標籤 ids（用於 audience.requiredTagIds 過濾）
+    const tagRows = profile
+      ? await this.db
+          .select({ tagId: respondentTags.tagId })
+          .from(respondentTags)
+          .where(eq(respondentTags.respondentProfileId, profile.id))
+      : [];
+    const profileTagIds = new Set(tagRows.map((r) => r.tagId));
+
+    // 抓所有 published 且未過期的問卷
+    // Phase 7.6: 高獎勵優先（高信譽分受試者更傾向找好任務）
+    const allPublished = await this.db
+      .select({
+        id: surveys.id,
+        title: surveys.title,
+        description: surveys.description,
+        rewardPoints: surveys.rewardPoints,
+        targetCount: surveys.targetCount,
+        completedCount: surveys.completedCount,
+        expiresAt: surveys.expiresAt,
+        audienceCriteria: surveys.audienceCriteria,
+        isAnonymous: surveys.isAnonymous,
+        publishedAt: surveys.publishedAt,
+      })
+      .from(surveys)
+      .where(eq(surveys.status, 'published'))
+      .orderBy(desc(surveys.rewardPoints), desc(surveys.publishedAt));
+
+    // 已填過的問卷 id
+    const submittedRows = await this.db
+      .select({ surveyId: surveyResponses.surveyId })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.respondentId, respondentId),
+          eq(surveyResponses.status, 'submitted'),
+        ),
+      );
+    const submittedIds = new Set(submittedRows.map((r) => r.surveyId));
+
+    const now = new Date();
+
+    return allPublished.filter((s) => {
+      // 已填過 → 不顯示
+      if (submittedIds.has(s.id)) return false;
+      // 已過期 → 不顯示
+      if (s.expiresAt && new Date(s.expiresAt) < now) return false;
+      // 已達配額 → 不顯示
+      if (s.completedCount >= s.targetCount) return false;
+      // 受眾篩選
+      if (s.audienceCriteria && profile) {
+        return matchAudience(s.audienceCriteria as AudienceCriteria, profile, profileTagIds);
+      }
+      return true;
+    });
+  }
+
+  // ─── 受試者：取得公開問卷詳情（含題目）────────────────────────────────────
+
+  async getPublicSurvey(surveyId: string, respondentId?: string) {
+    const rows = await this.db
+      .select()
+      .from(surveys)
+      .where(and(eq(surveys.id, surveyId), eq(surveys.status, 'published')))
+      .limit(1);
+
+    const survey = rows[0];
+    if (!survey) throw new NotFoundException('問卷不存在或尚未上架');
+
+    // 若受試者已填 → 告知
+    let alreadySubmitted = false;
+    if (respondentId) {
+      const existing = await this.db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            eq(surveyResponses.respondentId, respondentId),
+            eq(surveyResponses.status, 'submitted'),
+          ),
+        )
+        .limit(1);
+      alreadySubmitted = existing.length > 0;
+    }
+
+    const questions = await this.db
+      .select()
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const options =
+      qIds.length > 0
+        ? await this.db
+            .select()
+            .from(questionOptions)
+            .where(
+              qIds.length === 1
+                ? eq(questionOptions.questionId, qIds[0])
+                : inArray(questionOptions.questionId, qIds),
+            )
+            .orderBy(questionOptions.sortOrder)
+        : [];
+
+    return {
+      id: survey.id,
+      title: survey.title,
+      description: survey.description,
+      rewardPoints: survey.rewardPoints,
+      isAnonymous: survey.isAnonymous,
+      alreadySubmitted,
+      questions: questions.map((q) => ({
+        id: q.id,
+        type: q.type,
+        title: q.title,
+        description: q.description,
+        sortOrder: q.sortOrder,
+        isRequired: q.isRequired,
+        config: q.config,
+        options: options.filter((o) => o.questionId === q.id),
+      })),
+    };
+  }
+
+  // ─── 受試者：提交填答 ────────────────────────────────────────────────────
+
+  async submitResponse(surveyId: string, respondentId: string, dto: SubmitResponseDto) {
+    // ── 0. Phase 5.5: 停權檢查 ───────────────────────────────────────────────
+    await this.assertNotSuspended(respondentId);
+
+    // ── 1. 確認問卷上架 ──────────────────────────────────────────────────────
+    const surveyRows = await this.db
+      .select({
+        id: surveys.id,
+        status: surveys.status,
+        targetCount: surveys.targetCount,
+        completedCount: surveys.completedCount,
+        surveyorId: surveys.surveyorId,
+        rewardPoints: surveys.rewardPoints,
+      })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    const survey = surveyRows[0];
+    if (!survey) throw new NotFoundException('問卷不存在');
+    if (survey.status !== 'published') throw new BadRequestException('此問卷目前不開放填答');
+    if (survey.completedCount >= survey.targetCount) throw new BadRequestException('此問卷已達配額');
+
+    // ── 2. 防止重複提交 ──────────────────────────────────────────────────────
+    const existing = await this.db
+      .select({ id: surveyResponses.id })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          eq(surveyResponses.respondentId, respondentId),
+        ),
+      )
+      .limit(1);
+
+    if (existing.length > 0) throw new ConflictException('您已填寫過此問卷');
+
+    // ── 3. 計算填答時間 ──────────────────────────────────────────────────────
+    const now = new Date();
+    let fillDurationSeconds: number | null = null;
+    if (dto.startedAt) {
+      const started = new Date(dto.startedAt);
+      fillDurationSeconds = Math.round((now.getTime() - started.getTime()) / 1000);
+    }
+
+    // ── 4. 反作弊評估 ────────────────────────────────────────────────────────
+    const totalQCount = await this.db
+      .select({ id: surveyQuestions.id })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId));
+
+    const antiCheatResult = this.antiCheat.evaluate(
+      dto.answers,
+      totalQCount.length,
+      fillDurationSeconds,
+    );
+
+    // 極度可疑（score >= 80）→ 直接標記 rejected，不計入配額
+    const finalStatus = antiCheatResult.score >= 80 ? 'rejected' : 'submitted';
+
+    // ── 5. 建立 response 記錄 ────────────────────────────────────────────────
+    const inserted = await this.db
+      .insert(surveyResponses)
+      .values({
+        surveyId,
+        respondentId,
+        status: finalStatus,
+        submittedAt: now,
+        fillDurationSeconds,
+        antiCheatScore: antiCheatResult.score,
+        suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
+        // Phase 2: 把前端送來的行為訊號存起來
+        behaviorLog: dto.behaviorLog ?? null,
+      })
+      .returning({ id: surveyResponses.id });
+
+    const responseId = inserted[0].id;
+
+    // ── 6. 寫入答案 ──────────────────────────────────────────────────────────
+    if (dto.answers.length > 0) {
+      await this.db.insert(responseAnswers).values(
+        dto.answers.map((a) => ({
+          responseId,
+          questionId: a.questionId,
+          textAnswer: a.textAnswer,
+          selectedOptionIds: a.selectedOptionIds ?? null,
+          ratingValue: a.ratingValue,
+        })),
+      );
+    }
+
+    // ── 6.5 Quality Audit Pipeline（fire-and-forget，不卡住 submit 回應）────────
+    // 把前端蒐集的行為訊號一起傳給 pipeline，給 Layer 2 更豐富的訊號
+    void this.runQualityAuditAsync(responseId, {
+      fillDurationSeconds,
+      windowSwitchCount: dto.behaviorLog?.windowSwitchCount,
+      pasteEventCount: dto.behaviorLog?.pasteEventCount,
+      totalKeystrokes: dto.behaviorLog?.totalKeystrokes,
+      perQuestionTimes: dto.behaviorLog
+        ? Object.fromEntries(
+            Object.entries(dto.behaviorLog.perQuestionTimeMs).map(([k, v]) => [k, v / 1000]),
+          )
+        : undefined,
+    });
+
+    // ── 7. 只有正常提交才更新統計 ────────────────────────────────────────────
+    if (finalStatus === 'submitted') {
+      await this.db
+        .update(surveys)
+        .set({ completedCount: sql`${surveys.completedCount} + 1` })
+        .where(eq(surveys.id, surveyId));
+
+      if (survey.completedCount + 1 >= survey.targetCount) {
+        await this.db.update(surveys).set({ status: 'closed' }).where(eq(surveys.id, surveyId));
+      }
+
+      // ── 8. 更新受試者信譽分 ────────────────────────────────────────────────
+      await this.updateRespondentStats(respondentId);
+
+      // ── 9. 自動發放獎勵（fire-and-forget）────────────────────────────────
+      if (survey.rewardPoints > 0) {
+        this.walletService
+          .issueReward({
+            surveyId,
+            responseId,
+            respondentId,
+            surveyorId: survey.surveyorId,
+            rewardAmount: survey.rewardPoints,
+          })
+          .catch((err: unknown) =>
+            this.logger.error(`獎勵發放失敗 responseId=${responseId}`, err),
+          );
+      }
+
+      // ── 10. 通知問券方（fire-and-forget） ─────────────────────────────────
+      this.notifications
+        .create({
+          userId: survey.surveyorId,
+          type: 'new_response',
+          title: '有新的問卷填答',
+          body: `您的問卷收到一份新填答（共 ${survey.completedCount + 1} 份）`,
+          metadata: { surveyId, responseId },
+        })
+        .catch((err: unknown) =>
+          this.logger.error(`new_response 通知失敗 surveyId=${surveyId}`, err),
+        );
+    }
+
+    if (finalStatus === 'rejected') {
+      return {
+        message: '您的填答已記錄，但系統偵測到異常，請確保認真作答。',
+        responseId,
+        flagged: true,
+      };
+    }
+
+    return { message: '填答成功，感謝您的參與！', responseId, flagged: false };
+  }
+
+  // ─── Quality Audit Pipeline 觸發（fire-and-forget）─────────────────────
+
+  private async runQualityAuditAsync(
+    responseId: string,
+    behavior: {
+      fillDurationSeconds: number | null;
+      windowSwitchCount?: number;
+      pasteEventCount?: number;
+      totalKeystrokes?: number;
+      perQuestionTimes?: Record<string, number>;
+    },
+  ): Promise<void> {
+    try {
+      const breakdown = await this.qualityAudit.audit(responseId, behavior);
+      // 寫回 DB
+      const newStatus = breakdown.status === 'rejected'
+        ? 'rejected'
+        : breakdown.status === 'suspicious'
+          ? 'submitted'   // 仍標為 submitted，但 quality_score 會反映疑似
+          : 'submitted';
+      await this.db
+        .update(surveyResponses)
+        .set({
+          qualityScore: breakdown.finalScore,
+          qualityBreakdown: breakdown,
+          status: newStatus,
+        })
+        .where(eq(surveyResponses.id, responseId));
+
+      // 被 reject 時把預算退回給問券方（如果之前有預扣）+ 通知受試者 + 扣信譽分
+      if (breakdown.status === 'rejected') {
+        const respRows = await this.db
+          .select({ respondentId: surveyResponses.respondentId, surveyId: surveyResponses.surveyId })
+          .from(surveyResponses)
+          .where(eq(surveyResponses.id, responseId))
+          .limit(1);
+        const r = respRows[0];
+        if (r) {
+          await this.notifications.create({
+            userId: r.respondentId,
+            type: 'system',
+            title: '填答未通過品質審核',
+            body: `分數 ${breakdown.finalScore} / 100。${breakdown.llmReasoning ?? '請查看詳情並可申訴'}`,
+            metadata: { responseId, finalScore: breakdown.finalScore },
+          });
+          // Phase 5.4 + 5.5: 扣信譽分、檢查連續退件停權
+          await this.applyRejectionPenalty(r.respondentId);
+        }
+      }
+      this.logger.log(`Quality audit ${responseId}: ${breakdown.finalScore} (${breakdown.status})`);
+    } catch (err) {
+      this.logger.error(`Quality audit failed for ${responseId}`, err);
+    }
+  }
+
+  // ─── 受試者信譽分更新 ─────────────────────────────────────────────────────
+
+  private async updateRespondentStats(respondentId: string) {
+    const profileRows = await this.db
+      .select({
+        id: respondentProfiles.id,
+        totalCompleted: respondentProfiles.totalCompleted,
+      })
+      .from(respondentProfiles)
+      .where(eq(respondentProfiles.userId, respondentId))
+      .limit(1);
+
+    if (profileRows.length === 0) return;
+    const profile = profileRows[0];
+    const newTotal = profile.totalCompleted + 1;
+
+    await this.db
+      .update(respondentProfiles)
+      .set({ totalCompleted: newTotal, updatedAt: new Date() })
+      .where(eq(respondentProfiles.id, profile.id));
+
+    // 每完成 10 份 +1 分（透過 ReputationService 記入歷史）
+    if (newTotal % 10 === 0) {
+      await this.reputation.adjust(respondentId, 1, `完成 ${newTotal} 份問卷`);
+    }
+  }
+
+  // ─── Phase 5.5：停權檢查（過期會自動清除）─────────────────────────────────
+  private async assertNotSuspended(respondentId: string) {
+    const rows = await this.db
+      .select({
+        id: respondentProfiles.id,
+        suspendedUntil: respondentProfiles.suspendedUntil,
+        suspendedReason: respondentProfiles.suspendedReason,
+      })
+      .from(respondentProfiles)
+      .where(eq(respondentProfiles.userId, respondentId))
+      .limit(1);
+
+    const profile = rows[0];
+    if (!profile?.suspendedUntil) return;
+
+    const now = new Date();
+    if (profile.suspendedUntil > now) {
+      const days = Math.ceil(
+        (profile.suspendedUntil.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      throw new ForbiddenException(
+        `${profile.suspendedReason ?? '帳號暫停接案'}（剩 ${days} 天）`,
+      );
+    }
+    // 已過期 → 自動解除
+    await this.db
+      .update(respondentProfiles)
+      .set({ suspendedUntil: null, suspendedReason: null, updatedAt: now })
+      .where(eq(respondentProfiles.id, profile.id));
+  }
+
+  // ─── Phase 5.4 + 5.5：rejected 時扣分 / 連續退件停權 ───────────────────────
+  private async applyRejectionPenalty(respondentId: string) {
+    // 5.4：扣 5 分（走 ReputationService，自動寫歷史）
+    await this.reputation.adjust(respondentId, -5, '填答未通過品質審核');
+
+    // 5.5：查最近 3 筆「已審核完」的回答（rejected/rewarded/submitted = audit 完成的狀態）
+    //     排除 in_progress，否則填到一半的草稿會稀釋計算
+    const recent = await this.db
+      .select({ status: surveyResponses.status, submittedAt: surveyResponses.submittedAt })
+      .from(surveyResponses)
+      .where(and(
+        eq(surveyResponses.respondentId, respondentId),
+        inArray(surveyResponses.status, ['rejected', 'rewarded', 'submitted']),
+      ))
+      .orderBy(desc(surveyResponses.submittedAt))
+      .limit(3);
+
+    if (recent.length === 3 && recent.every((r) => r.status === 'rejected')) {
+      const suspendedUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const suspendedReason = '連續 3 次填答被退件，暫停接案 7 天';
+
+      const profileRows = await this.db
+        .select({ id: respondentProfiles.id })
+        .from(respondentProfiles)
+        .where(eq(respondentProfiles.userId, respondentId))
+        .limit(1);
+
+      if (profileRows[0]) {
+        await this.db
+          .update(respondentProfiles)
+          .set({ suspendedUntil, suspendedReason, updatedAt: new Date() })
+          .where(eq(respondentProfiles.id, profileRows[0].id));
+      }
+
+      await this.notifications.create({
+        userId: respondentId,
+        type: 'system',
+        title: '帳號暫停接案 7 天',
+        body: '您最近 3 次填答品質都未通過。系統暫停您接案 7 天，期間您仍可申訴。',
+        metadata: { suspendedUntil: suspendedUntil.toISOString() },
+      });
+      this.logger.warn(`受試者 ${respondentId} 連續 3 次 rejected → 停權 7 天`);
+    }
+  }
+
+  // ─── 受試者：查看自己的填答紀錄 ────────────────────────────────────────────
+
+  async getMyResponses(respondentId: string) {
+    const rows = await this.db
+      .select({
+        responseId: surveyResponses.id,
+        surveyId: surveyResponses.surveyId,
+        status: surveyResponses.status,
+        submittedAt: surveyResponses.submittedAt,
+        surveyTitle: surveys.title,
+        rewardPoints: surveys.rewardPoints,
+        qualityScore: surveyResponses.qualityScore,
+        qualityBreakdown: surveyResponses.qualityBreakdown,
+        suspiciousFlags: surveyResponses.suspiciousFlags,
+      })
+      .from(surveyResponses)
+      .innerJoin(surveys, eq(surveyResponses.surveyId, surveys.id))
+      .where(eq(surveyResponses.respondentId, respondentId))
+      .orderBy(desc(surveyResponses.submittedAt));
+
+    return rows;
+  }
+
+  // ─── 問券方：取得問卷填答統計 ────────────────────────────────────────────────
+
+  async getSurveyStats(surveyId: string, surveyorId: string) {
+    // 確認是問券方本人
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId, title: surveys.title, completedCount: surveys.completedCount })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    const survey = surveyRows[0];
+    if (!survey) throw new NotFoundException('問卷不存在');
+    if (survey.surveyorId !== surveyorId) throw new ForbiddenException('無權存取此問卷統計');
+
+    // 取所有已提交的 answers
+    const answers = await this.db
+      .select({
+        questionId: responseAnswers.questionId,
+        textAnswer: responseAnswers.textAnswer,
+        selectedOptionIds: responseAnswers.selectedOptionIds,
+        ratingValue: responseAnswers.ratingValue,
+      })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          // 已 submit + 已 reward 都應該算進統計（rewarded 是 submitted 的後續狀態）
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+        ),
+      );
+
+    const questions = await this.db
+      .select()
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const options =
+      qIds.length > 0
+        ? await this.db
+            .select()
+            .from(questionOptions)
+            .where(
+              qIds.length === 1
+                ? eq(questionOptions.questionId, qIds[0])
+                : inArray(questionOptions.questionId, qIds),
+            )
+        : [];
+
+    // 逐題彙整統計
+    const questionStats = questions.map((q) => {
+      const qAnswers = answers.filter((a) => a.questionId === q.id);
+      const qOptions = options.filter((o) => o.questionId === q.id);
+
+      if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+        const optionCounts = qOptions.map((o) => ({
+          optionId: o.id,
+          label: o.label,
+          count: qAnswers.filter((a) => {
+            const ids = a.selectedOptionIds as string[] | null;
+            return ids?.includes(o.id) ?? false;
+          }).length,
+        }));
+        return { questionId: q.id, title: q.title, type: q.type, totalAnswers: qAnswers.length, optionCounts };
+      }
+
+      if (q.type === 'rating') {
+        const ratings = qAnswers.map((a) => a.ratingValue).filter((v): v is number => v !== null);
+        const avg = ratings.length > 0 ? ratings.reduce((s, v) => s + v, 0) / ratings.length : null;
+        return { questionId: q.id, title: q.title, type: q.type, totalAnswers: ratings.length, averageRating: avg };
+      }
+
+      // text
+      const texts = qAnswers.map((a) => a.textAnswer).filter(Boolean).slice(0, 20);
+      return { questionId: q.id, title: q.title, type: q.type, totalAnswers: qAnswers.length, sampleTexts: texts };
+    });
+
+    // Phase 3: 品質分布（從 quality_score 統計 passed/suspicious/rejected）
+    const qualityRows = await this.db
+      .select({
+        id: surveyResponses.id,
+        qualityScore: surveyResponses.qualityScore,
+        status: surveyResponses.status,
+      })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded', 'rejected']),
+        ),
+      );
+    const qualityDistribution = {
+      total: qualityRows.length,
+      passed: qualityRows.filter((r) => (r.qualityScore ?? 0) >= 80).length,
+      suspicious: qualityRows.filter((r) => {
+        const s = r.qualityScore ?? 0;
+        return s >= 50 && s < 80;
+      }).length,
+      rejected: qualityRows.filter((r) => (r.qualityScore ?? 0) < 50 || r.status === 'rejected').length,
+      unaudited: qualityRows.filter((r) => r.qualityScore === null).length,
+      avgScore: qualityRows.length > 0
+        ? Math.round(
+            qualityRows.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / qualityRows.length,
+          )
+        : null,
+    };
+
+    return {
+      surveyId,
+      title: survey.title,
+      totalResponses: survey.completedCount,
+      questionStats,
+      qualityDistribution,
+    };
+  }
+
+  // ─── 問券方：每日填答趨勢（近 30 天）────────────────────────────────────────
+
+  async getSurveyTrend(surveyId: string, surveyorId: string): Promise<{ date: string; count: number }[]> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    // 近 30 天每天的提交數
+    const rows = await this.db
+      .select({
+        date: sql<string>`DATE(submitted_at AT TIME ZONE 'Asia/Taipei')`,
+        count: sql<number>`COUNT(*)::int`,
+      })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          eq(surveyResponses.status, 'submitted'),
+          sql`submitted_at >= NOW() - INTERVAL '30 days'`,
+        ),
+      )
+      .groupBy(sql`DATE(submitted_at AT TIME ZONE 'Asia/Taipei')`)
+      .orderBy(sql`DATE(submitted_at AT TIME ZONE 'Asia/Taipei')`);
+
+    // 補齊近 30 天的空日期
+    const countByDate = new Map(rows.map((r) => [r.date, r.count]));
+    const result: { date: string; count: number }[] = [];
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      const key = d.toISOString().slice(0, 10);
+      result.push({ date: key, count: countByDate.get(key) ?? 0 });
+    }
+    return result;
+  }
+
+  // ─── 問券方：匯出填答 CSV ─────────────────────────────────────────────────
+
+  async exportSurveyResponsesCsv(
+    surveyId: string,
+    surveyorId: string,
+    exportOpts: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<string> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId, title: surveys.title })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, type: surveyQuestions.type, sortOrder: surveyQuestions.sortOrder })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    // cleanOnly 模式：只匯出 quality_score >= threshold（預設 70）
+    const minScore = exportOpts.minQualityScore ?? 70;
+    let responses = await this.db
+      .select({
+        responseId: surveyResponses.id,
+        respondentId: surveyResponses.respondentId,
+        submittedAt: surveyResponses.submittedAt,
+        fillDurationSeconds: surveyResponses.fillDurationSeconds,
+        antiCheatScore: surveyResponses.antiCheatScore,
+        qualityScore: surveyResponses.qualityScore,
+      })
+      .from(surveyResponses)
+      .where(and(eq(surveyResponses.surveyId, surveyId), inArray(surveyResponses.status, ['submitted', 'rewarded'])))
+      .orderBy(surveyResponses.submittedAt);
+    if (exportOpts.cleanOnly) {
+      responses = responses.filter((r) => (r.qualityScore ?? 0) >= minScore);
+    }
+
+    if (responses.length === 0) return 'response_id,submitted_at\n（無填答資料）';
+
+    const responseIds = responses.map((r) => r.responseId);
+    const allAnswers = await this.db
+      .select()
+      .from(responseAnswers)
+      .where(inArray(responseAnswers.responseId, responseIds));
+
+    const qIds = questions.map((q) => q.id);
+    const options =
+      qIds.length > 0
+        ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+        : [];
+
+    // CSV header
+    const headers = [
+      'response_id', 'submitted_at', 'fill_duration_sec', 'anti_cheat_score', 'quality_score',
+      ...questions.map((q) => `Q${q.sortOrder + 1}_${q.title.replace(/,/g, '；').slice(0, 30)}`),
+    ];
+
+    const rows = responses.map((r) => {
+      const answers = allAnswers.filter((a) => a.responseId === r.responseId);
+      const qCells = questions.map((q) => {
+        const a = answers.find((ans) => ans.questionId === q.id);
+        if (!a) return '';
+        if (a.textAnswer) return `"${a.textAnswer.replace(/"/g, '""')}"`;
+        if (a.ratingValue !== null && a.ratingValue !== undefined) return String(a.ratingValue);
+        if (a.selectedOptionIds) {
+          const ids = a.selectedOptionIds as string[];
+          const labels = ids
+            .map((id) => options.find((o) => o.id === id)?.label ?? id)
+            .join('|');
+          return `"${labels}"`;
+        }
+        return '';
+      });
+
+      return [
+        r.responseId,
+        r.submittedAt ? new Date(r.submittedAt).toISOString() : '',
+        r.fillDurationSeconds ?? '',
+        r.antiCheatScore ?? '',
+        r.qualityScore ?? '',
+        ...qCells,
+      ].join(',');
+    });
+
+    return [headers.join(','), ...rows].join('\n');
+  }
+}
+
+// ─── 受眾媒合 helper ──────────────────────────────────────────────────────────
+
+interface AudienceCriteria {
+  ageRange?: string[];
+  gender?: string[];
+  region?: string[];
+  occupation?: string[];
+  education?: string[];
+  // Phase 7.3: 最低信譽分要求
+  minReputationScore?: number;
+  // Phase G.6: 需符合的興趣標籤（OR — 受試者只要有任一標籤即通過）
+  requiredTagIds?: string[];
+  // 'any'（預設）= 任一即可；'all' = 全部要符合
+  tagMatchMode?: 'any' | 'all';
+}
+
+type RespondentProfilePartial = {
+  ageRange?: string | null;
+  gender?: string | null;
+  region?: string | null;
+  occupation?: string | null;
+  education?: string | null;
+  reputationScore?: number | null;
+};
+
+function matchAudience(
+  criteria: AudienceCriteria,
+  profile: RespondentProfilePartial,
+  profileTagIds?: Set<string>,
+): boolean {
+  const checks: [keyof AudienceCriteria, string | null | undefined][] = [
+    ['ageRange', profile.ageRange],
+    ['gender', profile.gender],
+    ['region', profile.region],
+    ['occupation', profile.occupation],
+    ['education', profile.education],
+  ];
+
+  for (const [field, profileValue] of checks) {
+    const allowed = criteria[field];
+    if (!Array.isArray(allowed) || allowed.length === 0) continue; // 無限制
+    if (!profileValue) return false;                 // 有限制但 profile 未填
+    if (!allowed.includes(profileValue)) return false;
+  }
+
+  // Phase 7.4: 最低信譽分檢查
+  if (typeof criteria.minReputationScore === 'number' && criteria.minReputationScore > 0) {
+    const rep = profile.reputationScore ?? 60;
+    if (rep < criteria.minReputationScore) return false;
+  }
+
+  // Phase G.6: 興趣標籤過濾
+  if (Array.isArray(criteria.requiredTagIds) && criteria.requiredTagIds.length > 0) {
+    const tags = profileTagIds ?? new Set<string>();
+    const mode = criteria.tagMatchMode ?? 'any';
+    if (mode === 'all') {
+      if (!criteria.requiredTagIds.every((id) => tags.has(id))) return false;
+    } else {
+      if (!criteria.requiredTagIds.some((id) => tags.has(id))) return false;
+    }
+  }
+
+  return true;
+}

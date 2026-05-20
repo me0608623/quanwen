@@ -6,9 +6,21 @@ const config: Config = {
     './src/pages/**/*.{js,ts,jsx,tsx,mdx}',
     './src/components/**/*.{js,ts,jsx,tsx,mdx}',
     './src/app/**/*.{js,ts,jsx,tsx,mdx}',
+    './src/features/**/*.{js,ts,jsx,tsx,mdx}',
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: [
+          '-apple-system',
+          'BlinkMacSystemFont',
+          '"Segoe UI"',
+          '"PingFang TC"',
+          '"Noto Sans TC"',
+          '"Microsoft JhengHei"',
+          'sans-serif',
+        ],
+      },
       colors: {
         // 品牌色（MVP 先用通用色，設計師後期替換）
         primary: {

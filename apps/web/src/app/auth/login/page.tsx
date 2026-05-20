@@ -1,119 +1,208 @@
-'use client';
+﻿"use client";
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import Link from 'next/link';
-import { useLogin } from '@/hooks/use-auth';
+import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+import { Mail } from "lucide-react";
 
-const loginSchema = z.object({
-  email: z.string().email('請輸入有效的電子郵件'),
-  password: z.string().min(1, '請輸入密碼'),
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useLogin } from "@/hooks/use-auth";
+import { extractApiError } from "@/lib/extract-error";
+
+import { AuthShell } from "../_components/auth-shell";
+import { AuthDivider, OAuthButtons } from "../_components/oauth-buttons";
+import { PasswordInput } from "../_components/password-input";
+import { RoleToggle, type Role } from "../_components/role-toggle";
+
+const LoginSchema = z.object({
+  email: z.string().min(1, "請輸入 Email"),
+  password: z.string().min(1, "請輸入密碼"),
+  remember: z.boolean().default(false),
 });
-type LoginForm = z.infer<typeof loginSchema>;
 
-export default function LoginPage() {
+type LoginInput = z.infer<typeof LoginSchema>;
+
+const OAUTH_ERRORS: Record<string, string> = {
+  cancelled: "你已取消第三方登入。",
+  oauth_failed: "第三方登入失敗，請稍後再試或改用 Email 登入。",
+  email_missing: "第三方帳號未提供 Email，請改用 Email 註冊。",
+};
+
+function LoginForm() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const oauthError = searchParams.get("error");
+  const redirectTo = searchParams.get("redirect");
   const loginMutation = useLogin();
+  const [role, setRole] = useState<Role>("respondent");
+  const [sessionExpired, setSessionExpired] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
+  useEffect(() => {
+    if (sessionStorage.getItem("session_expired")) {
+      setSessionExpired(true);
+      sessionStorage.removeItem("session_expired");
+    }
+  }, []);
 
-  const onSubmit = (data: LoginForm) => loginMutation.mutate(data);
+  const form = useForm<LoginInput>({
+    resolver: zodResolver(LoginSchema),
+    defaultValues: { email: "", password: "", remember: false },
+  });
+
+  const password = form.watch("password");
+
+  const onSubmit = (data: LoginInput) =>
+    loginMutation.mutate(
+      { email: data.email.trim(), password: data.password },
+      {
+        onSuccess: () => {
+          router.push(redirectTo?.startsWith("/") ? redirectTo : "/tasks");
+        },
+      }
+    );
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-muted px-4">
-      <div className="w-full max-w-md rounded-lg bg-background p-8 shadow-md">
-        <h1 className="mb-6 text-2xl font-bold">登入券問</h1>
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium">
-              電子郵件
-            </label>
-            <input
-              id="email"
-              type="email"
-              {...register('email')}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="you@example.com"
-            />
-            {errors.email && (
-              <p className="mt-1 text-xs text-destructive">{errors.email.message}</p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium">
-              密碼
-            </label>
-            <input
-              id="password"
-              type="password"
-              {...register('password')}
-              className="mt-1 w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
-              placeholder="••••••••"
-            />
-            {errors.password && (
-              <p className="mt-1 text-xs text-destructive">{errors.password.message}</p>
-            )}
-          </div>
-
-          {loginMutation.error && (
-            <p className="text-sm text-destructive">
-              {(loginMutation.error as { response?: { data?: { message?: string } } })?.response?.data?.message ?? '登入失敗，請再試一次'}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isSubmitting || loginMutation.isPending}
-            className="w-full rounded-md bg-primary py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
-          >
-            {loginMutation.isPending ? '登入中...' : '登入'}
-          </button>
-        </form>
-
-        <div className="my-4 flex items-center gap-2">
-          <div className="flex-1 border-t" />
-          <span className="text-xs text-muted-foreground">或</span>
-          <div className="flex-1 border-t" />
+    <>
+      <AuthShell scene="immersive" audience={role}>
+      {sessionExpired && (
+        <div className="mb-4 animate-[fadeIn_0.35s_ease-out] rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          登入已逾時，請重新登入。
         </div>
+      )}
 
-        <a
-          href={`${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/auth/google`}
-          className="flex w-full items-center justify-center gap-2 rounded-md border py-2 text-sm font-medium hover:bg-secondary transition-colors"
-        >
-          <svg className="h-4 w-4" viewBox="0 0 24 24">
-            <path
-              fill="#4285F4"
-              d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-            />
-            <path
-              fill="#EA4335"
-              d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-            />
-          </svg>
-          以 Google 登入
-        </a>
+      {oauthError && (
+        <div className="mb-4 animate-[fadeIn_0.35s_ease-out] rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {OAUTH_ERRORS[oauthError] ?? "登入發生錯誤，請稍後再試。"}
+        </div>
+      )}
 
-        <p className="mt-4 text-center text-sm text-muted-foreground">
-          還沒有帳號？{' '}
-          <Link href="/auth/register" className="text-primary hover:underline">
-            立即註冊
+      <div className="mb-8 animate-[fadeIn_0.45s_ease-out]">
+        <h2 className="mb-1.5 text-3xl font-bold tracking-tight text-slate-900">歡迎回來</h2>
+        <p className="text-sm text-slate-500">
+          還沒有帳號？{" "}
+          <Link href="/auth/register" className="font-semibold text-[#126b8a] hover:underline">
+            建立新帳號
           </Link>
         </p>
       </div>
-    </div>
+
+      <div className="mb-6 animate-[fadeIn_0.55s_ease-out]">
+        <RoleToggle value={role} onChange={setRole} />
+      </div>
+
+      <div className="animate-[fadeIn_0.65s_ease-out]">
+        <OAuthButtons intent="login" role={role} />
+      </div>
+
+      <AuthDivider text="或使用 Email 登入" />
+
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+        <div className="animate-[fadeIn_0.75s_ease-out]">
+          <Label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-slate-900">
+            Email
+          </Label>
+          <div className="relative">
+            <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
+            <Input
+              id="email"
+              type="email"
+              autoComplete="username"
+              placeholder="you@example.com"
+              className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/20"
+              {...form.register("email")}
+            />
+          </div>
+          {form.formState.errors.email && (
+            <p className="mt-1 text-xs text-red-500">{form.formState.errors.email.message}</p>
+          )}
+        </div>
+
+        <div className="animate-[fadeIn_0.85s_ease-out]">
+          <Label htmlFor="password" className="mb-1.5 block text-xs font-semibold text-slate-900">
+            密碼
+          </Label>
+          <PasswordInput
+            id="password"
+            autoComplete="current-password"
+            placeholder="請輸入密碼"
+            value={password}
+            className="shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-[#126b8a]/20"
+            {...form.register("password")}
+          />
+          {form.formState.errors.password && (
+            <p className="mt-1 text-xs text-red-500">{form.formState.errors.password.message}</p>
+          )}
+        </div>
+
+        <div className="flex items-center justify-between pt-1 animate-[fadeIn_0.95s_ease-out]">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-500">
+            <Checkbox id="remember" {...form.register("remember")} />
+            記住我
+          </label>
+          <Link href="/auth/forgot-password" className="text-sm font-semibold text-[#126b8a] hover:underline">
+            忘記密碼？
+          </Link>
+        </div>
+
+        {loginMutation.error && (
+          <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+            {extractApiError(loginMutation.error, "登入失敗，請確認帳號密碼。")}
+          </div>
+        )}
+
+        <Button
+          type="submit"
+          disabled={loginMutation.isPending}
+          className="h-[46px] w-full rounded-[10px] bg-[#126b8a] text-base font-bold text-white shadow-[0_12px_24px_-14px_rgba(18,107,138,0.8)] transition-all hover:-translate-y-0.5 hover:bg-[#0f5d78] hover:shadow-[0_16px_30px_-14px_rgba(18,107,138,0.85)] active:translate-y-px disabled:opacity-60 animate-[fadeIn_1.05s_ease-out]"
+        >
+          {loginMutation.isPending ? "登入中..." : "登入"}
+        </Button>
+      </form>
+
+      <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-400 animate-[fadeIn_1.15s_ease-out]">
+        登入即代表你同意
+        <Link href="/terms" className="mx-1 text-slate-500 underline">
+          服務條款
+        </Link>
+        與
+        <Link href="/privacy" className="mx-1 text-slate-500 underline">
+          隱私政策
+        </Link>
+      </p>
+      </AuthShell>
+      <style jsx global>{`
+        @keyframes fadeIn {
+          0% {
+            opacity: 0;
+            transform: translateY(10px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateY(0);
+          }
+        }
+      `}</style>
+    </>
   );
 }
+
+export default function LoginPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-slate-200 border-t-[#126b8a]" />
+        </div>
+      }
+    >
+      <LoginForm />
+    </Suspense>
+  );
+}
+
