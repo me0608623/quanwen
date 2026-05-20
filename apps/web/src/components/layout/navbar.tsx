@@ -71,6 +71,7 @@ export function Navbar() {
         { href: '/tasks', label: '填問卷' },
         { href: '/earnings', label: '我的收益' },
         { href: '/wallet', label: '錢包' },
+        { href: '/shop', label: '🛒 商城' },
         { href: '/profile', label: '個人資料' },
         { href: '/settings/accounts', label: '帳號' },
       ];

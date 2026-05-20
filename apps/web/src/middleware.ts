@@ -13,6 +13,7 @@ const PROTECTED_PREFIXES = [
   '/onboarding',
   '/surveys',
   '/admin',
+  '/shop',
 ];
 
 // Auth pages — redirect already-logged-in users away
@@ -22,7 +23,7 @@ const AUTH_PREFIXES = ['/auth/login', '/auth/register', '/login'];
 const SURVEYOR_ONLY_PREFIXES = ['/dashboard'];
 
 // Respondent-only routes — redirect surveyors away
-const RESPONDENT_ONLY_PREFIXES = ['/tasks', '/earnings', '/profile'];
+const RESPONDENT_ONLY_PREFIXES = ['/tasks', '/earnings', '/profile', '/shop'];
 
 /** Decode JWT payload without signature verification (safe for routing hints only). */
 function decodeJwtRole(token: string): string | null {

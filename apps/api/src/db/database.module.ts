@@ -284,6 +284,53 @@ export { DB_TOKEN as DB };
             );
           `);
 
+          // Phase Q: point_shop_items + point_redemptions
+          await client.exec(`
+            CREATE TYPE shop_item_category AS ENUM (
+              'voucher_711','voucher_familymart','voucher_starbucks','voucher_general','merchandise'
+            );
+            CREATE TYPE redemption_status AS ENUM ('issued','used','expired','cancelled');
+
+            CREATE TABLE point_shop_items (
+              id          UUID               PRIMARY KEY DEFAULT gen_random_uuid(),
+              name        VARCHAR(100)       NOT NULL,
+              description TEXT,
+              category    shop_item_category NOT NULL,
+              cost_points INTEGER            NOT NULL,
+              face_value  INTEGER            NOT NULL,
+              image_url   VARCHAR(500),
+              stock_qty   INTEGER            NOT NULL DEFAULT -1,
+              active      BOOLEAN            NOT NULL DEFAULT true,
+              sort_order  INTEGER            NOT NULL DEFAULT 0,
+              created_at  TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+              updated_at  TIMESTAMPTZ        NOT NULL DEFAULT NOW()
+            );
+
+            CREATE TABLE point_redemptions (
+              id              UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id         UUID              NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              item_id         UUID              NOT NULL REFERENCES point_shop_items(id) ON DELETE RESTRICT,
+              cost_points     INTEGER           NOT NULL,
+              face_value      INTEGER           NOT NULL,
+              pin_code_cipher TEXT              NOT NULL,
+              status          redemption_status NOT NULL DEFAULT 'issued',
+              expires_at      TIMESTAMPTZ,
+              used_at         TIMESTAMPTZ,
+              created_at      TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+            );
+
+            -- Seed catalog（demo 商品）
+            INSERT INTO point_shop_items
+              (id, name, description, category, cost_points, face_value, sort_order)
+            VALUES
+              ('77777777-7777-7777-7777-777777777701', '7-11 NT$50 禮券', '可在全國 7-11 門市使用', 'voucher_711', 100, 50, 1),
+              ('77777777-7777-7777-7777-777777777702', '7-11 NT$100 禮券', '可在全國 7-11 門市使用', 'voucher_711', 200, 100, 2),
+              ('77777777-7777-7777-7777-777777777703', '7-11 NT$200 禮券', '可在全國 7-11 門市使用', 'voucher_711', 400, 200, 3),
+              ('77777777-7777-7777-7777-777777777704', '全家 NT$50 禮券', '全家便利商店通用', 'voucher_familymart', 100, 50, 4),
+              ('77777777-7777-7777-7777-777777777705', '星巴克中杯飲料券', '可換購任一中杯飲品（限定門市）', 'voucher_starbucks', 280, 140, 5),
+              ('77777777-7777-7777-7777-777777777706', 'PChome 商城禮券 NT$100', '線上購物折抵', 'voucher_general', 200, 100, 6);
+          `);
+
           // Phase B (9): kyc_verifications
           await client.exec(`
             CREATE TYPE kyc_status AS ENUM ('unverified','submitted','approved','rejected');
@@ -350,10 +397,11 @@ export { DB_TOKEN as DB };
           `);
 
           // ── Seed wallets (cash_balance reflects historical reward income) ──
+          // Phase Q：aa 也給 500 點供商城兌換 demo
           await client.exec(`
             INSERT INTO wallets (user_id, cash_balance, locked_cash, points_balance, version)
             VALUES
-              ('${AA_ID}', 160, 0, 0, 0),
+              ('${AA_ID}', 160, 0, 500, 0),
               ('${BB_ID}', 5000, 2400, 0, 0)
             ON CONFLICT (user_id) DO NOTHING;
           `);

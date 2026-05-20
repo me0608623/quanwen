@@ -12,6 +12,7 @@ import { NotificationsModule } from './notifications/notifications.module';
 import { AdminModule } from './admin/admin.module';
 import { WalletModule } from './wallet/wallet.module';
 import { KycModule } from './kyc/kyc.module';
+import { PointShopModule } from './point-shop/point-shop.module';
 
 @Module({
   imports: [
@@ -30,6 +31,7 @@ import { KycModule } from './kyc/kyc.module';
     AdminModule,
     WalletModule,
     KycModule,
+    PointShopModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
