@@ -239,6 +239,12 @@ Quality Score = 0.25 × 行為分數
 - [x] 外層 .gitignore 排除 `quanwen/` 子樹避免兩 repo 互 track
 - [x] git config user.email + user.name local 設好
 
+## Phase P (24)：JWT refresh + 矩陣題 demo seed ✅ 完成
+
+- [x] P.1 `POST /auth/refresh` (JwtAuthGuard + Throttle 30/min)：`AuthService.refreshToken()` 重新簽 7d 新 token；frontend `useRefreshToken()` hook
+- [x] P.2 第 4 份 demo published survey「【展示】各品牌購物體驗多維度評比」：showcase **Phase G.1 跳題（Q1 選「沒有網購過」→ skipToEnd）+ Phase N.1 矩陣題（3 rows × 5 cols）+ Phase 5.3 反向題對（Q3 正向 / Q4 reverseOfIndex=2）+ Phase G.1 跳題 ON Q1**，aa 登入直接點看
+- [x] P.3 修 envSchema：ECPAY_PAYMENT_URL / ZAI_BASE_URL / SENTRY_DSN 從 `.url()` 改 `.string()`，避免 placeholder（`your_sentry_dsn`）害啟動失敗；下游 init 改用 `isPlaceholder + startsWith('http')` 判斷
+
 ## Phase O (23)：部署就緒 ✅ 完成
 
 - [x] O.1 GitHub Actions CI 切成 4 個 parallel job：static (tsc/lint/audit) / test (postgres+redis) / build (nest+next) / e2e (playwright+chromium)；e2e failure 自動 upload report artifact
