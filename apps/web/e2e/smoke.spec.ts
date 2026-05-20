@@ -9,7 +9,7 @@ test.describe('Smoke', () => {
 
   test('登入頁可開啟', async ({ page }) => {
     await page.goto('/auth/login');
-    await expect(page.getByRole('button', { name: /登入|sign in/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: '登入', exact: true })).toBeVisible();
   });
 
   test('受試者 aa 可登入並看到 /tasks', async ({ page }) => {

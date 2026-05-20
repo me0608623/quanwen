@@ -12,8 +12,9 @@ export async function login(page: Page, who: keyof typeof ACCOUNTS) {
   await page.goto('/auth/login');
   await page.getByLabel(/email|帳號/i).first().fill(acc.email);
   await page.getByLabel(/密碼|password/i).first().fill(acc.password);
-  await page.getByRole('button', { name: /登入|sign in/i }).click();
-  await page.waitForURL(new RegExp(acc.landing));
+  // 用 exact = '登入' 避免匹到「用 Google 登入」「用 LINE 登入」OAuth buttons
+  await page.getByRole('button', { name: '登入', exact: true }).click();
+  await page.waitForURL(new RegExp(acc.landing), { timeout: 15_000 });
 }
 
 export async function logout(page: Page) {
