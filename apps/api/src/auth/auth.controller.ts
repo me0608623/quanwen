@@ -84,6 +84,21 @@ export class AuthController {
     return this.authService.getMe(user.id);
   }
 
+  /**
+   * Phase P: token refresh.
+   * 用 still-valid Bearer token 換一份新的 7d token，
+   * 讓長期在線的用戶不必每 7d 重新登入。
+   * 之後可進一步把 access 縮短 + 接 refresh token table (with revocation)。
+   */
+  @Post('refresh')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @Throttle({ medium: { ttl: 60_000, limit: 30 } })
+  async refresh(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.authService.refreshToken(user.id);
+  }
+
   // ─── Email Verification ────────────────────────────────────────────────────
 
   @Post('send-verification-email')

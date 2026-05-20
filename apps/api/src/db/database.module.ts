@@ -467,8 +467,45 @@ export { DB_TOKEN as DB };
               ('33333333-3333-3333-3333-333333333305', '${BB_ID}',
                 '租屋族居住痛點訪談（待審）',
                 '針對台北雙北 25-40 歲租屋族，了解居住相關問題。',
-                'pending_review', 100, 40, 0, NOW() + INTERVAL '30 days', true, NULL)
+                'pending_review', 100, 40, 0, NOW() + INTERVAL '30 days', true, NULL),
+              -- Phase P: 第 4 份已上架，showcase 矩陣題 + 跳題 + 反向題（demo Phase N + 5）
+              ('33333333-3333-3333-3333-333333333306', '${BB_ID}',
+                '【展示】各品牌購物體驗多維度評比',
+                '本問卷展示矩陣題、跳題邏輯、反向題對照等進階功能。約 3 分鐘可填完。',
+                'published', 50, 100, 0, NOW() + INTERVAL '30 days', true, NOW())
             ON CONFLICT (id) DO NOTHING;
+          `);
+
+          // ── Phase P: 展示問卷 questions（含矩陣題 + 跳題 + 反向題）──
+          await client.exec(`
+            INSERT INTO survey_questions (id, survey_id, type, title, sort_order, is_required, config)
+            VALUES
+              -- Q1 single_choice + skipLogic：選「沒有網購過」直接跳到 Q5（end）
+              ('44444444-4444-4444-4444-444444440601', '33333333-3333-3333-3333-333333333306', 'single_choice',
+                '您過去 6 個月內有網購經驗嗎？', 0, true,
+                '{"skipLogic":[{"selectedOptionLabel":"沒有網購過","skipToEnd":true}]}'::jsonb),
+              -- Q2 矩陣題：對 3 家品牌的 4 個維度評比（每列單選）
+              ('44444444-4444-4444-4444-444444440602', '33333333-3333-3333-3333-333333333306', 'matrix',
+                '您對下列品牌在這四個面向的滿意度（每列選一格）', 1, true,
+                '{"matrix":{"rows":["蝦皮 Shopee","PChome","Momo"],"columns":["很不滿意","不滿意","普通","滿意","很滿意"],"scale":"single"}}'::jsonb),
+              -- Q3 rating 正向：客服滿意度
+              ('44444444-4444-4444-4444-444444440603', '33333333-3333-3333-3333-333333333306', 'rating',
+                '客服回應對您的整體滿意度？（1=很不滿意，5=很滿意）', 2, true,
+                '{"maxRating":5}'::jsonb),
+              -- Q4 rating 反向題：抱怨累積（與 Q3 互為 reverse pair via reverseOfIndex=2 即 Q3）
+              ('44444444-4444-4444-4444-444444440604', '33333333-3333-3333-3333-333333333306', 'rating',
+                '客服讓您感到挫折的程度？（1=完全沒有，5=非常嚴重）', 3, true,
+                '{"maxRating":5,"reverseOfIndex":2}'::jsonb),
+              -- Q5 text
+              ('44444444-4444-4444-4444-444444440605', '33333333-3333-3333-3333-333333333306', 'text',
+                '您希望網購平台改善哪一點？', 4, false, NULL)
+            ON CONFLICT (id) DO NOTHING;
+
+            INSERT INTO question_options (question_id, label, sort_order) VALUES
+              ('44444444-4444-4444-4444-444444440601', '每月 1-3 次', 1),
+              ('44444444-4444-4444-4444-444444440601', '每週 1-2 次', 2),
+              ('44444444-4444-4444-4444-444444440601', '幾乎每天', 3),
+              ('44444444-4444-4444-4444-444444440601', '沒有網購過', 4);
           `);
 
           // ── Seed minimal questions for survey 1 (so it's clickable & fillable) ──

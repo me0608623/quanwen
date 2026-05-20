@@ -15,7 +15,7 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   NODE_ENV: z.enum(['development', 'test', 'production']).optional().default('development'),
   PORT: z.string().regex(/^\d+$/).optional(),
-  WEB_URL: z.string().url().optional(),
+  WEB_URL: z.union([z.string().url(), z.literal('')]).optional(),
 
   // Phase B: PII 加密金鑰（prod 必設，dev 用 fallback）
   PII_ENCRYPTION_KEY: z.string().min(16).optional(),
@@ -44,14 +44,14 @@ const envSchema = z.object({
   ECPAY_MERCHANT_ID: z.string().optional(),
   ECPAY_HASH_KEY: z.string().optional(),
   ECPAY_HASH_IV: z.string().optional(),
-  ECPAY_PAYMENT_URL: z.string().url().optional(),
+  ECPAY_PAYMENT_URL: z.string().optional(),
 
   // Z.ai LLM
   ZAI_API_KEY: z.string().optional(),
-  ZAI_BASE_URL: z.string().url().optional(),
+  ZAI_BASE_URL: z.string().optional(),
 
-  // Sentry observability
-  SENTRY_DSN: z.string().url().optional(),
+  // Sentry observability — 接受任何字串（包括 placeholder），下游 init 自己判斷
+  SENTRY_DSN: z.string().optional(),
   SENTRY_TRACES_SAMPLE_RATE: z.string().regex(/^0(\.\d+)?|1(\.0)?$/).optional(),
 });
 
@@ -122,7 +122,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
 // Phase F.2: Sentry SDK skeleton（env-gated；安裝 @sentry/node 後解開 require）
 function initSentry() {
   const dsn = process.env.SENTRY_DSN;
-  if (!dsn) return;
+  if (!dsn || isPlaceholder(dsn) || !dsn.startsWith('http')) return;
   try {
     // 套件需要 pnpm install @sentry/node @sentry/profiling-node 才會解析；
     // 用 dynamic require 避開靜態 import 解析錯誤

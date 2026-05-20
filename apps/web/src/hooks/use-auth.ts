@@ -39,6 +39,22 @@ export function useMe() {
   });
 }
 
+/**
+ * Phase P: refresh JWT — 在 /me 拿成功後若 token 快過期可呼叫；
+ * 也可由 axios interceptor 在 401 時嘗試 refresh。
+ */
+export function useRefreshToken() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<{ token: string; user: AuthUser }>('/auth/refresh');
+      return data;
+    },
+    onSuccess: ({ token }) => {
+      setToken(token);
+    },
+  });
+}
+
 export function useLogin() {
   const queryClient = useQueryClient();
   const router = useRouter();

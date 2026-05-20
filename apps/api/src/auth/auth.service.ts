@@ -706,6 +706,32 @@ export class AuthService {
       .where(eq(users.id, user.id));
   }
 
+  // Phase P: token refresh — 把 still-valid JWT 換成全新 7d token
+  async refreshToken(userId: string): Promise<{ token: string; user: { id: string; email: string; displayName: string; role: string } }> {
+    const rows = await this.db
+      .select({
+        id: users.id,
+        email: users.email,
+        displayName: users.displayName,
+        role: users.role,
+        status: users.status,
+      })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1);
+
+    const user = rows[0];
+    if (!user) throw new UnauthorizedException('User not found');
+    if (user.status !== 'active') throw new UnauthorizedException('帳號已停用');
+
+    const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
+    this.logger.log(`Token refreshed: userId=${userId}`);
+    return {
+      token,
+      user: { id: user.id, email: user.email, displayName: user.displayName, role: user.role },
+    };
+  }
+
   // ─── Internal ─────────────────────────────────────────────────────────────
 
   private signToken(payload: JwtPayload): string {
