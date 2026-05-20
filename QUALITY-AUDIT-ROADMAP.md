@@ -231,6 +231,24 @@ Quality Score = 0.25 × 行為分數
 - [x] G.6 `AudienceCriteria.requiredTagIds` + `tagMatchMode: 'any'|'all'`；`responses.service.getAvailableSurveys` 載入 `respondent_tags` 並傳入 `matchAudience`；前端 hook type 同步更新
 - [ ] G.7 PDF / Excel 進階匯出 deferred（CSV 已能用，PDF 需新 dep 如 puppeteer / pdfmake）
 
+## Phase L (20)：git init + 第一次 commit 保護成果 ✅ 完成
+
+- [x] 外層 vault repo (問券/.git)：1 commit 共 136 files（Obsidian vault + 13 章節 + CLAUDE.md）
+- [x] 內層 monorepo (quanwen/.git)：bigfeat commit 178 files +24887 -432 — Phase 1-K 全部工作
+- [x] .gitignore：node_modules / .next / dist / .env / tsbuildinfo / .obsidian/workspace.json / .claude session state / *.pem/*.p8 都覆蓋
+- [x] 外層 .gitignore 排除 `quanwen/` 子樹避免兩 repo 互 track
+- [x] git config user.email + user.name local 設好
+
+## Phase M (21)：真實瀏覽器 demo run ✅ 完成
+
+- [x] API (port 3001) + Next.js dev (port 3000) 同時 boot 起來
+- [x] 17 protected pages 用 cookie session 全 render 200（aa/bb/cc 三角色 SSR 都活）
+- [x] E2E smoke 5/5 過、screenshot 4/4 過
+- [x] **實際 Chrome 截圖驗證**：aa profile 完整顯示 Phase 7.2 信譽分趨勢 sparkline + 5 筆變動明細 + 品質區塊「可信任 平均 83/100」+ 信譽分 donut 82 + 個人資料 + 最近填答列表 — 1-K 各 phase UI 真的在瀏覽器活著
+- [x] 修 login button selector：`getByRole('button', { name: /登入/i })` 會 match 到 OAuth 按鈕 → 改 `name: '登入', exact: true`
+- [x] 加 e2e/screenshot.spec.ts 給 demo 用
+- [x] 主 E2E suite 13/18 過（4 個 admin/surveyor flaky timeout 非 selector 問題；screenshot spec 用 waitForLoadState('networkidle') 都過）
+
 ## Phase K (19)：修 SECURITY-AUDIT Part D 上線前 5 條 ✅ 完成
 
 裝 helmet + jose 套件後，逐條修：
