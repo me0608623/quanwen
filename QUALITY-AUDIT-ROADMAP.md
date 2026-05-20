@@ -239,6 +239,13 @@ Quality Score = 0.25 × 行為分數
 - [x] 外層 .gitignore 排除 `quanwen/` 子樹避免兩 repo 互 track
 - [x] git config user.email + user.name local 設好
 
+## Phase N (22)：矩陣題 UI + 自動分頁 ✅ 完成（積分商城 / PDF 留下輪）
+
+- [x] N.1 矩陣題 UI：QuestionEditor 加 MatrixConfig 元件（rows/columns/scale 動態增刪），SurveyPreviewModal + tasks/[id]/page.tsx 真實 render（radio/checkbox by scale，答案存 textAnswer = JSON）+ validation 要每列都答
+- [x] N.2 問卷分頁：tasks/[id]/page.tsx 重構成 `PaginatedSurveyForm`，題數 > 6 自動分頁 5 題 / 頁；progress bar + 上下頁導覽 + 「下一頁」disable 直到當頁 required 全填完；最後一頁才顯示送出
+- [ ] N.3 積分商城兌換流程 deferred（schema/journal 已備，需新建商品 catalog + 兌換頁 + PIN code 驗證）
+- [ ] N.4 PDF / Excel 進階匯出 deferred（需新增 puppeteer/pdfmake dep）
+
 ## Phase M (21)：真實瀏覽器 demo run ✅ 完成
 
 - [x] API (port 3001) + Next.js dev (port 3000) 同時 boot 起來
