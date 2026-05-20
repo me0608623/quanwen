@@ -239,6 +239,14 @@ Quality Score = 0.25 × 行為分數
 - [x] 外層 .gitignore 排除 `quanwen/` 子樹避免兩 repo 互 track
 - [x] git config user.email + user.name local 設好
 
+## Phase O (23)：部署就緒 ✅ 完成
+
+- [x] O.1 GitHub Actions CI 切成 4 個 parallel job：static (tsc/lint/audit) / test (postgres+redis) / build (nest+next) / e2e (playwright+chromium)；e2e failure 自動 upload report artifact
+- [x] O.2 main.ts envSchema 擴充覆蓋所有 critical env（PII_*/ECPAY_*/ZAI_*/SENTRY_*/WEB_URL）+ prod-only 強制檢查（5 條必設缺即 exit 1，4 條建議缺則 warn）
+- [x] O.3 Sentry frontend：`apps/web/src/instrumentation.ts` Next.js register hook + `sentry.client.config.ts` browser runtime；env-gated、套件未裝 silent skip、預設關 PII/cookie/auth header、replaysOnError=1 replaysSession=0
+- [x] O.4 `DEPLOYMENT.md` runbook：必設 / 建議 env 兩層分類、ECPay sandbox→prod 切換、docker compose deploy、checklist（security/法規/observability/帳號/CI）、故障排除表、rollback 流程
+- [x] O.5 `.env.example` 補 PII_ENCRYPTION_KEY/KDF_SALT/SENTRY_*/NEXT_PUBLIC_*/ENABLE_SWAGGER
+
 ## Phase N (22)：矩陣題 UI + 自動分頁 ✅ 完成（積分商城 / PDF 留下輪）
 
 - [x] N.1 矩陣題 UI：QuestionEditor 加 MatrixConfig 元件（rows/columns/scale 動態增刪），SurveyPreviewModal + tasks/[id]/page.tsx 真實 render（radio/checkbox by scale，答案存 textAnswer = JSON）+ validation 要每列都答
