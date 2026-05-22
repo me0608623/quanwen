@@ -20,6 +20,23 @@ import { DepositDto, DepositSchema } from './dto/deposit.dto';
 import { WithdrawDto, WithdrawSchema } from './dto/withdraw.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 
+/**
+ * Phase S: ECPay webhook 接收端 — 必須無 JWT（ECPay server 直接 POST）。
+ * 用 CheckMacValue HMAC 簽章驗證來源。
+ */
+@Controller('wallet/ecpay')
+export class EcpayWebhookController {
+  constructor(private readonly wallet: WalletService) {}
+
+  @Post('callback')
+  @HttpCode(HttpStatus.OK)
+  async callback(@Body() body: Record<string, string>, @Res() res: Response) {
+    const result = await this.wallet.processEcpayCallback(body);
+    res.setHeader('Content-Type', 'text/plain');
+    res.send(result);
+  }
+}
+
 @UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
@@ -79,17 +96,7 @@ export class WalletController {
   }
 
   // POST /wallet/ecpay/callback — ECPay 非同步通知（無 JWT，ECPay Server 呼叫）
-  @Post('ecpay/callback')
-  @HttpCode(HttpStatus.OK)
-  async ecpayCallback(
-    @Body() body: Record<string, string>,
-    @Res() res: Response,
-  ) {
-    const result = await this.wallet.processEcpayCallback(body);
-    // ECPay expects plain text response: '1|OK'
-    res.setHeader('Content-Type', 'text/plain');
-    res.send(result);
-  }
+  // 註：ECPay callback 移到 EcpayWebhookController（無 JWT，因 ECPay server 直接 POST）
 
   // GET /wallet/points — 積分摘要
   @Get('points')

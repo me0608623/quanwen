@@ -36,6 +36,44 @@ Phase O：把整套 demo-ready system 推上線需要的步驟。
 
 ---
 
+## 2a. ECPay sandbox local 整合測試（Phase S）
+
+不需要真實商家帳號 — 用 ECPay 公開測試憑證 + 本地 webhook simulator。
+
+### Sandbox 公開憑證（任何人都能用）
+
+```bash
+ECPAY_MERCHANT_ID=2000132
+ECPAY_HASH_KEY=pwFHCqoQZGmho4w6
+ECPAY_HASH_IV=EkRm7iFT261dpevs
+ECPAY_PAYMENT_URL=https://payment-stage.ecpay.com.tw/Cashier/AioCheckOut/V5
+```
+
+### Local E2E flow（一鍵跑通 deposit + idempotency）
+
+1. 啟 API（API_URL=http://localhost:3001）+ 帶上面四個 env
+2. bb 登入後呼叫 `POST /api/v1/wallet/ecpay/order { amount: 500 }`，從回傳 HTML form 拿 `MerchantTradeNo`
+3. 跑 webhook simulator：
+   ```bash
+   node scripts/simulate-ecpay-webhook.mjs <tradeNo> --replay
+   ```
+   - 第一次 callback → service 處理成功、wallet +500
+   - replay 同一 callback → service 偵測到 status 已 success，直接 OK 但 NOT 雙重 credit
+4. 用 `--fail` 模擬付款失敗 → wallet 不 credit
+
+### Verified（Phase S smoke）
+
+- `[first] HTTP 200 → '1|OK'` / `[replay] HTTP 200 → '1|OK'`
+- wallet 5000 → 5500（+500 一次，replay 不重複）
+- `--fail` callback：5500 不變
+- 所有測試後 reconciliation 5/5 仍過
+
+### Webhook 路徑
+
+`POST {API_URL}/api/v1/wallet/ecpay/callback` — **無 JWT**（綠界 server 直接 POST，用 CheckMacValue HMAC 驗源）。
+路徑現在掛在 `EcpayWebhookController`，與 `WalletController` 分離。
+記得在 ECPay 後台白名單加這個 URL。
+
 ## 2. ECPay sandbox / production 切換
 
 | 環境 | 設定 |
