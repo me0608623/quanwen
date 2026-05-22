@@ -5,6 +5,7 @@ import { AntiCheatService } from './anti-cheat.service';
 import { QualityAuditService } from './quality-audit.service';
 import { AppealsService } from './appeals.service';
 import { ReputationService } from './reputation.service';
+import { ExportService } from './export.service';
 import { RespondentAssistantService } from './respondent-assistant.service';
 import { WalletModule } from '../wallet/wallet.module';
 import { NotificationsModule } from '../notifications/notifications.module';
@@ -20,8 +21,9 @@ import { AiAuditModule } from '../ai-audit/ai-audit.module';
     QualityAuditService,
     AppealsService,
     ReputationService,
+    ExportService,
     RespondentAssistantService,
   ],
-  exports: [ResponsesService, QualityAuditService, AppealsService, ReputationService],
+  exports: [ResponsesService, QualityAuditService, AppealsService, ReputationService, ExportService],
 })
 export class ResponsesModule {}

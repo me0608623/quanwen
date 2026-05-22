@@ -90,24 +90,39 @@ export default function SurveyStatsPage() {
   const router = useRouter();
   const { data: stats, isLoading } = useSurveyStats(id);
 
-  const handleExportCsv = (cleanOnly = false) => {
+  const downloadBinary = (path: string, filename: string) => {
     const token = getToken() ?? '';
-    const cleanQuery = cleanOnly ? '?clean=1' : '';
-    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}/surveys/${id}/export${cleanQuery}`;
-    const a = document.createElement('a');
-    const filename = cleanOnly
-      ? `survey_${id}_responses_clean.csv`
-      : `survey_${id}_responses.csv`;
-    a.setAttribute('download', filename);
+    const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}${path}`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => res.blob())
+      .then((res) => {
+        if (!res.ok) throw new Error(`Export 失敗：${res.status}`);
+        return res.blob();
+      })
       .then((blob) => {
         const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.setAttribute('download', filename);
         a.href = blobUrl;
         a.click();
         URL.revokeObjectURL(blobUrl);
-      });
+      })
+      .catch((err: Error) => alert(err.message));
   };
+
+  const handleExportCsv = (cleanOnly = false) =>
+    downloadBinary(
+      `/surveys/${id}/export${cleanOnly ? '?clean=1' : ''}`,
+      cleanOnly ? `survey_${id}_responses_clean.csv` : `survey_${id}_responses.csv`,
+    );
+
+  const handleExportPdf = () =>
+    downloadBinary(`/surveys/${id}/export.pdf`, `survey_${id}_report.pdf`);
+
+  const handleExportXlsx = (cleanOnly = false) =>
+    downloadBinary(
+      `/surveys/${id}/export.xlsx${cleanOnly ? '?clean=1' : ''}`,
+      cleanOnly ? `survey_${id}_responses_clean.xlsx` : `survey_${id}_responses.xlsx`,
+    );
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
   if (!stats) return <div className="p-10 text-sm text-destructive">無法取得統計資料</div>;
@@ -125,19 +140,33 @@ export default function SurveyStatsPage() {
           <h1 className="mt-2 text-2xl font-bold">{stats.title}</h1>
           <p className="text-sm text-muted-foreground">共 {stats.totalResponses} 份有效填答</p>
         </div>
-        <div className="shrink-0 flex gap-2">
+        <div className="shrink-0 flex flex-wrap gap-2 justify-end">
           <button
             onClick={() => handleExportCsv(false)}
-            className="rounded-md border border-border px-3 py-1.5 text-sm hover:bg-muted"
+            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
           >
-            匯出全部 CSV
+            CSV
           </button>
           <button
-            onClick={() => handleExportCsv(true)}
-            className="rounded-md border border-[#126b8a] bg-[#126b8a] px-3 py-1.5 text-sm text-white font-semibold hover:bg-[#0f5d78]"
-            title="只匯出 quality score ≥ 70 的高品質樣本"
+            onClick={() => handleExportXlsx(false)}
+            className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs hover:bg-emerald-100"
+            title="Excel: Responses + Summary 兩個 sheet"
           >
-            ✨ 乾淨樣本
+            📊 Excel
+          </button>
+          <button
+            onClick={handleExportPdf}
+            className="rounded-md border border-rose-300 bg-rose-50 text-rose-800 px-3 py-1.5 text-xs hover:bg-rose-100"
+            title="PDF 統計總覽報表"
+          >
+            📄 PDF 報表
+          </button>
+          <button
+            onClick={() => handleExportXlsx(true)}
+            className="rounded-md border border-[#126b8a] bg-[#126b8a] px-3 py-1.5 text-xs text-white font-semibold hover:bg-[#0f5d78]"
+            title="只匯出 quality score ≥ 70 的高品質樣本（Excel）"
+          >
+            ✨ 乾淨 Excel
           </button>
         </div>
       </div>

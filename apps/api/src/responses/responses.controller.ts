@@ -17,6 +17,7 @@ import { ResponsesService } from './responses.service';
 import { RespondentAssistantService } from './respondent-assistant.service';
 import { AppealsService } from './appeals.service';
 import { ReputationService } from './reputation.service';
+import { ExportService } from './export.service';
 import { AiInsightsService } from '../surveys/ai-insights.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -129,6 +130,7 @@ export class ResponsesController {
   constructor(
     private readonly responsesService: ResponsesService,
     private readonly aiInsights: AiInsightsService,
+    private readonly exportSvc: ExportService,
   ) {}
 
   /** GET /surveys/:id/stats — 問券方查看填答統計 */
@@ -170,6 +172,43 @@ export class ResponsesController {
     const user = req.user as AuthenticatedUser;
     this.assertSurveyor(user);
     return this.responsesService.getSurveyTrend(id, user.id);
+  }
+
+  /** GET /surveys/:id/export.pdf — Phase R PDF stats 報表 */
+  @Get(':id/export.pdf')
+  async exportPdf(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    this.assertSurveyor(user);
+    const buf = await this.exportSvc.generateStatsPdf(id, user.id);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_report.pdf"`);
+    res.send(buf);
+  }
+
+  /** GET /surveys/:id/export.xlsx — Phase R Excel raw responses（含 quality column） */
+  @Get(':id/export.xlsx')
+  async exportXlsx(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    this.assertSurveyor(user);
+    const isClean = clean === '1' || clean === 'true';
+    const buf = await this.exportSvc.generateResponsesExcel(id, user.id, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}.xlsx"`);
+    res.send(buf);
   }
 
   /** GET /surveys/:id/export — 匯出 CSV */
