@@ -101,15 +101,15 @@ export class CryptoService {
   redactPii(text: string): string {
     if (!text) return text;
     return text
-      // 1. 信用卡格式（含空格/dash 的 13-19 位數字組）— 先抓避免被 BANK 蓋掉
+      // 1. 信用卡格式（含空格/dash 的 13-19 位數字組）
       .replace(/\b(?:\d[ -]){12,18}\d\b/g, '[CARD]')
-      // 2. 連續長數字 → 銀行帳號（10-16 位）
-      .replace(/\b\d{10,16}\b/g, '[BANK]')
-      // 3. 台灣身分證號
+      // 2. 台灣身分證號（A123456789）
       .replace(/\b[A-Z][12]\d{8}\b/g, '[ID]')
-      // 4. 手機號
-      .replace(/\b09\d{2}[- ]?\d{3}[- ]?\d{3}\b/g, '[PHONE]')
+      // 3. 國際 / 國內手機號（要在 BANK 前，因 09xxxxxxxx 是 10 位數字）
       .replace(/\+886[- ]?9\d{2}[- ]?\d{3}[- ]?\d{3}/g, '[PHONE]')
+      .replace(/\b09\d{2}[- ]?\d{3}[- ]?\d{3}\b/g, '[PHONE]')
+      // 4. 連續長數字 → 銀行帳號（10-16 位；09 開頭已被上面 PHONE 規則吃掉）
+      .replace(/\b\d{10,16}\b/g, '[BANK]')
       // 5. email
       .replace(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g, '[EMAIL]');
   }
