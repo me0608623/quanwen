@@ -8,6 +8,16 @@ import {
   Tooltip,
   Legend,
 } from 'recharts';
+import type {
+  Formatter,
+  NameType,
+  ValueType,
+} from 'recharts/types/component/DefaultTooltipContent';
+
+const formatShares: Formatter<ValueType, NameType> = (value, name) => [
+  `${value} 份`,
+  String(name ?? ''),
+];
 
 interface Props {
   counts: Record<string, number>;
@@ -73,12 +83,10 @@ export function SurveyStatusDonut({ counts }: Props) {
               innerRadius={42}
               outerRadius={70}
               paddingAngle={2}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              label={(props: any) =>
-                props.percent > 0.06
-                  ? `${Math.round(props.percent * 100)}%`
-                  : ''
-              }
+              label={(props) => {
+                const pct = (props as { percent?: number }).percent ?? 0;
+                return pct > 0.06 ? `${Math.round(pct * 100)}%` : '';
+              }}
               labelLine={false}
             >
               {data.map((d) => (
@@ -91,11 +99,7 @@ export function SurveyStatusDonut({ counts }: Props) {
                 borderRadius: 6,
                 border: '1px solid #e2e8f0',
               }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(value: any, name: any): [string, string] => [
-                `${value} 份`,
-                name,
-              ]}
+              formatter={formatShares}
             />
             <Legend
               verticalAlign="bottom"

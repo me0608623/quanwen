@@ -11,6 +11,11 @@ import {
   CartesianGrid,
   Dot,
 } from 'recharts';
+import type { TooltipContentProps } from 'recharts';
+import type {
+  NameType,
+  ValueType,
+} from 'recharts/types/component/DefaultTooltipContent';
 
 export interface ReputationHistoryEntry {
   id: string;
@@ -119,10 +124,9 @@ export function ReputationTrend({ history }: Props) {
             />
             <Tooltip
               cursor={{ stroke: '#94a3b8', strokeDasharray: '3 3' }}
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              content={(props: any) => {
+              content={(props: TooltipContentProps<ValueType, NameType>) => {
                 if (!props.active || !props.payload?.length) return null;
-                const p = props.payload[0].payload as ChartPoint;
+                const p = props.payload[0]!.payload as ChartPoint;
                 return (
                   <div className="rounded-md border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm text-[11px]">
                     <p className="text-slate-500">{p.date}</p>
@@ -152,16 +156,23 @@ export function ReputationTrend({ history }: Props) {
               stroke="#126b8a"
               strokeWidth={1.5}
               fill="url(#repTrendFill)"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              dot={(props: any) => {
-                const p = props.payload as ChartPoint;
+              dot={(props) => {
+                const { cx, cy, payload } = props as {
+                  cx?: number;
+                  cy?: number;
+                  payload: ChartPoint;
+                };
                 const color =
-                  p.delta > 0 ? '#16a34a' : p.delta < 0 ? '#dc2626' : '#64748b';
+                  payload.delta > 0
+                    ? '#16a34a'
+                    : payload.delta < 0
+                      ? '#dc2626'
+                      : '#64748b';
                 return (
                   <Dot
-                    key={`dot-${p.index}`}
-                    cx={props.cx}
-                    cy={props.cy}
+                    key={`dot-${payload.index}`}
+                    cx={cx}
+                    cy={cy}
                     r={2.5}
                     fill={color}
                     stroke="#fff"

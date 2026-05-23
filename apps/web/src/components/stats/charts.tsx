@@ -13,12 +13,30 @@ import {
   Legend,
   LabelList,
 } from 'recharts';
+import type {
+  Formatter,
+  NameType,
+  ValueType,
+} from 'recharts/types/component/DefaultTooltipContent';
 
 /**
  * Phase V: stats 頁視覺化 — recharts BarChart / PieChart 替代 CSS-only bars
+ * Phase HH: Formatter 型別取代 any
  */
 
 const PALETTE = ['#126b8a', '#0F2A5C', '#8B5CF6', '#10b981', '#f59e0b', '#ef4444', '#64748b'];
+
+// 票數 + percent tooltip
+const formatVotePct: Formatter<ValueType, NameType> = (value, _name, ctx) => {
+  const pct = (ctx as { payload?: { pct?: number } })?.payload?.pct ?? 0;
+  return [`${value} 票 (${pct}%)`, '票數'];
+};
+
+// 份數 tooltip（quality donut）
+const formatCount: Formatter<ValueType, NameType> = (value) => [`${value} 份`, ''];
+
+// 人數 tooltip（rating distribution）
+const formatPeople: Formatter<ValueType, NameType> = (value) => [`${value} 人`, ''];
 
 interface OptionDatum {
   optionId?: string;
@@ -53,10 +71,7 @@ export function OptionBarChart({ data, totalAnswers }: { data: OptionDatum[]; to
           <Tooltip
             cursor={{ fill: 'rgba(18,107,138,0.04)' }}
             contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any, _name: any, ctx: any): [string, string] =>
-              [`${value} 票 (${ctx?.payload?.pct ?? 0}%)`, '票數']
-            }
+            formatter={formatVotePct}
           />
           <Bar dataKey="count" radius={[0, 4, 4, 0]}>
             {dataWithPct.map((_, i) => (
@@ -65,8 +80,7 @@ export function OptionBarChart({ data, totalAnswers }: { data: OptionDatum[]; to
             <LabelList
               dataKey="pct"
               position="right"
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              formatter={(v: any) => `${v}%`}
+              formatter={(v) => `${v as number}%`}
               style={{ fontSize: 11, fill: '#64748b', fontWeight: 600 }}
             />
           </Bar>
@@ -117,8 +131,7 @@ export function QualityDonut({
           </Pie>
           <Tooltip
             contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any): [string, string] => [`${value} 份`, '']}
+            formatter={formatCount}
           />
           <Legend
             verticalAlign="middle"
@@ -144,10 +157,8 @@ export function RatingDistribution({ buckets }: { buckets: { value: number; coun
           <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
           <Tooltip
             contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            formatter={(value: any): [string, string] => [`${value} 人`, '']}
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            labelFormatter={(label: any) => `${label} 分`}
+            formatter={formatPeople}
+            labelFormatter={(label) => `${label as number} 分`}
           />
           <Bar dataKey="count" fill="#126b8a" radius={[4, 4, 0, 0]} />
         </BarChart>
