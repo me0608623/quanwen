@@ -11,9 +11,11 @@ import {
   useMockDeposit,
   useEcpayDeposit,
   useRequestWithdrawal,
+  useEarningsSummary,
 } from '@/hooks/use-wallet';
 import { useMe } from '@/hooks/use-auth';
 import { cn } from '@/lib/cn';
+import { EarningsChart } from '@/components/wallet/earnings-chart';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
@@ -267,6 +269,7 @@ function WalletContent() {
   const { data: wallet, isLoading, isError, refetch } = useWallet();
   const { data: cashTxns = [], refetch: refetchTxns } = useWalletTransactions();
   const { data: pointsTxns = [] } = usePointsTransactions();
+  const { data: earnings } = useEarningsSummary();
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
@@ -341,6 +344,11 @@ function WalletContent() {
               )}
             </div>
           </div>
+
+          {/* Phase GG: 受試者收益視覺化（trend + bySurvey） */}
+          {isRespondent && earnings && (earnings.monthly.length > 0 || earnings.bySurvey.length > 0) && (
+            <EarningsChart summary={earnings} />
+          )}
 
           {/* 現金交易紀錄 */}
           <section>
