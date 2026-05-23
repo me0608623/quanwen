@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { usePlatformStats, usePlatformHealth } from '@/hooks/use-admin';
+import { SurveyStatusDonut } from '@/components/admin/survey-status-donut';
 
 function StatCard({ label, value, sub }: { label: string; value: number | string; sub?: string }) {
   return (
@@ -59,15 +60,17 @@ export default function AdminOverviewPage() {
       {/* 問卷統計 */}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">問卷</h2>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-          <StatCard label="待審核" value={stats.surveyCounts.pending_review}
-            sub={stats.surveyCounts.pending_review > 0 ? '需要處理' : '已清空'} />
-          <StatCard label="已發布" value={stats.surveyCounts.published} />
-          <StatCard label="已關閉" value={stats.surveyCounts.closed} />
-          <StatCard label="已拒絕" value={stats.surveyCounts.rejected} />
-          <StatCard label="草稿" value={stats.surveyCounts.draft} />
-          <StatCard label="暫停中" value={stats.surveyCounts.paused} />
-          <StatCard label="問卷總數" value={totalSurveys} />
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div className="lg:col-span-2 grid grid-cols-2 sm:grid-cols-3 gap-4">
+            <StatCard label="待審核" value={stats.surveyCounts.pending_review}
+              sub={stats.surveyCounts.pending_review > 0 ? '需要處理' : '已清空'} />
+            <StatCard label="已發布" value={stats.surveyCounts.published} />
+            <StatCard label="已關閉" value={stats.surveyCounts.closed} />
+            <StatCard label="已拒絕" value={stats.surveyCounts.rejected} />
+            <StatCard label="草稿" value={stats.surveyCounts.draft} />
+            <StatCard label="暫停中" value={stats.surveyCounts.paused} />
+          </div>
+          <SurveyStatusDonut counts={stats.surveyCounts} />
         </div>
       </section>
 
