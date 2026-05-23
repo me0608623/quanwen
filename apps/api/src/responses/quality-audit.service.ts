@@ -11,6 +11,7 @@ import {
   respondentProfiles,
 } from '../db/schema';
 import { ZaiClient } from '../ai-audit/zai.client';
+import { parseHolisticJudge, GROUNDING_SUFFIX } from '../ai-audit/schemas';
 import { CryptoService } from '../common/crypto.service';
 import { AntiCheatService } from './anti-cheat.service';
 import type { AnswerDto } from './dto/submit-response.dto';
@@ -452,18 +453,15 @@ export class QualityAuditService {
       '}',
     ].join('\n');
 
-    return this.zai.jsonChat<{
-      sincerity_score: number;
-      primary_concern?: string;
-      evidence?: string[];
-      recommendation?: 'approve' | 'manual_review' | 'reject';
-      summary?: string;
-    }>(
+    // Phase II.2: 用 Zod schema 嚴格驗證 LLM 輸出，並 append GROUNDING_SUFFIX 防幻覺
+    const raw = await this.zai.jsonChat<unknown>(
       '你是台灣資深問卷品質審核員（市調公司 10 年經驗）。判斷填答整體誠意，給 0-100 分。' +
-      '回繁體中文 JSON，語氣中立、具體、可被申訴。',
+        '回繁體中文 JSON，語氣中立、具體、可被申訴。' +
+        GROUNDING_SUFFIX,
       userPrompt,
       { temperature: 0.3 },
     );
+    return parseHolisticJudge(raw);
   }
 
   // ─── Default fallback ──────────────────────────────────────────────────

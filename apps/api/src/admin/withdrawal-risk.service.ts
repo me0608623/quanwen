@@ -4,6 +4,7 @@ import { DB } from '../db';
 import type { AppDb } from '../db';
 import { transactions, surveyResponses, users } from '../db/schema';
 import { ZaiClient } from '../ai-audit/zai.client';
+import { parseWithdrawalRisk, GROUNDING_SUFFIX } from '../ai-audit/schemas';
 
 export interface WithdrawalRisk {
   riskLevel: 'low' | 'medium' | 'high';
@@ -117,12 +118,15 @@ export class WithdrawalRiskService {
     ].join('\n');
 
     try {
-      return await this.zai.jsonChat<WithdrawalRisk>(
+      // Phase II.2: Zod schema 驗證輸出，GROUNDING_SUFFIX 防幻覺
+      const raw = await this.zai.jsonChat<unknown>(
         '你是金融反詐分析師。給出客觀的提領風險評估。' +
-          '只回傳合法 JSON，繁體中文，redFlags 每項 ≤ 35 字，禁編造。',
+          '只回傳合法 JSON，繁體中文，redFlags 每項 ≤ 35 字，禁編造。' +
+          GROUNDING_SUFFIX,
         prompt,
         { temperature: 0.2 },
       );
+      return parseWithdrawalRisk(raw);
     } catch (err) {
       this.logger.error('LLM withdrawal risk failed', err);
       return this.fallback({
