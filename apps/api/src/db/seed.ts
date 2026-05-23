@@ -18,12 +18,12 @@ async function seed() {
   const db = drizzle(pool, { schema: { users } });
 
   console.log('🌱 Seeding...');
-  const passwordHash = await bcrypt.hash('Password1', 12);
+  const passwordHash = await bcrypt.hash('000', 12);
 
   await db.insert(users).values([
-    { email: 'surveyor@example.com', passwordHash, displayName: '測試問券方', role: 'surveyor', emailVerified: true },
-    { email: 'respondent@example.com', passwordHash, displayName: '測試受試者', role: 'respondent', emailVerified: true },
-    { email: 'admin@quanwen.com', passwordHash, displayName: '平台管理員', role: 'admin', emailVerified: true },
+    { email: 'user@quanwen.com', passwordHash, displayName: '平台管理員', role: 'admin', emailVerified: true },
+    { email: 'user1@quanwen.com', passwordHash, displayName: '測試問券方', role: 'surveyor', emailVerified: true },
+    { email: 'user2@quanwen.com', passwordHash, displayName: '測試受試者', role: 'respondent', emailVerified: true },
   ]).onConflictDoNothing();
 
   console.log('✅ Done');
