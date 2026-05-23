@@ -8,6 +8,7 @@ import { useMe, useUpdateProfile, isPlaceholderEmail } from '@/hooks/use-auth';
 import { useMyProfile } from '@/hooks/use-profile';
 import { useMyResponses, useMyAppeals, useCreateAppeal, useMyReputationHistory } from '@/hooks/use-responses';
 import type { RespondentProfile } from '@/hooks/use-profile';
+import { ReputationTrend } from '@/components/profile/reputation-trend';
 
 const REPUTATION_LEVELS = [
   { min: 90, label: '優質受試者', color: 'text-green-600', bg: 'bg-green-100' },
@@ -386,8 +387,8 @@ function MyQualitySection({
         </div>
       )}
 
-      {/* Phase 7.2: 信譽分趨勢 mini chart */}
-      {repHistory.length > 0 && <ReputationTrendBlock history={repHistory} />}
+      {/* Phase EE: 信譽分趨勢 recharts mini chart */}
+      {repHistory.length > 0 && <ReputationTrend history={repHistory} />}
 
       {/* 申訴狀態歷史 */}
       {appeals.length > 0 && (
@@ -468,60 +469,3 @@ function Item({ label, value }: { label: string; value: string }) {
   );
 }
 
-/** Phase 7.2: 信譽分趨勢 mini chart（sparkline + 最近 5 筆變動）*/
-function ReputationTrendBlock({
-  history,
-}: {
-  history: Array<{ id: string; delta: number; newScore: number; reason: string; createdAt: string }>;
-}) {
-  // 取最近 10 筆作 sparkline（時間升序：左舊右新）
-  const points = [...history].reverse().slice(-10);
-  if (points.length === 0) return null;
-
-  const width = 200;
-  const height = 32;
-  const max = Math.max(...points.map((p) => p.newScore), 100);
-  const min = Math.min(...points.map((p) => p.newScore), 0);
-  const range = Math.max(1, max - min);
-  const stepX = points.length > 1 ? width / (points.length - 1) : 0;
-  const pathD = points
-    .map((p, i) => `${i === 0 ? 'M' : 'L'} ${i * stepX} ${height - ((p.newScore - min) / range) * height}`)
-    .join(' ');
-
-  const latest = points[points.length - 1];
-
-  return (
-    <div className="mt-3 rounded border border-slate-200 bg-white/60 p-3">
-      <div className="flex items-center justify-between mb-2">
-        <div>
-          <p className="text-[10px] uppercase tracking-wide text-slate-500">信譽分趨勢（最近 {points.length} 次變動）</p>
-          <p className="text-xs text-slate-600">最新：{latest.newScore} 分</p>
-        </div>
-        <svg width={width} height={height} className="text-[#126b8a]">
-          <path d={pathD} fill="none" stroke="currentColor" strokeWidth="1.5" />
-          {points.map((p, i) => (
-            <circle
-              key={p.id}
-              cx={i * stepX}
-              cy={height - ((p.newScore - min) / range) * height}
-              r={2}
-              fill={p.delta > 0 ? '#16a34a' : p.delta < 0 ? '#dc2626' : '#64748b'}
-            />
-          ))}
-        </svg>
-      </div>
-      <ul className="space-y-0.5">
-        {history.slice(0, 5).map((h) => (
-          <li key={h.id} className="flex items-center justify-between text-[11px]">
-            <span className="truncate flex-1 mr-2 text-slate-600">{h.reason}</span>
-            <span className={`font-mono font-bold ${
-              h.delta > 0 ? 'text-green-600' : h.delta < 0 ? 'text-red-600' : 'text-slate-500'
-            }`}>
-              {h.delta > 0 ? '+' : ''}{h.delta} → {h.newScore}
-            </span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
