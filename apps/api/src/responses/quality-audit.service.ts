@@ -12,7 +12,7 @@ import {
 } from '../db/schema';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { parseHolisticJudge } from '../ai-audit/schemas';
-import { HOLISTIC_JUDGE } from '../ai-audit/prompts';
+import { HOLISTIC_JUDGE, resolvePrompt } from '../ai-audit/prompts';
 import { CryptoService } from '../common/crypto.service';
 import { AntiCheatService } from './anti-cheat.service';
 import type { AnswerDto } from './dto/submit-response.dto';
@@ -454,14 +454,15 @@ export class QualityAuditService {
       '}',
     ].join('\n');
 
-    // Phase II.5: prompt 從 registry 取，telemetry 帶 key + version
+    // Phase II.5/II.6: prompt 從 registry 取，env feature flag 可切換版本
+    const prompt = resolvePrompt(HOLISTIC_JUDGE);
     const raw = await this.zai.jsonChat<unknown>(
-      HOLISTIC_JUDGE.system,
+      prompt.system,
       userPrompt,
       {
         temperature: 0.3,
-        promptKey: HOLISTIC_JUDGE.key,
-        promptVersion: HOLISTIC_JUDGE.version,
+        promptKey: prompt.key,
+        promptVersion: prompt.version,
       },
     );
     return parseHolisticJudge(raw);

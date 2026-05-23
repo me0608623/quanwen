@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { parsePlatformHealth } from '../ai-audit/schemas';
-import { PLATFORM_HEALTH } from '../ai-audit/prompts';
+import { PLATFORM_HEALTH, resolvePrompt } from '../ai-audit/prompts';
 
 export interface PlatformHealthSummary {
   status: 'healthy' | 'attention' | 'critical';
@@ -31,14 +31,15 @@ export class PlatformHealthService {
   async summarize(stats: StatsInput): Promise<PlatformHealthSummary> {
     const prompt = this.buildPrompt(stats);
     try {
-      // Phase II.5: prompt 從 registry 取
+      // Phase II.5/II.6: prompt 從 registry 取，env feature flag 可切換版本
+      const promptEntry = resolvePrompt(PLATFORM_HEALTH);
       const raw = await this.zai.jsonChat<unknown>(
-        PLATFORM_HEALTH.system,
+        promptEntry.system,
         prompt,
         {
           temperature: 0.3,
-          promptKey: PLATFORM_HEALTH.key,
-          promptVersion: PLATFORM_HEALTH.version,
+          promptKey: promptEntry.key,
+          promptVersion: promptEntry.version,
         },
       );
       const result = parsePlatformHealth(raw);

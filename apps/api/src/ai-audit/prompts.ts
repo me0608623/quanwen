@@ -75,3 +75,44 @@ export const ALL_PROMPTS: PromptEntry[] = [
   WITHDRAWAL_RISK,
   PLATFORM_HEALTH,
 ];
+
+// ─── Phase II.6: env feature flag for prompt version ────────────────────────
+
+/**
+ * 同一 key 可註冊多個 version（A/B 用）。
+ * env `AI_PROMPT_<DOMAIN.USE>_VERSION` 指定要用哪個 version；不指定走 default。
+ *
+ * 例：對 quality_audit.holistic_judge 啟用 v2 →
+ *   AI_PROMPT_QUALITY_AUDIT__HOLISTIC_JUDGE_VERSION=2.0.0
+ *
+ * 為什麼 env 而非 db flag：
+ * - dev/staging/prod 環境隔離；同一 commit 部署到不同環境可跑不同 prompt
+ * - 重啟即生效，不需 db migration
+ * - 對 prompt A/B 這種低頻變更，env 比 db flag 簡單
+ */
+function envKeyFor(promptKey: string): string {
+  return `AI_PROMPT_${promptKey.toUpperCase().replace(/\./g, '__')}_VERSION`;
+}
+
+/**
+ * 取 prompt：依 env 偏好版本，否則 default。
+ *
+ * @param defaultEntry 該 key 的預設 entry（通常是 v1.0.0）
+ * @param alternatives 其他註冊版本（同 key 不同 version）
+ */
+export function resolvePrompt(
+  defaultEntry: PromptEntry,
+  alternatives: PromptEntry[] = [],
+): PromptEntry {
+  const envKey = envKeyFor(defaultEntry.key);
+  const wanted = process.env[envKey];
+  if (!wanted || wanted === defaultEntry.version) return defaultEntry;
+
+  const match = alternatives.find(
+    (p) => p.key === defaultEntry.key && p.version === wanted,
+  );
+  return match ?? defaultEntry; // 找不到 alt 退回 default（保守 fallback）
+}
+
+/** 把 envKeyFor export 出來供測試用 */
+export { envKeyFor };

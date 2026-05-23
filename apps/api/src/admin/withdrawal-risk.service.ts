@@ -5,7 +5,7 @@ import type { AppDb } from '../db';
 import { transactions, surveyResponses, users } from '../db/schema';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { parseWithdrawalRisk } from '../ai-audit/schemas';
-import { WITHDRAWAL_RISK } from '../ai-audit/prompts';
+import { WITHDRAWAL_RISK, resolvePrompt } from '../ai-audit/prompts';
 
 export interface WithdrawalRisk {
   riskLevel: 'low' | 'medium' | 'high';
@@ -119,14 +119,15 @@ export class WithdrawalRiskService {
     ].join('\n');
 
     try {
-      // Phase II.5: prompt 從 registry 取
+      // Phase II.5/II.6: prompt 從 registry 取，env feature flag 可切換版本
+      const promptEntry = resolvePrompt(WITHDRAWAL_RISK);
       const raw = await this.zai.jsonChat<unknown>(
-        WITHDRAWAL_RISK.system,
+        promptEntry.system,
         prompt,
         {
           temperature: 0.2,
-          promptKey: WITHDRAWAL_RISK.key,
-          promptVersion: WITHDRAWAL_RISK.version,
+          promptKey: promptEntry.key,
+          promptVersion: promptEntry.version,
         },
       );
       return parseWithdrawalRisk(raw);

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   HOLISTIC_JUDGE,
   WITHDRAWAL_RISK,
@@ -53,5 +53,60 @@ describe('AI prompt registry', () => {
       key: 'quality_audit.holistic_judge',
       version: '1.0.0',
     });
+  });
+});
+
+describe('resolvePrompt (Phase II.6 feature flag)', () => {
+  const ENV_KEY = 'AI_PROMPT_QUALITY_AUDIT__HOLISTIC_JUDGE_VERSION';
+
+  // 確保 test 開始 / 結束都清乾淨
+  beforeEach(() => {
+    delete process.env[ENV_KEY];
+  });
+  afterEach(() => {
+    delete process.env[ENV_KEY];
+  });
+
+  it('無 env override → 回 default entry', async () => {
+    const { resolvePrompt, HOLISTIC_JUDGE } = await import('./prompts');
+    const p = resolvePrompt(HOLISTIC_JUDGE);
+    expect(p.version).toBe('1.0.0');
+  });
+
+  it('env 指定 default version → 仍回 default', async () => {
+    const { resolvePrompt, HOLISTIC_JUDGE } = await import('./prompts');
+    process.env[ENV_KEY] = '1.0.0';
+    const p = resolvePrompt(HOLISTIC_JUDGE);
+    expect(p.version).toBe('1.0.0');
+  });
+
+  it('env 指定存在的 alt version → 用 alt', async () => {
+    const { resolvePrompt, HOLISTIC_JUDGE } = await import('./prompts');
+    const alt = {
+      key: HOLISTIC_JUDGE.key,
+      version: '2.0.0',
+      system: 'alt prompt v2',
+    };
+    process.env[ENV_KEY] = '2.0.0';
+    const p = resolvePrompt(HOLISTIC_JUDGE, [alt]);
+    expect(p.version).toBe('2.0.0');
+    expect(p.system).toBe('alt prompt v2');
+  });
+
+  it('env 指定不存在的 version → fallback 回 default', async () => {
+    const { resolvePrompt, HOLISTIC_JUDGE } = await import('./prompts');
+    process.env[ENV_KEY] = '99.99.99';
+    const p = resolvePrompt(HOLISTIC_JUDGE);
+    expect(p.version).toBe('1.0.0');
+  });
+
+  it('envKeyFor 把 key dotted notation 轉成 env-safe', async () => {
+    const { envKeyFor } = await import('./prompts');
+    expect(envKeyFor('quality_audit.holistic_judge')).toBe(
+      'AI_PROMPT_QUALITY_AUDIT__HOLISTIC_JUDGE_VERSION',
+    );
+    expect(envKeyFor('admin.platform_health')).toBe(
+      'AI_PROMPT_ADMIN__PLATFORM_HEALTH_VERSION',
+    );
   });
 });
