@@ -175,4 +175,116 @@ describe('ZaiClient', () => {
     expect(new ZaiError('http_401', '', 1).retryable).toBe(false);
     expect(new ZaiError('parse', '', 1).retryable).toBe(false);
   });
+
+  describe('Phase II.3 — response cache', () => {
+    it('11. 同 prompt 第二次呼叫 → CACHE_HIT，fetch 不被叫第二次', async () => {
+      fetchSpy.mockReturnValueOnce(mockOk('{"k":"v"}'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'same prompt' }];
+      const a = await client.chat(messages);
+      const b = await client.chat(messages);
+
+      expect(a).toBe(b);
+      expect(fetchSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('12. options.cache=false 旁路 cache → 第二次仍 fetch', async () => {
+      fetchSpy
+        .mockReturnValueOnce(mockOk('{"x":1}'))
+        .mockReturnValueOnce(mockOk('{"x":2}'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'bypass' }];
+      await client.chat(messages, { cache: false });
+      await client.chat(messages, { cache: false });
+
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('13. 不同 temperature → 不同 cache key', async () => {
+      fetchSpy
+        .mockReturnValueOnce(mockOk('first'))
+        .mockReturnValueOnce(mockOk('second'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'temp-sensitive' }];
+      const a = await client.chat(messages, { temperature: 0.3 });
+      const b = await client.chat(messages, { temperature: 0.5 });
+
+      expect(a).toBe('first');
+      expect(b).toBe('second');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('14. ZAI_CACHE_DISABLED=true → cache 失效', async () => {
+      process.env.ZAI_CACHE_DISABLED = 'true';
+      const c = new ZaiClient();
+      fetchSpy
+        .mockReturnValueOnce(mockOk('one'))
+        .mockReturnValueOnce(mockOk('two'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'no cache' }];
+      const a = await c.chat(messages);
+      const b = await c.chat(messages);
+
+      expect(a).toBe('one');
+      expect(b).toBe('two');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+      delete process.env.ZAI_CACHE_DISABLED;
+    });
+
+    it('15. clearCache() 後再呼叫 → 重新 fetch', async () => {
+      fetchSpy
+        .mockReturnValueOnce(mockOk('a'))
+        .mockReturnValueOnce(mockOk('b'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'clear test' }];
+      await client.chat(messages);
+      client.clearCache();
+      const second = await client.chat(messages);
+
+      expect(second).toBe('b');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('16. truncated 結果（finish_reason=length）不寫 cache', async () => {
+      fetchSpy
+        .mockReturnValueOnce(
+          Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () =>
+              Promise.resolve({
+                id: 'r',
+                choices: [{ message: { content: 'truncated' }, finish_reason: 'length' }],
+                usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 },
+              }),
+          } as Response),
+        )
+        .mockReturnValueOnce(mockOk('full'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'truncated case' }];
+      await client.chat(messages);
+      const second = await client.chat(messages);
+
+      expect(second).toBe('full');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('17. cache TTL 過期 → 重新 fetch', async () => {
+      process.env.ZAI_CACHE_TTL_MS = '50';
+      const c = new ZaiClient();
+      fetchSpy
+        .mockReturnValueOnce(mockOk('initial'))
+        .mockReturnValueOnce(mockOk('refreshed'));
+
+      const messages: { role: 'user'; content: string }[] = [{ role: 'user', content: 'ttl test' }];
+      const a = await c.chat(messages);
+      expect(a).toBe('initial');
+
+      await new Promise((r) => setTimeout(r, 80));
+
+      const b = await c.chat(messages);
+      expect(b).toBe('refreshed');
+      expect(fetchSpy).toHaveBeenCalledTimes(2);
+    }, 5000);
+  });
 });

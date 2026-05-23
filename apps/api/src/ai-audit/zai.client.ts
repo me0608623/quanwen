@@ -1,4 +1,5 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
+import { createHash } from 'crypto';
 
 interface ZaiMessage {
   role: 'system' | 'user' | 'assistant';
@@ -72,6 +73,60 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_MAX_RETRIES = 2; // 共嘗試 1 + 2 = 3 次
 const RETRY_BASE_MS = 500;
 
+const DEFAULT_CACHE_TTL_MS = 5 * 60_000; // 5 分鐘
+const DEFAULT_CACHE_MAX_ENTRIES = 200;
+
+interface CacheEntry {
+  content: string;
+  expiresAt: number;
+}
+
+/**
+ * 簡易 LRU：用 Map 的 insertion-order 特性實作。
+ * - get 命中 → 把 key 移到 Map 尾端（最新）
+ * - set 超過 max → 刪掉 Map 第一個 key（最舊）
+ *
+ * 注意：這是 in-memory，每個 Node 進程獨立；多實例部署時不共享。
+ * 對 SaaS 平台 stats 摘要這類「同輸入短時間內可能被多次查詢」的場景仍有效。
+ */
+class ZaiCache {
+  private map = new Map<string, CacheEntry>();
+  constructor(
+    private readonly max: number,
+    private readonly ttlMs: number,
+  ) {}
+
+  get(key: string): string | undefined {
+    const entry = this.map.get(key);
+    if (!entry) return undefined;
+    if (Date.now() > entry.expiresAt) {
+      this.map.delete(key);
+      return undefined;
+    }
+    // LRU：移到 Map 尾端
+    this.map.delete(key);
+    this.map.set(key, entry);
+    return entry.content;
+  }
+
+  set(key: string, content: string): void {
+    if (this.map.has(key)) this.map.delete(key);
+    this.map.set(key, { content, expiresAt: Date.now() + this.ttlMs });
+    if (this.map.size > this.max) {
+      const firstKey = this.map.keys().next().value;
+      if (firstKey !== undefined) this.map.delete(firstKey);
+    }
+  }
+
+  clear(): void {
+    this.map.clear();
+  }
+
+  get size(): number {
+    return this.map.size;
+  }
+}
+
 @Injectable()
 export class ZaiClient {
   private readonly logger = new Logger(ZaiClient.name);
@@ -80,6 +135,8 @@ export class ZaiClient {
   private readonly model: string;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
+  private readonly cacheEnabled: boolean;
+  private readonly cache: ZaiCache;
 
   constructor() {
     this.baseUrl = process.env.ZAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4';
@@ -88,6 +145,14 @@ export class ZaiClient {
     this.timeoutMs = parseInt(process.env.ZAI_TIMEOUT_MS ?? String(DEFAULT_TIMEOUT_MS), 10);
     this.maxRetries = parseInt(process.env.ZAI_MAX_RETRIES ?? String(DEFAULT_MAX_RETRIES), 10);
 
+    const ttlMs = parseInt(process.env.ZAI_CACHE_TTL_MS ?? String(DEFAULT_CACHE_TTL_MS), 10);
+    const cacheMax = parseInt(
+      process.env.ZAI_CACHE_MAX ?? String(DEFAULT_CACHE_MAX_ENTRIES),
+      10,
+    );
+    this.cacheEnabled = process.env.ZAI_CACHE_DISABLED !== 'true' && ttlMs > 0;
+    this.cache = new ZaiCache(cacheMax, ttlMs);
+
     if (!this.apiKey) {
       // 不在 constructor throw — service 在 prod 環境若沒設仍可走 fallback path
       // 真正 chat 時才檢查
@@ -95,12 +160,41 @@ export class ZaiClient {
     }
   }
 
+  /** Cache key = sha256(model + temperature + messages + jsonMode)。temperature 影響輸出，必須納入 key */
+  private cacheKey(messages: ZaiMessage[], options: { temperature?: number; jsonMode?: boolean }): string {
+    const payload = JSON.stringify({
+      model: this.model,
+      temperature: options.temperature ?? 0.3,
+      jsonMode: options.jsonMode ?? false,
+      messages,
+    });
+    return createHash('sha256').update(payload).digest('hex');
+  }
+
+  /** 強制清空 cache（測試用 / 手動 cache invalidation） */
+  clearCache(): void {
+    this.cache.clear();
+  }
+
   async chat(
     messages: ZaiMessage[],
-    options: { temperature?: number; maxTokens?: number; jsonMode?: boolean } = {},
+    options: { temperature?: number; maxTokens?: number; jsonMode?: boolean; cache?: boolean } = {},
   ): Promise<string> {
     if (!this.apiKey) {
       throw new ZaiError('http_401', 'ZAI_API_KEY 未設定', 0);
+    }
+
+    // Cache lookup（caller 可用 cache:false 旁路）
+    const useCache = this.cacheEnabled && options.cache !== false;
+    const cacheK = useCache ? this.cacheKey(messages, options) : null;
+    if (cacheK) {
+      const hit = this.cache.get(cacheK);
+      if (hit !== undefined) {
+        this.logger.log(
+          `zai.chat CACHE_HIT model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
+        );
+        return hit;
+      }
     }
 
     const body: ZaiChatRequest = {
@@ -174,6 +268,12 @@ export class ZaiClient {
               `Z.ai output truncated (finish_reason=length). Consider raising maxTokens. usage=${JSON.stringify(data.usage)}`,
             );
           }
+
+          // Cache write — 不快取 truncated output（不完整資料快取會 mislead 後續查詢）
+          if (cacheK && finishReason !== 'length') {
+            this.cache.set(cacheK, content);
+          }
+
           return content;
         }
       } catch (err) {
