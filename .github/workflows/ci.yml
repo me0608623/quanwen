@@ -7,6 +7,59 @@ on:
     branches: [main, develop]
 
 jobs:
+  ai-prompt-change-guard:
+    name: AI prompt change guard
+    # 只在 PR 跑（push to main 不需要）；Phase II.7：對 prompts.ts diff 加 prominent warning
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Detect prompt registry changes
+        id: detect
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          git fetch origin ${{ github.base_ref }} --depth=1
+          CHANGED=$(git diff --name-only "$BASE...HEAD" -- 'apps/api/src/ai-audit/prompts.ts' 'apps/api/src/ai-audit/schemas.ts' || true)
+          echo "files=$CHANGED" >> "$GITHUB_OUTPUT"
+          if [ -n "$CHANGED" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Show prompt diff in job summary
+        if: steps.detect.outputs.changed == 'true'
+        run: |
+          BASE="origin/${{ github.base_ref }}"
+          {
+            echo '## ⚠️ AI Prompt Registry / Schema 變更偵測'
+            echo ''
+            echo '此 PR 動到了 LLM prompt 或輸出 schema。Reviewer 請特別檢查：'
+            echo ''
+            echo '- [ ] 改 prompt 文字 → `version` 是否有 bump？'
+            echo '- [ ] 加新 prompt entry → `key` 命名是否符合 `領域.用途` 格式？'
+            echo '- [ ] 改 Zod schema → 對應 caller 是否處理新欄位 / fallback 是否保守？'
+            echo '- [ ] GROUNDING_SUFFIX 動到 → 影響所有 LLM service，三思'
+            echo '- [ ] prompts.test.ts / schemas.test.ts 是否有對應更新？'
+            echo ''
+            echo '### Changed files'
+            echo '```'
+            echo '${{ steps.detect.outputs.files }}'
+            echo '```'
+            echo ''
+            echo '### Diff'
+            echo '```diff'
+            git diff "$BASE...HEAD" -- 'apps/api/src/ai-audit/prompts.ts' 'apps/api/src/ai-audit/schemas.ts'
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail-soft note (always pass)
+        if: steps.detect.outputs.changed != 'true'
+        run: echo "No AI prompt/schema changes in this PR."
+
   static:
     name: Type-check / Lint / Audit
     runs-on: ubuntu-latest
