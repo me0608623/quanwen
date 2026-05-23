@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
 import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment } from '@/hooks/use-surveys';
+import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
 
 interface OptionCount { optionId: string; label: string; count: number }
 interface QuestionStat {
@@ -191,30 +192,9 @@ export default function SurveyStatsPage() {
             <p className="text-xs text-muted-foreground">{q.totalAnswers} 人回答</p>
           </div>
 
-          {/* 單選 / 多選 */}
-          {q.optionCounts && (
-            <div className="space-y-2">
-              {q.optionCounts
-                .slice()
-                .sort((a, b) => b.count - a.count)
-                .map((o) => {
-                  const pct = q.totalAnswers > 0 ? Math.round((o.count / q.totalAnswers) * 100) : 0;
-                  return (
-                    <div key={o.optionId}>
-                      <div className="flex justify-between text-sm mb-0.5">
-                        <span className="truncate max-w-[70%]">{o.label}</span>
-                        <span className="text-muted-foreground tabular-nums shrink-0">{o.count} ({pct}%)</span>
-                      </div>
-                      <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div
-                          className="h-full bg-primary rounded-full transition-all"
-                          style={{ width: `${pct}%` }}
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-            </div>
+          {/* 單選 / 多選 — Phase V: recharts BarChart */}
+          {q.optionCounts && q.optionCounts.length > 0 && (
+            <OptionBarChart data={q.optionCounts} totalAnswers={q.totalAnswers} />
           )}
 
           {/* 評分 */}
@@ -517,20 +497,30 @@ function QualityDistributionPanel({ data }: { data: QualityDistribution }) {
         )}
       </div>
 
-      {/* Bar */}
-      <div className="flex h-6 w-full overflow-hidden rounded-md border border-slate-200 bg-white">
-        {passedPct > 0 && <div className="bg-green-400 transition-all" style={{ width: `${passedPct}%` }} title={`通過 ${data.passed}`} />}
-        {suspiciousPct > 0 && <div className="bg-amber-300 transition-all" style={{ width: `${suspiciousPct}%` }} title={`疑似 ${data.suspicious}`} />}
-        {rejectedPct > 0 && <div className="bg-red-400 transition-all" style={{ width: `${rejectedPct}%` }} title={`退件 ${data.rejected}`} />}
-        {unauditedPct > 0 && <div className="bg-slate-200 transition-all" style={{ width: `${unauditedPct}%` }} title={`未審核 ${data.unaudited}`} />}
-      </div>
-
-      {/* Legend */}
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-        <LegendCell color="bg-green-400" label="通過" count={data.passed} total={data.total} />
-        <LegendCell color="bg-amber-300" label="疑似" count={data.suspicious} total={data.total} />
-        <LegendCell color="bg-red-400" label="退件" count={data.rejected} total={data.total} />
-        <LegendCell color="bg-slate-200" label="未審核" count={data.unaudited} total={data.total} />
+      {/* Phase V: recharts donut + 保留 bar 線型 + legend cells */}
+      <div className="grid gap-3 md:grid-cols-[1fr,200px] items-center">
+        <div>
+          {/* Bar */}
+          <div className="flex h-6 w-full overflow-hidden rounded-md border border-slate-200 bg-white">
+            {passedPct > 0 && <div className="bg-green-400 transition-all" style={{ width: `${passedPct}%` }} title={`通過 ${data.passed}`} />}
+            {suspiciousPct > 0 && <div className="bg-amber-300 transition-all" style={{ width: `${suspiciousPct}%` }} title={`疑似 ${data.suspicious}`} />}
+            {rejectedPct > 0 && <div className="bg-red-400 transition-all" style={{ width: `${rejectedPct}%` }} title={`退件 ${data.rejected}`} />}
+            {unauditedPct > 0 && <div className="bg-slate-200 transition-all" style={{ width: `${unauditedPct}%` }} title={`未審核 ${data.unaudited}`} />}
+          </div>
+          {/* Legend */}
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
+            <LegendCell color="bg-green-400" label="通過" count={data.passed} total={data.total} />
+            <LegendCell color="bg-amber-300" label="疑似" count={data.suspicious} total={data.total} />
+            <LegendCell color="bg-red-400" label="退件" count={data.rejected} total={data.total} />
+            <LegendCell color="bg-slate-200" label="未審核" count={data.unaudited} total={data.total} />
+          </div>
+        </div>
+        <QualityDonut
+          passed={data.passed}
+          suspicious={data.suspicious}
+          rejected={data.rejected}
+          unaudited={data.unaudited}
+        />
       </div>
 
       {audited === 0 && (
