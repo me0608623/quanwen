@@ -4,7 +4,8 @@ import { DB } from '../db';
 import type { AppDb } from '../db';
 import { transactions, surveyResponses, users } from '../db/schema';
 import { ZaiClient } from '../ai-audit/zai.client';
-import { parseWithdrawalRisk, GROUNDING_SUFFIX } from '../ai-audit/schemas';
+import { parseWithdrawalRisk } from '../ai-audit/schemas';
+import { WITHDRAWAL_RISK } from '../ai-audit/prompts';
 
 export interface WithdrawalRisk {
   riskLevel: 'low' | 'medium' | 'high';
@@ -118,13 +119,15 @@ export class WithdrawalRiskService {
     ].join('\n');
 
     try {
-      // Phase II.2: Zod schema 驗證輸出，GROUNDING_SUFFIX 防幻覺
+      // Phase II.5: prompt 從 registry 取
       const raw = await this.zai.jsonChat<unknown>(
-        '你是金融反詐分析師。給出客觀的提領風險評估。' +
-          '只回傳合法 JSON，繁體中文，redFlags 每項 ≤ 35 字，禁編造。' +
-          GROUNDING_SUFFIX,
+        WITHDRAWAL_RISK.system,
         prompt,
-        { temperature: 0.2 },
+        {
+          temperature: 0.2,
+          promptKey: WITHDRAWAL_RISK.key,
+          promptVersion: WITHDRAWAL_RISK.version,
+        },
       );
       return parseWithdrawalRisk(raw);
     } catch (err) {

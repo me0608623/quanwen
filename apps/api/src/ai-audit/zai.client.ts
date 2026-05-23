@@ -67,6 +67,8 @@ interface ZaiTelemetry {
   totalTokens: number;
   finishReason: string;
   attempts: number;
+  promptKey?: string;     // Phase II.5: 哪支 prompt 用的
+  promptVersion?: string;
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -178,7 +180,14 @@ export class ZaiClient {
 
   async chat(
     messages: ZaiMessage[],
-    options: { temperature?: number; maxTokens?: number; jsonMode?: boolean; cache?: boolean } = {},
+    options: {
+      temperature?: number;
+      maxTokens?: number;
+      jsonMode?: boolean;
+      cache?: boolean;
+      promptKey?: string;     // Phase II.5: telemetry 用
+      promptVersion?: string;
+    } = {},
   ): Promise<string> {
     if (!this.apiKey) {
       throw new ZaiError('http_401', 'ZAI_API_KEY 未設定', 0);
@@ -260,6 +269,8 @@ export class ZaiClient {
             totalTokens: data.usage?.total_tokens ?? 0,
             finishReason,
             attempts: attempt,
+            promptKey: options.promptKey,
+            promptVersion: options.promptVersion,
           };
           this.logger.log(`zai.chat OK ${JSON.stringify(telemetry)}`);
 
@@ -314,7 +325,12 @@ export class ZaiClient {
   async jsonChat<T>(
     systemPrompt: string,
     userPrompt: string,
-    options: { temperature?: number; maxTokens?: number } = {},
+    options: {
+      temperature?: number;
+      maxTokens?: number;
+      promptKey?: string;
+      promptVersion?: string;
+    } = {},
   ): Promise<T> {
     // 強化 system prompt 確保 LLM 回 JSON 而不是 markdown
     const enforcedSystem =

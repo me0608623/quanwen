@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ZaiClient } from '../ai-audit/zai.client';
-import { parsePlatformHealth, GROUNDING_SUFFIX } from '../ai-audit/schemas';
+import { parsePlatformHealth } from '../ai-audit/schemas';
+import { PLATFORM_HEALTH } from '../ai-audit/prompts';
 
 export interface PlatformHealthSummary {
   status: 'healthy' | 'attention' | 'critical';
@@ -30,14 +31,15 @@ export class PlatformHealthService {
   async summarize(stats: StatsInput): Promise<PlatformHealthSummary> {
     const prompt = this.buildPrompt(stats);
     try {
-      // Phase II.2: Zod schema + grounding 防幻覺。Zod 已內建 max(4) slice 不需再 trim
+      // Phase II.5: prompt 從 registry 取
       const raw = await this.zai.jsonChat<unknown>(
-        '你是 SaaS 平台健康度分析師。基於平台統計給出簡潔健康摘要與行動建議。' +
-          '回繁體中文 JSON。status 為 healthy/attention/critical 三選一。' +
-          '所有條目限制 ≤ 40 字，不可編造資料。' +
-          GROUNDING_SUFFIX,
+        PLATFORM_HEALTH.system,
         prompt,
-        { temperature: 0.3 },
+        {
+          temperature: 0.3,
+          promptKey: PLATFORM_HEALTH.key,
+          promptVersion: PLATFORM_HEALTH.version,
+        },
       );
       const result = parsePlatformHealth(raw);
       return {
