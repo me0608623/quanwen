@@ -75,15 +75,40 @@ export class QualityAuditService {
    * 完整 3 層品質審核 pipeline
    * @param responseId 已存的 response 紀錄 ID
    * @param behavior 從前端送來的行為訊號（Phase 2 才會完整）
+   * @param options.force 為 true 時忽略 DB 已存的 quality_breakdown，重新跑全 pipeline
    */
-  async audit(responseId: string, behavior: BehaviorMetrics): Promise<QualityBreakdown> {
+  async audit(
+    responseId: string,
+    behavior: BehaviorMetrics,
+    options: { force?: boolean } = {},
+  ): Promise<QualityBreakdown> {
     // ── 載入資料 ─────────────────────────────────────────────────────────
     const data = await this.loadResponseContext(responseId);
     if (!data) {
       this.logger.warn(`audit: response ${responseId} not found`);
       return this.defaultBreakdown();
     }
-    const { response, survey, questions, answers, options, respondentProfile } = data;
+    const { response, survey, questions, answers, options: questionOpts, respondentProfile } = data;
+
+    // ── Phase II.8: DB 短路 — 若已 audit 過且 force≠true，直接回 cached ────────
+    if (!options.force && response.qualityScore !== null && response.qualityBreakdown) {
+      const cached = response.qualityBreakdown as Partial<QualityBreakdown>;
+      // sanity check：必填欄位都存在才信任 cache
+      if (
+        cached.finalScore !== undefined &&
+        cached.status !== undefined &&
+        cached.behaviorScore !== undefined
+      ) {
+        this.logger.log(
+          `audit DB_HIT response=${responseId} finalScore=${cached.finalScore} status=${cached.status}`,
+        );
+        return cached as QualityBreakdown;
+      }
+      // cache 不完整 → fall through 重跑（log 為觀察用）
+      this.logger.warn(
+        `audit DB cache incomplete for ${responseId}, recomputing. cached=${JSON.stringify(cached).slice(0, 200)}`,
+      );
+    }
 
     // ── Layer 1+2：規則式行為訊號評分 ────────────────────────────────────
     const legacy = this.antiCheat.evaluate(
@@ -97,7 +122,7 @@ export class QualityAuditService {
       legacy,
       questions,
       answers,
-      options,
+      options: questionOpts,
     });
     const behaviorScore = this.weightedBehavior(signalScores);
 
