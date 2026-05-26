@@ -1,5 +1,6 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { createHash } from 'crypto';
+import { zaiTelemetry } from './telemetry';
 
 interface ZaiMessage {
   role: 'system' | 'user' | 'assistant';
@@ -190,7 +191,9 @@ export class ZaiClient {
     } = {},
   ): Promise<string> {
     if (!this.apiKey) {
-      throw new ZaiError('http_401', 'ZAI_API_KEY 未設定', 0);
+      const e = new ZaiError('http_401', 'ZAI_API_KEY 未設定', 0);
+      this.recordErrorTelemetry(e, options);
+      throw e;
     }
 
     // Cache lookup（caller 可用 cache:false 旁路）
@@ -202,6 +205,18 @@ export class ZaiClient {
         this.logger.log(
           `zai.chat CACHE_HIT model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
         );
+        zaiTelemetry.record({
+          ts: Date.now(),
+          promptKey: options.promptKey,
+          promptVersion: options.promptVersion,
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          latencyMs: 0,
+          attempts: 0,
+          finishReason: 'cache_hit',
+          cacheHit: true,
+        });
         return hit;
       }
     }
@@ -219,6 +234,7 @@ export class ZaiClient {
     const startedAt = Date.now();
     let lastError: ZaiError | null = null;
 
+    try {
     for (let attempt = 1; attempt <= this.maxRetries + 1; attempt++) {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -273,6 +289,18 @@ export class ZaiClient {
             promptVersion: options.promptVersion,
           };
           this.logger.log(`zai.chat OK ${JSON.stringify(telemetry)}`);
+          zaiTelemetry.record({
+            ts: Date.now(),
+            promptKey: options.promptKey,
+            promptVersion: options.promptVersion,
+            totalTokens: telemetry.totalTokens,
+            promptTokens: telemetry.promptTokens,
+            completionTokens: telemetry.completionTokens,
+            latencyMs: telemetry.latencyMs,
+            attempts: telemetry.attempts,
+            finishReason,
+            cacheHit: false,
+          });
 
           if (finishReason === 'length') {
             this.logger.warn(
@@ -320,6 +348,33 @@ export class ZaiClient {
 
     // 不會到這（loop 內每條路徑都 throw 或 return），但 TS narrow 用
     throw lastError ?? new ZaiError('network', 'unreachable', 0);
+    } catch (err) {
+      // 任何 terminal ZaiError 在這集中記錄一次 telemetry 後 rethrow
+      if (err instanceof ZaiError) {
+        this.recordErrorTelemetry(err, options, Date.now() - startedAt);
+      }
+      throw err;
+    }
+  }
+
+  private recordErrorTelemetry(
+    err: ZaiError,
+    options: { promptKey?: string; promptVersion?: string },
+    latencyMs = 0,
+  ): void {
+    zaiTelemetry.record({
+      ts: Date.now(),
+      promptKey: options.promptKey,
+      promptVersion: options.promptVersion,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      latencyMs,
+      attempts: err.attempts,
+      finishReason: 'error',
+      errorKind: err.kind,
+      cacheHit: false,
+    });
   }
 
   async jsonChat<T>(
