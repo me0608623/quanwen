@@ -8,3 +8,6 @@ export * from './wallet';
 export * from './appeals';
 export * from './kyc';
 export * from './point-shop';
+export * from './mutual';
+export * from './spin';
+export * from './zai-call-log';

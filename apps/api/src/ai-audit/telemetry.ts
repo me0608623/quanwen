@@ -47,9 +47,17 @@ export interface TelemetrySnapshot {
 
 const DEFAULT_RING_SIZE = 500;
 
+/**
+ * Sink：record() 時除了進 ring buffer，也轉給已註冊的 sink（如 DB 持久化）。
+ * sink-agnostic 設計 — ZaiClient 只 call record()，不知道有沒有 DB。
+ * Phase II.11 的 ZaiCallLogService 會 registerSink 把每筆寫進 zai_call_log table。
+ */
+export type TelemetrySink = (r: TelemetryRecord) => void;
+
 export class ZaiTelemetryAggregator {
   private ring: TelemetryRecord[] = [];
   private readonly maxSize: number;
+  private sinks: TelemetrySink[] = [];
 
   // 累計計數（不受 ring buffer 淘汰影響）
   private cumulativeCalls = 0;
@@ -60,6 +68,14 @@ export class ZaiTelemetryAggregator {
     this.maxSize = maxSize;
   }
 
+  /** 註冊 sink（如 DB 持久化）。回傳 unregister fn */
+  registerSink(sink: TelemetrySink): () => void {
+    this.sinks.push(sink);
+    return () => {
+      this.sinks = this.sinks.filter((s) => s !== sink);
+    };
+  }
+
   record(r: TelemetryRecord): void {
     this.cumulativeCalls++;
     if (r.errorKind) this.cumulativeErrors++;
@@ -68,6 +84,15 @@ export class ZaiTelemetryAggregator {
     this.ring.push(r);
     if (this.ring.length > this.maxSize) {
       this.ring.shift();
+    }
+
+    // 轉給 sink（DB 等）— sink 自己負責 fire-and-forget / 錯誤吞掉
+    for (const sink of this.sinks) {
+      try {
+        sink(r);
+      } catch {
+        /* sink 出錯絕不能影響主流程 */
+      }
     }
   }
 
