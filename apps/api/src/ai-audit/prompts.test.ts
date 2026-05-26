@@ -43,6 +43,11 @@ describe('AI prompt registry', () => {
     expect(SURVEY_DRAFT.system).toContain('JSON');
   });
 
+  it('SURVEY_DRAFT v2.1+ 支援使用者偏好題型', () => {
+    expect(SURVEY_DRAFT.version).toBe('2.1.0');
+    expect(SURVEY_DRAFT.system).toContain('偏好題型');
+  });
+
   it('key 之間不重複', () => {
     const keys = ALL_PROMPTS.map((p) => p.key);
     const unique = new Set(keys);

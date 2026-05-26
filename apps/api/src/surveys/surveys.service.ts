@@ -222,18 +222,31 @@ export class SurveysService {
     language: string;
     targetAudience?: string;
     purpose?: string;
+    preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
   }): Promise<{
     title: string;
     description?: string;
     questions: SurveyQuestionDto[];
     notes: string[];
   }> {
+    const TYPE_LABELS: Record<string, string> = {
+      single_choice: '單選',
+      multiple_choice: '多選',
+      text: '開放問答',
+      rating: '評分',
+    };
+    const preferredLine =
+      dto.preferredTypes && dto.preferredTypes.length > 0
+        ? `偏好題型（請優先使用，其餘酌量）：${dto.preferredTypes.map((t) => TYPE_LABELS[t] ?? t).join('、')}`
+        : '';
+
     const userPrompt = [
       `主題：${dto.topic}`,
       dto.purpose ? `目的：${dto.purpose}` : '',
       `題目數量：${dto.questionCount} 題`,
       `語言：${dto.language}`,
       dto.targetAudience ? `目標受眾：${dto.targetAudience}` : '',
+      preferredLine,
     ]
       .filter(Boolean)
       .join('\n');

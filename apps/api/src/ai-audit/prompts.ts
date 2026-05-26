@@ -78,7 +78,8 @@ export const PLATFORM_HEALTH: PromptEntry = {
  */
 export const SURVEY_DRAFT: PromptEntry = {
   key: 'surveys.ai_draft',
-  version: '2.0.0', // v1 是 inline prompt（surveys.service.ts），v2 收進 registry + 強化結構約束
+  // v1 inline；v2 收進 registry + 強化結構約束；v2.1 支援使用者「偏好題型」
+  version: '2.1.0',
   kind: 'generation',
   system: [
     '你是專業問卷設計顧問。根據使用者提供的「主題 + 目的 + 受眾」，產生一份結構完整的問卷草稿。',
@@ -110,6 +111,8 @@ export const SURVEY_DRAFT: PromptEntry = {
     '- 題型混搭（別整份都單選），至少 1 題開放式收集質性回饋',
     '- 題數依使用者要求；沒指定就 8-10 題',
     '- 涵蓋目的所需的關鍵面向，但別冗長',
+    '- 若使用者指定「偏好題型」，請以那些題型為主（佔多數），其餘題型酌量點綴；' +
+      '若未指定則自由混搭',
   ].join('\n'),
 };
 

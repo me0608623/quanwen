@@ -221,6 +221,7 @@ export function useAiDraft() {
       questionCount?: number;
       language?: string;
       targetAudience?: string;
+      preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
     }) => {
       const { data } = await api.post<AiDraftResult>('/surveys/ai-draft', {
         questionCount: 8,

@@ -7,6 +7,12 @@ export const AiDraftSchema = z.object({
   questionCount: z.number().int().min(3).max(20).default(8),
   language: z.enum(['zh-TW', 'en']).default('zh-TW'),
   targetAudience: z.string().max(200).optional(),
+  // Phase II.13: 建立者想要的題型偏好（AI 會優先使用這些題型）。
+  // 空 / 未給 → AI 自由混搭。
+  preferredTypes: z
+    .array(z.enum(['single_choice', 'multiple_choice', 'text', 'rating']))
+    .max(4)
+    .optional(),
 });
 
 export type AiDraftDto = z.infer<typeof AiDraftSchema>;

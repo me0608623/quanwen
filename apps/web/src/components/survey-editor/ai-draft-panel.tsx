@@ -7,14 +7,28 @@ interface AiDraftPanelProps {
   onApply: (draft: AiDraftResult) => void;
 }
 
+type QType = 'single_choice' | 'multiple_choice' | 'text' | 'rating';
+const TYPE_OPTIONS: { value: QType; label: string }[] = [
+  { value: 'single_choice', label: '單選' },
+  { value: 'multiple_choice', label: '多選' },
+  { value: 'text', label: '開放問答' },
+  { value: 'rating', label: '評分' },
+];
+
 export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
   const [topic, setTopic] = useState('');
   const [purpose, setPurpose] = useState('');
   const [questionCount, setQuestionCount] = useState(8);
   const [targetAudience, setTargetAudience] = useState('');
+  const [preferredTypes, setPreferredTypes] = useState<QType[]>([]);
   const [open, setOpen] = useState(false);
   const [notes, setNotes] = useState<string[]>([]);
   const aiDraft = useAiDraft();
+
+  const toggleType = (t: QType) =>
+    setPreferredTypes((prev) =>
+      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
+    );
 
   const handleGenerate = async () => {
     if (!topic.trim()) return;
@@ -24,6 +38,7 @@ export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
         purpose: purpose.trim() || undefined,
         questionCount,
         targetAudience: targetAudience.trim() || undefined,
+        preferredTypes: preferredTypes.length > 0 ? preferredTypes : undefined,
       });
       onApply(result);
       // 顯示 AI 自動調整提醒；有 notes 時不馬上關閉面板，讓使用者看到
@@ -97,6 +112,33 @@ export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
                 placeholder="例：18-35 歲學生"
                 className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
               />
+            </div>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-xs text-muted-foreground">
+              偏好題型（選填，可複選；不選則由 AI 自由混搭）
+            </label>
+            <div className="flex flex-wrap gap-2">
+              {TYPE_OPTIONS.map((opt) => {
+                const active = preferredTypes.includes(opt.value);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => toggleType(opt.value)}
+                    className={
+                      'rounded-full border px-3 py-1 text-xs font-medium transition-colors ' +
+                      (active
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:bg-muted')
+                    }
+                  >
+                    {active ? '✓ ' : ''}
+                    {opt.label}
+                  </button>
+                );
+              })}
             </div>
           </div>
 
