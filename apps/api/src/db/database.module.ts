@@ -363,15 +363,16 @@ export { DB_TOKEN as DB };
           interface BcryptShape { hash: (s: string, rounds: number) => Promise<string> }
           const bcryptMod = (await import('bcryptjs')) as unknown as BcryptShape & { default?: BcryptShape };
           const bcrypt: BcryptShape = bcryptMod.default ?? bcryptMod;
-          const aaHash = await bcrypt.hash('aa', 4);
-          const bbHash = await bcrypt.hash('bb', 4);
-          const ccHash = await bcrypt.hash('cc', 4);
+          // Phase A 後：帳號與 seed.ts / e2e helper 同步 — 統一 user/user1/user2@quanwen.com，密碼皆 '000'
+          // （UUID 維持不變，下方所有 demo 資料引用照舊）
+          const devHash = await bcrypt.hash('000', 4);
+          const aaHash = devHash; // demo-* 帳號沿用
           await client.exec(`
             INSERT INTO users (id, email, password_hash, role, status, display_name, email_verified, role_selected_at)
             VALUES
-              ('${AA_ID}', 'aa@aa.aa', '${aaHash}', 'respondent', 'active', '受試者 aa', true, NOW()),
-              ('${BB_ID}', 'bb@bb.bb', '${bbHash}', 'surveyor',   'active', '問券方 bb', true, NOW()),
-              ('${CC_ID}', 'cc@cc.cc', '${ccHash}', 'admin',      'active', '管理員 cc', true, NOW())
+              ('${AA_ID}', 'user2@quanwen.com', '${devHash}', 'respondent', 'active', '測試用戶 2', true, NOW()),
+              ('${BB_ID}', 'user1@quanwen.com', '${devHash}', 'surveyor',   'active', '測試用戶 1', true, NOW()),
+              ('${CC_ID}', 'user@quanwen.com',  '${devHash}', 'admin',      'active', '平台管理員', true, NOW())
             ON CONFLICT (email) DO NOTHING;
           `);
 
@@ -830,10 +831,10 @@ export { DB_TOKEN as DB };
           `);
 
           console.log('✅ PGlite in-memory DB initialized');
-          console.log('🔑 Dev seed accounts:');
-          console.log('   📨 aa@aa.aa / aa  (respondent)');
-          console.log('   📨 bb@bb.bb / bb  (surveyor)');
-          console.log('   📨 cc@cc.cc / cc  (admin)');
+          console.log('🔑 Dev seed accounts (password: 000):');
+          console.log('   📨 user@quanwen.com   (admin)');
+          console.log('   📨 user1@quanwen.com  (一般用戶 #1)');
+          console.log('   📨 user2@quanwen.com  (一般用戶 #2)');
           console.log('📋 Seeded 3 sample published surveys + profiles + notifications');
           return drizzlePg(client, { schema }) as unknown as AppDb;
         }
