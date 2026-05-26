@@ -222,12 +222,38 @@ export function useAiDraft() {
       language?: string;
       targetAudience?: string;
       preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+      avoidTitles?: string[];
     }) => {
       const { data } = await api.post<AiDraftResult>('/surveys/ai-draft', {
         questionCount: 8,
         language: 'zh-TW',
         ...dto,
       });
+      return data;
+    },
+  });
+}
+
+// Phase II.14: 單題重生
+export interface RegenerateQuestionResult {
+  question: SurveyQuestion;
+  notes: string[];
+}
+
+export function useRegenerateQuestion() {
+  return useMutation({
+    mutationFn: async (dto: {
+      topic: string;
+      purpose?: string;
+      currentTitle: string;
+      otherTitles?: string[];
+      direction?: string;
+      preferredType?: 'single_choice' | 'multiple_choice' | 'text' | 'rating';
+    }) => {
+      const { data } = await api.post<RegenerateQuestionResult>(
+        '/surveys/ai-regenerate-question',
+        { otherTitles: [], ...dto },
+      );
       return data;
     },
   });

@@ -48,6 +48,14 @@ describe('AI prompt registry', () => {
     expect(SURVEY_DRAFT.system).toContain('偏好題型');
   });
 
+  it('SURVEY_QUESTION_REGEN：單題重生 generation prompt', async () => {
+    const { SURVEY_QUESTION_REGEN } = await import('./prompts');
+    expect(SURVEY_QUESTION_REGEN.kind).toBe('generation');
+    expect(SURVEY_QUESTION_REGEN.key).toBe('surveys.question_regen');
+    expect(SURVEY_QUESTION_REGEN.system).toContain('重新生成');
+    expect(SURVEY_QUESTION_REGEN.system).toContain('不可與');
+  });
+
   it('key 之間不重複', () => {
     const keys = ALL_PROMPTS.map((p) => p.key);
     const unique = new Set(keys);

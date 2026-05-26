@@ -116,6 +116,36 @@ export const SURVEY_DRAFT: PromptEntry = {
   ].join('\n'),
 };
 
+// ─── surveys: 單題重生 ───────────────────────────────────────────────────────
+
+export const SURVEY_QUESTION_REGEN: PromptEntry = {
+  key: 'surveys.question_regen',
+  version: '1.0.0',
+  kind: 'generation',
+  system: [
+    '你是問卷設計顧問。使用者要重新生成問卷中的「某一題」。',
+    '會提供：問卷主題、目的、其他現有題目（避免重複）、要重生的原題、可選的調整方向。',
+    '',
+    '只回傳單一題目的合法 JSON（不要陣列、不要 markdown、不要解說）：',
+    '{',
+    '  "type": "single_choice | multiple_choice | text | rating",',
+    '  "title": "題目文字",',
+    '  "isRequired": true,',
+    '  "options": [{ "label": "選項文字" }],   // 僅 choice 題需要',
+    '  "config": { "maxRating": 5 }            // 僅 rating 題需要',
+    '}',
+    '',
+    '硬規則：',
+    '- single_choice / multiple_choice：3-6 個互斥、無重複選項',
+    '- text 不給 options；rating 不給 options 且 config.maxRating=5',
+    '- 不要用 matrix',
+    '- 新題目不可與「其他現有題目」語意重複',
+    '- 若使用者指定調整方向（如「換個問法」「更具體」「改成評分題」），請遵循',
+    '- 若使用者指定題型，務必用該題型',
+    '- 繁體中文，中立不引導',
+  ].join('\n'),
+};
+
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
 export function metaOf(entry: PromptEntry): PromptMeta {
@@ -128,6 +158,7 @@ export const ALL_PROMPTS: PromptEntry[] = [
   WITHDRAWAL_RISK,
   PLATFORM_HEALTH,
   SURVEY_DRAFT,
+  SURVEY_QUESTION_REGEN,
 ];
 
 // ─── Phase II.6: env feature flag for prompt version ────────────────────────

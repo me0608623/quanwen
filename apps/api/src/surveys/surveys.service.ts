@@ -15,9 +15,14 @@ import type { UpdateSurveyDto } from './dto/update-survey.dto';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
-// Phase II.12: AI 生成問卷走 registry prompt + Zod parse + normalize
-import { SURVEY_DRAFT, resolvePrompt } from '../ai-audit/prompts';
-import { parseAiSurveyDraft, normalizeSurveyDraft } from '../ai-audit/survey-draft';
+// Phase II.12/14: AI 生成問卷走 registry prompt + Zod parse + normalize
+import { SURVEY_DRAFT, SURVEY_QUESTION_REGEN, resolvePrompt } from '../ai-audit/prompts';
+import {
+  parseAiSurveyDraft,
+  normalizeSurveyDraft,
+  parseAiQuestion,
+  normalizeOneQuestion,
+} from '../ai-audit/survey-draft';
 
 // Phase II.12: 原 inline prompt 已移到 prompts.ts 的 SURVEY_DRAFT (v2.0.0)
 
@@ -223,6 +228,8 @@ export class SurveysService {
     targetAudience?: string;
     purpose?: string;
     preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+    // Phase II.14: 換個角度再生 — 避開前一版題目 + 換切入角度
+    avoidTitles?: string[];
   }): Promise<{
     title: string;
     description?: string;
@@ -240,6 +247,11 @@ export class SurveysService {
         ? `偏好題型（請優先使用，其餘酌量）：${dto.preferredTypes.map((t) => TYPE_LABELS[t] ?? t).join('、')}`
         : '';
 
+    const avoidLine =
+      dto.avoidTitles && dto.avoidTitles.length > 0
+        ? `這是「換個角度再生」：請用不同的切入角度與問法，避免與以下上一版題目重複：\n${dto.avoidTitles.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}`
+        : '';
+
     const userPrompt = [
       `主題：${dto.topic}`,
       dto.purpose ? `目的：${dto.purpose}` : '',
@@ -247,6 +259,7 @@ export class SurveysService {
       `語言：${dto.language}`,
       dto.targetAudience ? `目標受眾：${dto.targetAudience}` : '',
       preferredLine,
+      avoidLine,
     ]
       .filter(Boolean)
       .join('\n');
@@ -269,6 +282,62 @@ export class SurveysService {
       questions: normalized.questions as unknown as SurveyQuestionDto[],
       notes: normalized.notes,
     };
+  }
+
+  /**
+   * Phase II.14: AI 單題重生。
+   * 給問卷上下文 + 要重生的題 + 調整方向 → AI 回一題新的（normalize 後）。
+   * 用於前端「🔄 換一題」：保留其他題，只替換這一題。
+   */
+  async regenerateQuestion(dto: {
+    topic: string;
+    purpose?: string;
+    currentTitle: string;
+    otherTitles: string[];
+    direction?: string;
+    preferredType?: 'single_choice' | 'multiple_choice' | 'text' | 'rating';
+  }): Promise<{ question: SurveyQuestionDto; notes: string[] }> {
+    const TYPE_LABELS: Record<string, string> = {
+      single_choice: '單選',
+      multiple_choice: '多選',
+      text: '開放問答',
+      rating: '評分',
+    };
+    const userPrompt = [
+      `問卷主題：${dto.topic}`,
+      dto.purpose ? `問卷目的：${dto.purpose}` : '',
+      `要重新生成的題目：${dto.currentTitle}`,
+      dto.otherTitles.length > 0
+        ? `其他現有題目（不可重複）：\n${dto.otherTitles.map((t, i) => `  ${i + 1}. ${t}`).join('\n')}`
+        : '',
+      dto.direction ? `調整方向：${dto.direction}` : '請換個問法或角度，產生一個更好的版本',
+      dto.preferredType ? `指定題型：${TYPE_LABELS[dto.preferredType] ?? dto.preferredType}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n');
+
+    const prompt = resolvePrompt(SURVEY_QUESTION_REGEN);
+    const raw = await this.zai.jsonChat<unknown>(prompt.system, userPrompt, {
+      temperature: 0.8, // 重生要更多變化
+      promptKey: prompt.key,
+      promptVersion: prompt.version,
+    });
+
+    const parsed = parseAiQuestion(raw);
+    const { question, notes } = normalizeOneQuestion(parsed, 0);
+    if (!question) {
+      // AI 回了無效題（空 title 等）→ 回退一個最簡單的開放題佔位，附 note
+      return {
+        question: {
+          type: 'text',
+          title: dto.currentTitle,
+          sortOrder: 0,
+          isRequired: true,
+        } as unknown as SurveyQuestionDto,
+        notes: ['AI 重生結果無效，已保留原題目文字，請手動調整或再試一次'],
+      };
+    }
+    return { question: question as unknown as SurveyQuestionDto, notes };
   }
 
   /**

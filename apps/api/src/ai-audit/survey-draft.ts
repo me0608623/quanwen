@@ -109,102 +109,9 @@ export function normalizeSurveyDraft(
       notes.push(`題數超過上限 ${maxQuestions}，已截斷多餘題目`);
       break;
     }
-
-    const title2 = q.title?.trim();
-    if (!title2) {
-      notes.push('略過一題：題目文字為空');
-      continue;
-    }
-
-    let type = q.type as GenQuestionType | 'matrix';
-
-    // matrix 結構複雜，若 config 沒給合法 rows/columns → 降級為 single_choice
-    if (type === 'matrix') {
-      const m = (q.config as { matrix?: { rows?: unknown; columns?: unknown } } | undefined)?.matrix;
-      const validMatrix =
-        Array.isArray(m?.rows) && Array.isArray(m?.columns) && m!.rows.length > 0 && m!.columns.length > 0;
-      if (!validMatrix) {
-        type = 'single_choice';
-        notes.push(`「${title2.slice(0, 20)}」matrix 結構不完整，已降級為單選`);
-      } else {
-        // 合法 matrix 直接收（config 保留）
-        normalized.push({
-          type: 'single_choice', // DB enum 仍存原樣？matrix 需特殊處理；此處保守降級
-          title: title2,
-          description: q.description?.trim() || undefined,
-          sortOrder: normalized.length,
-          isRequired: q.isRequired ?? true,
-          config: q.config,
-        });
-        continue;
-      }
-    }
-
-    const isChoice = type === 'single_choice' || type === 'multiple_choice';
-
-    if (isChoice) {
-      // 整理選項：去空白、去重、cap
-      const seen = new Set<string>();
-      const cleanOptions: NormalizedOption[] = [];
-      for (const o of q.options ?? []) {
-        const label = (o as { label?: string }).label?.trim();
-        if (!label) continue;
-        const key = label.toLowerCase();
-        if (seen.has(key)) continue;
-        seen.add(key);
-        cleanOptions.push({ label: label.slice(0, 300), sortOrder: cleanOptions.length });
-        if (cleanOptions.length >= MAX_CHOICE_OPTIONS) break;
-      }
-
-      if (cleanOptions.length < MIN_CHOICE_OPTIONS) {
-        // 選項不足 → 降級為開放題（保留題目本身）
-        normalized.push({
-          type: 'text',
-          title: title2,
-          description: q.description?.trim() || undefined,
-          sortOrder: normalized.length,
-          isRequired: q.isRequired ?? true,
-        });
-        notes.push(`「${title2.slice(0, 20)}」選項不足 ${MIN_CHOICE_OPTIONS} 個，已改為開放題`);
-        continue;
-      }
-
-      normalized.push({
-        type,
-        title: title2,
-        description: q.description?.trim() || undefined,
-        sortOrder: normalized.length,
-        isRequired: q.isRequired ?? true,
-        options: cleanOptions,
-      });
-      continue;
-    }
-
-    if (type === 'rating') {
-      const rawMax = (q.config as { maxRating?: unknown } | undefined)?.maxRating;
-      let maxRating = typeof rawMax === 'number' ? Math.round(rawMax) : DEFAULT_MAX_RATING;
-      if (!Number.isFinite(maxRating) || maxRating < 3 || maxRating > 10) {
-        maxRating = DEFAULT_MAX_RATING;
-      }
-      normalized.push({
-        type: 'rating',
-        title: title2,
-        description: q.description?.trim() || undefined,
-        sortOrder: normalized.length,
-        isRequired: q.isRequired ?? true,
-        config: { maxRating },
-      });
-      continue;
-    }
-
-    // text（含 matrix 已降級後不會到這）
-    normalized.push({
-      type: 'text',
-      title: title2,
-      description: q.description?.trim() || undefined,
-      sortOrder: normalized.length,
-      isRequired: q.isRequired ?? true,
-    });
+    const { question, notes: qNotes } = normalizeOneQuestion(q, normalized.length);
+    notes.push(...qNotes);
+    if (question) normalized.push(question);
   }
 
   if (normalized.length === 0) {
@@ -212,4 +119,125 @@ export function normalizeSurveyDraft(
   }
 
   return { title: title.slice(0, 200), description, questions: normalized, notes };
+}
+
+type RawQuestion = NonNullable<RawAiSurveyDraft['questions']>[number];
+
+/**
+ * 把單一 raw question normalize 成乾淨結構（給整份 normalize 與「單題重生」共用）。
+ * 回傳 question=null 表示該題無效（空 title）。notes 是此題的修正提醒。
+ */
+export function normalizeOneQuestion(
+  q: RawQuestion,
+  sortOrder: number,
+): { question: NormalizedQuestion | null; notes: string[] } {
+  const notes: string[] = [];
+  const title2 = q.title?.trim();
+  if (!title2) {
+    return { question: null, notes: ['略過一題：題目文字為空'] };
+  }
+
+  let type = q.type as GenQuestionType | 'matrix';
+
+  // matrix 結構複雜，若 config 沒給合法 rows/columns → 降級為 single_choice
+  if (type === 'matrix') {
+    const m = (q.config as { matrix?: { rows?: unknown; columns?: unknown } } | undefined)?.matrix;
+    const validMatrix =
+      Array.isArray(m?.rows) && Array.isArray(m?.columns) && m!.rows.length > 0 && m!.columns.length > 0;
+    if (!validMatrix) {
+      type = 'single_choice';
+      notes.push(`「${title2.slice(0, 20)}」matrix 結構不完整，已降級為單選`);
+    } else {
+      return {
+        question: {
+          type: 'single_choice',
+          title: title2,
+          description: q.description?.trim() || undefined,
+          sortOrder,
+          isRequired: q.isRequired ?? true,
+          config: q.config,
+        },
+        notes,
+      };
+    }
+  }
+
+  const isChoice = type === 'single_choice' || type === 'multiple_choice';
+
+  if (isChoice) {
+    const seen = new Set<string>();
+    const cleanOptions: NormalizedOption[] = [];
+    for (const o of q.options ?? []) {
+      const label = (o as { label?: string }).label?.trim();
+      if (!label) continue;
+      const key = label.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      cleanOptions.push({ label: label.slice(0, 300), sortOrder: cleanOptions.length });
+      if (cleanOptions.length >= MAX_CHOICE_OPTIONS) break;
+    }
+
+    if (cleanOptions.length < MIN_CHOICE_OPTIONS) {
+      notes.push(`「${title2.slice(0, 20)}」選項不足 ${MIN_CHOICE_OPTIONS} 個，已改為開放題`);
+      return {
+        question: {
+          type: 'text',
+          title: title2,
+          description: q.description?.trim() || undefined,
+          sortOrder,
+          isRequired: q.isRequired ?? true,
+        },
+        notes,
+      };
+    }
+
+    return {
+      question: {
+        type,
+        title: title2,
+        description: q.description?.trim() || undefined,
+        sortOrder,
+        isRequired: q.isRequired ?? true,
+        options: cleanOptions,
+      },
+      notes,
+    };
+  }
+
+  if (type === 'rating') {
+    const rawMax = (q.config as { maxRating?: unknown } | undefined)?.maxRating;
+    let maxRating = typeof rawMax === 'number' ? Math.round(rawMax) : DEFAULT_MAX_RATING;
+    if (!Number.isFinite(maxRating) || maxRating < 3 || maxRating > 10) {
+      maxRating = DEFAULT_MAX_RATING;
+    }
+    return {
+      question: {
+        type: 'rating',
+        title: title2,
+        description: q.description?.trim() || undefined,
+        sortOrder,
+        isRequired: q.isRequired ?? true,
+        config: { maxRating },
+      },
+      notes,
+    };
+  }
+
+  // text
+  return {
+    question: {
+      type: 'text',
+      title: title2,
+      description: q.description?.trim() || undefined,
+      sortOrder,
+      isRequired: q.isRequired ?? true,
+    },
+    notes,
+  };
+}
+
+// ─── 單題重生：parse 單一 question 物件 ──────────────────────────────────────
+
+export function parseAiQuestion(raw: unknown): RawQuestion {
+  return rawQuestionSchema.parse(raw);
 }

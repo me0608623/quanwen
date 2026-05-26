@@ -13,6 +13,8 @@ export const AiDraftSchema = z.object({
     .array(z.enum(['single_choice', 'multiple_choice', 'text', 'rating']))
     .max(4)
     .optional(),
+  // Phase II.14: 換個角度再生 — 帶上一版題目，AI 會換角度避免重複
+  avoidTitles: z.array(z.string().max(1000)).max(50).optional(),
 });
 
 export type AiDraftDto = z.infer<typeof AiDraftSchema>;
