@@ -3,6 +3,7 @@ import {
   HOLISTIC_JUDGE,
   WITHDRAWAL_RISK,
   PLATFORM_HEALTH,
+  SURVEY_DRAFT,
   ALL_PROMPTS,
   metaOf,
 } from './prompts';
@@ -17,12 +18,29 @@ describe('AI prompt registry', () => {
     }
   });
 
-  it('所有 prompt system body 含 GROUNDING_SUFFIX 接地原則', () => {
-    for (const p of ALL_PROMPTS) {
+  it('judgment 類 prompt 含 GROUNDING_SUFFIX 接地原則', () => {
+    const judgment = ALL_PROMPTS.filter((p) => p.kind === 'judgment');
+    expect(judgment.length).toBeGreaterThanOrEqual(3);
+    for (const p of judgment) {
       expect(p.system).toContain(GROUNDING_SUFFIX);
       expect(p.system).toContain('manual_review');
       expect(p.system).toContain('禁止猜測');
     }
+  });
+
+  it('generation 類 prompt 不套 GROUNDING_SUFFIX（需要創造力）', () => {
+    const generation = ALL_PROMPTS.filter((p) => p.kind === 'generation');
+    expect(generation.length).toBeGreaterThanOrEqual(1);
+    for (const p of generation) {
+      expect(p.system).not.toContain(GROUNDING_SUFFIX);
+    }
+  });
+
+  it('SURVEY_DRAFT 含生成問卷的結構約束', () => {
+    expect(SURVEY_DRAFT.kind).toBe('generation');
+    expect(SURVEY_DRAFT.system).toContain('single_choice');
+    expect(SURVEY_DRAFT.system).toContain('maxRating');
+    expect(SURVEY_DRAFT.system).toContain('JSON');
   });
 
   it('key 之間不重複', () => {
@@ -85,6 +103,7 @@ describe('resolvePrompt (Phase II.6 feature flag)', () => {
     const alt = {
       key: HOLISTIC_JUDGE.key,
       version: '2.0.0',
+      kind: 'judgment' as const,
       system: 'alt prompt v2',
     };
     process.env[ENV_KEY] = '2.0.0';

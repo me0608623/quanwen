@@ -9,34 +9,17 @@ import {
 import { eq, desc, inArray } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyQuestions, questionOptions } from '../db/schema';
+import { surveys, surveyQuestions, questionOptions, mutualPairs } from '../db/schema';
 import type { CreateSurveyDto, SurveyQuestionDto } from './dto/create-survey.dto';
 import type { UpdateSurveyDto } from './dto/update-survey.dto';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
+// Phase II.12: AI 生成問卷走 registry prompt + Zod parse + normalize
+import { SURVEY_DRAFT, resolvePrompt } from '../ai-audit/prompts';
+import { parseAiSurveyDraft, normalizeSurveyDraft } from '../ai-audit/survey-draft';
 
-const AI_DRAFT_SYSTEM_PROMPT = `你是問卷設計專家。請根據使用者提供的主題，產生一份專業的問卷草稿。
-回傳 JSON 格式，結構如下：
-{
-  "title": "問卷標題",
-  "description": "問卷說明",
-  "questions": [
-    {
-      "type": "single_choice" | "multiple_choice" | "text" | "rating",
-      "title": "題目文字",
-      "sortOrder": 0,
-      "isRequired": true,
-      "options": [{ "label": "選項文字", "sortOrder": 0 }]  // text 題型不需要 options
-    }
-  ]
-}
-注意：
-- single_choice 和 multiple_choice 必須有 options（3-6 個）
-- text 題型不需要 options
-- rating 題型不需要 options，config 設 { "maxRating": 5 }
-- 題目數量依使用者要求
-- 語言依使用者要求`;
+// Phase II.12: 原 inline prompt 已移到 prompts.ts 的 SURVEY_DRAFT (v2.0.0)
 
 @Injectable()
 export class SurveysService {
@@ -58,6 +41,10 @@ export class SurveysService {
         surveyorId,
         title: dto.title,
         description: dto.description,
+        type: dto.type ?? 'standard',
+        category: dto.category,
+        aiReviewEnabled: dto.aiReviewEnabled ?? true,
+        externalUrl: dto.externalUrl,
         rewardPoints: dto.rewardPoints ?? 0,
         targetCount: dto.targetCount ?? 100,
         expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
@@ -133,6 +120,8 @@ export class SurveysService {
 
     if (surveyFields.title !== undefined) updateData.title = surveyFields.title;
     if (surveyFields.description !== undefined) updateData.description = surveyFields.description;
+    if (surveyFields.category !== undefined) updateData.category = surveyFields.category;
+    if (surveyFields.aiReviewEnabled !== undefined) updateData.aiReviewEnabled = surveyFields.aiReviewEnabled;
     if (surveyFields.rewardPoints !== undefined) updateData.rewardPoints = surveyFields.rewardPoints;
     if (surveyFields.targetCount !== undefined) updateData.targetCount = surveyFields.targetCount;
     if (surveyFields.expiresAt !== undefined) updateData.expiresAt = new Date(surveyFields.expiresAt);
@@ -158,6 +147,39 @@ export class SurveysService {
 
     if (questionCount.length === 0) {
       throw new BadRequestException('問卷至少需要一道題目才能發布');
+    }
+
+    // Mutual 問卷：跳過 AI 審核 + 預算鎖定，直接上架並進配對池
+    if (survey.type === 'mutual') {
+      // 簡易 PII 詞彙過濾 (見 互惠問卷-安全審閱 §3.1 T3)
+      await this.assertNoPiiInMutualQuestions(surveyId);
+
+      await this.db
+        .update(surveys)
+        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(surveys.id, surveyId));
+
+      await this.db
+        .insert(mutualPairs)
+        .values({ aUserId: survey.surveyorId, aSurveyId: surveyId, status: 'waiting' })
+        .onConflictDoNothing();
+
+      return { message: '互惠問卷已上架，等待配對中', surveyId };
+    }
+
+    // Phase C-2: 發問卷方關掉 AI 審核 → 直接上架, 不送 AI 評分
+    if (survey.aiReviewEnabled === false) {
+      await this.db
+        .update(surveys)
+        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(surveys.id, surveyId));
+
+      // 預算仍要鎖（付費取樣）
+      this.wallet.lockSurveyBudget(survey.surveyorId, surveyId).catch((err) =>
+        this.logger.error(`預算鎖定失敗 surveyId=${surveyId}`, err),
+      );
+
+      return { message: '問卷已直接上架（未開啟 AI 審核）', surveyId };
     }
 
     await this.db
@@ -186,14 +208,29 @@ export class SurveysService {
 
   // ─── AI Draft ─────────────────────────────────────────────────────────────
 
+  /**
+   * Phase II.12: AI 一鍵生成問卷草稿。
+   * 使用者給「主題 + 目的 + 受眾」→ LLM 生 → Zod parse（救型別）→ normalize
+   * （修結構：選項不足降級、rating 補 maxRating、去重、截斷…）→ 回乾淨草稿。
+   *
+   * 回傳的 questions 結構直接相容 CreateSurveySchema，前端可一鍵存成 draft。
+   * notes 是 normalize 過程的修正提醒，給前端顯示「AI 草稿已自動調整 X」。
+   */
   async generateAiDraft(dto: {
     topic: string;
     questionCount: number;
     language: string;
     targetAudience?: string;
-  }) {
+    purpose?: string;
+  }): Promise<{
+    title: string;
+    description?: string;
+    questions: SurveyQuestionDto[];
+    notes: string[];
+  }> {
     const userPrompt = [
       `主題：${dto.topic}`,
+      dto.purpose ? `目的：${dto.purpose}` : '',
       `題目數量：${dto.questionCount} 題`,
       `語言：${dto.language}`,
       dto.targetAudience ? `目標受眾：${dto.targetAudience}` : '',
@@ -201,11 +238,24 @@ export class SurveysService {
       .filter(Boolean)
       .join('\n');
 
-    return this.zai.jsonChat<{
-      title: string;
-      description: string;
-      questions: SurveyQuestionDto[];
-    }>(AI_DRAFT_SYSTEM_PROMPT, userPrompt, { temperature: 0.7 });
+    const prompt = resolvePrompt(SURVEY_DRAFT);
+    const raw = await this.zai.jsonChat<unknown>(prompt.system, userPrompt, {
+      temperature: 0.7,
+      promptKey: prompt.key,
+      promptVersion: prompt.version,
+    });
+
+    const parsed = parseAiSurveyDraft(raw);
+    const normalized = normalizeSurveyDraft(parsed, { maxQuestions: dto.questionCount });
+
+    // normalized.questions 已是 {type,title,sortOrder,isRequired,config?,options?}
+    // 直接當 SurveyQuestionDto[] 回（options 內含 sortOrder）
+    return {
+      title: normalized.title,
+      description: normalized.description,
+      questions: normalized.questions as unknown as SurveyQuestionDto[],
+      notes: normalized.notes,
+    };
   }
 
   /**
@@ -412,9 +462,40 @@ export class SurveysService {
 
   // ─── Private helpers ───────────────────────────────────────────────────────
 
+  /**
+   * Phase B 安全防護:檢查 mutual 問卷的題目不要套取 PII。
+   * 看 互惠問卷-安全審閱.md §3.1 T3。
+   */
+  private async assertNoPiiInMutualQuestions(surveyId: string): Promise<void> {
+    const qs = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, description: surveyQuestions.description })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId));
+
+    // 中英文 PII 索取的常見字眼
+    const PII_PATTERNS = [
+      /身分證/, /身份證/, /national\s*id/i,
+      /銀行帳號/, /銀行卡/, /bank\s*account/i, /account\s*number/i,
+      /信用卡/, /credit\s*card/i, /\bccv\b/i, /\bcvv\b/i,
+      /密碼/, /\bpassword\b/i, /\bpasswd\b/i,
+      /護照號/, /passport/i,
+      /健保卡/, /駕照/,
+    ];
+
+    for (const q of qs) {
+      const text = `${q.title}\n${q.description ?? ''}`;
+      const hit = PII_PATTERNS.find((re) => re.test(text));
+      if (hit) {
+        throw new BadRequestException(
+          `互惠問卷不可索取個資 (偵測到「${hit}」相關關鍵字)。請改 standard 付費取樣模式並走 KYC 流程。`,
+        );
+      }
+    }
+  }
+
   private async assertOwnerAndDraft(surveyId: string, surveyorId: string) {
     const rows = await this.db
-      .select({ id: surveys.id, surveyorId: surveys.surveyorId, status: surveys.status })
+      .select({ id: surveys.id, surveyorId: surveys.surveyorId, status: surveys.status, type: surveys.type, aiReviewEnabled: surveys.aiReviewEnabled })
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);
