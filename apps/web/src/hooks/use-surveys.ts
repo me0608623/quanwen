@@ -73,11 +73,40 @@ export interface SkipLogicRule {
   skipToEnd?: boolean;
 }
 
+export type SurveyCategory =
+  | 'consumer'
+  | 'academic'
+  | 'wellness'
+  | 'workplace'
+  | 'lifestyle'
+  | 'tech'
+  | 'social'
+  | 'education'
+  | 'finance'
+  | 'other';
+
+export const SURVEY_CATEGORY_LABELS: Record<SurveyCategory, string> = {
+  consumer:  '消費者調查',
+  academic:  '學術研究',
+  wellness:  '健康健身',
+  workplace: '職場工作',
+  lifestyle: '生活風格',
+  tech:      '科技產品',
+  social:    '社會議題',
+  education: '教育學習',
+  finance:   '金融投資',
+  other:     '其他',
+};
+
 export interface Survey {
   id: string;
   title: string;
   description?: string;
   status: 'draft' | 'pending_review' | 'published' | 'paused' | 'closed' | 'rejected';
+  type?: 'standard' | 'mutual';
+  category?: SurveyCategory | null;
+  aiReviewEnabled?: boolean;
+  externalUrl?: string | null;
   rewardPoints: number;
   targetCount: number;
   completedCount: number;
@@ -94,8 +123,10 @@ export interface Survey {
 
 export interface AiDraftResult {
   title: string;
-  description: string;
+  description?: string;
   questions: SurveyQuestion[];
+  // Phase II.12: normalize 過程的自動調整提醒（如「選項不足已改開放題」）
+  notes?: string[];
 }
 
 // ─── Queries ──────────────────────────────────────────────────────────────────
@@ -186,6 +217,7 @@ export function useAiDraft() {
   return useMutation({
     mutationFn: async (dto: {
       topic: string;
+      purpose?: string;
       questionCount?: number;
       language?: string;
       targetAudience?: string;
