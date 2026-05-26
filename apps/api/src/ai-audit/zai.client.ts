@@ -1,6 +1,7 @@
 import { Injectable, Logger, InternalServerErrorException } from '@nestjs/common';
 import { createHash } from 'crypto';
 import { zaiTelemetry } from './telemetry';
+import { RedisCache } from './redis-cache';
 
 interface ZaiMessage {
   role: 'system' | 'user' | 'assistant';
@@ -140,6 +141,7 @@ export class ZaiClient {
   private readonly maxRetries: number;
   private readonly cacheEnabled: boolean;
   private readonly cache: ZaiCache;
+  private readonly l2: RedisCache | null;
 
   constructor() {
     this.baseUrl = process.env.ZAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4';
@@ -155,6 +157,10 @@ export class ZaiClient {
     );
     this.cacheEnabled = process.env.ZAI_CACHE_DISABLED !== 'true' && ttlMs > 0;
     this.cache = new ZaiCache(cacheMax, ttlMs);
+
+    // Phase II.10: Redis L2（跨進程共享）。沒設 URL / 沒裝 ioredis → 自動降級為 in-memory only
+    const redisUrl = process.env.ZAI_REDIS_URL ?? process.env.REDIS_URL;
+    this.l2 = this.cacheEnabled && redisUrl ? new RedisCache(redisUrl, ttlMs) : null;
 
     if (!this.apiKey) {
       // 不在 constructor throw — service 在 prod 環境若沒設仍可走 fallback path
@@ -200,24 +206,24 @@ export class ZaiClient {
     const useCache = this.cacheEnabled && options.cache !== false;
     const cacheK = useCache ? this.cacheKey(messages, options) : null;
     if (cacheK) {
-      const hit = this.cache.get(cacheK);
-      if (hit !== undefined) {
+      // L1：in-memory（最快）
+      const l1Hit = this.cache.get(cacheK);
+      if (l1Hit !== undefined) {
         this.logger.log(
-          `zai.chat CACHE_HIT model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
+          `zai.chat CACHE_HIT(L1) model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
         );
-        zaiTelemetry.record({
-          ts: Date.now(),
-          promptKey: options.promptKey,
-          promptVersion: options.promptVersion,
-          totalTokens: 0,
-          promptTokens: 0,
-          completionTokens: 0,
-          latencyMs: 0,
-          attempts: 0,
-          finishReason: 'cache_hit',
-          cacheHit: true,
-        });
-        return hit;
+        this.recordCacheHit(options);
+        return l1Hit;
+      }
+      // L2：Redis（跨進程）。命中後回填 L1
+      if (this.l2) {
+        const l2Hit = await this.l2.get(cacheK);
+        if (l2Hit !== undefined) {
+          this.logger.log(`zai.chat CACHE_HIT(L2) model=${this.model} key=${cacheK.slice(0, 16)}`);
+          this.cache.set(cacheK, l2Hit); // 回填 L1
+          this.recordCacheHit(options);
+          return l2Hit;
+        }
       }
     }
 
@@ -311,6 +317,10 @@ export class ZaiClient {
           // Cache write — 不快取 truncated output（不完整資料快取會 mislead 後續查詢）
           if (cacheK && finishReason !== 'length') {
             this.cache.set(cacheK, content);
+            // L2 寫入 fire-and-forget — Redis 慢/掛不能拖累主流程
+            if (this.l2) {
+              void this.l2.set(cacheK, content);
+            }
           }
 
           return content;
@@ -355,6 +365,26 @@ export class ZaiClient {
       }
       throw err;
     }
+  }
+
+  private recordCacheHit(options: { promptKey?: string; promptVersion?: string }): void {
+    zaiTelemetry.record({
+      ts: Date.now(),
+      promptKey: options.promptKey,
+      promptVersion: options.promptVersion,
+      totalTokens: 0,
+      promptTokens: 0,
+      completionTokens: 0,
+      latencyMs: 0,
+      attempts: 0,
+      finishReason: 'cache_hit',
+      cacheHit: true,
+    });
+  }
+
+  /** shutdown / 測試用：關閉 L2 連線 */
+  async closeL2(): Promise<void> {
+    await this.l2?.close();
   }
 
   private recordErrorTelemetry(

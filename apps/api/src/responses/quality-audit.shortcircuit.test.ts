@@ -58,6 +58,7 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
       CREATE TYPE survey_status AS ENUM ('draft','pending_review','published','paused','closed','rejected');
       CREATE TYPE reward_type AS ENUM ('cash','points');
       CREATE TYPE survey_type AS ENUM ('standard','mutual');
+      CREATE TYPE survey_category AS ENUM ('consumer','academic','wellness','workplace','lifestyle','tech','social','education','finance','other');
       CREATE TABLE surveys (
         id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         surveyor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -65,6 +66,8 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         description TEXT,
         status      survey_status NOT NULL DEFAULT 'draft',
         type        survey_type NOT NULL DEFAULT 'standard',
+        category    survey_category,
+        ai_review_enabled BOOLEAN NOT NULL DEFAULT true,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
         audience_criteria JSONB,
