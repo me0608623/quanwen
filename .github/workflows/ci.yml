@@ -198,6 +198,10 @@ jobs:
         run: pnpm --filter web test:e2e
         env:
           CI: 'true'
+          # e2e webServer 跑 `pnpm --filter api dev`，用 in-memory PGlite（自動建 schema +
+          # seed user@/user1@/user2@ 帳號 + sample 資料）。e2e helpers/auth.ts 正是針對這份
+          # seed 寫的。否則 API 連到沒套 schema 的 Postgres → TagsService.onModuleInit 崩潰。
+          USE_PG_MEM: 'true'
           DATABASE_URL: postgresql://quanwen:quanwen@localhost:5432/quanwen_test
           JWT_SECRET: ci_test_secret_not_for_production_at_least_32_chars
           PII_ENCRYPTION_KEY: ci_test_pii_encryption_key
