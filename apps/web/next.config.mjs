@@ -13,6 +13,9 @@ const nextConfig = {
     // ../../ = quanwen/（pnpm-workspace.yaml 所在的 monorepo root）
     outputFileTracingRoot: path.join(__dirname, '../../'),
   },
+  // lint 由獨立的 CI job（pnpm lint / next lint）負責;build 不重複 lint，
+  // 避免「加了 eslint config 後 next build 開始 lint」把原本綠的 build job 弄紅。
+  eslint: { ignoreDuringBuilds: true },
   transpilePackages: ['shared-types'],
   images: {
     remotePatterns: [
