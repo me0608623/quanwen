@@ -103,6 +103,11 @@ export const surveys = pgTable(
     surveyorIdx: index('surveys_surveyor_idx').on(t.surveyorId),
     statusIdx: index('surveys_status_idx').on(t.status),
     expiresIdx: index('surveys_expires_idx').on(t.expiresAt),
+    // P6: task list 熱查詢 WHERE status=? AND type=? ORDER BY reward_points DESC, published_at DESC
+    // (responses.service.getAvailableSurveys / getCategoryCounts)。複合索引避免 published
+    //  全表掃再以 type 過濾;category 索引給分類別篩選用。
+    statusTypeIdx: index('surveys_status_type_idx').on(t.status, t.type),
+    categoryIdx: index('surveys_category_idx').on(t.category),
   }),
 );
 
