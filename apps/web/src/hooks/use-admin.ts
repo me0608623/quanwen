@@ -19,6 +19,11 @@ export interface PlatformStats {
   suspiciousResponses: number;
   platformRevenue: number;
   platformRevenueThisMonth: number;
+  mutualCounts?: Partial<Record<
+    'waiting' | 'matched' | 'a_done' | 'b_done' | 'both_done' | 'expired' | 'cancelled',
+    number
+  >>;
+  mutualTotal?: number;
 }
 
 export interface AdminSurvey {
@@ -42,6 +47,71 @@ export interface SuspiciousResponse {
   suspiciousFlags: string[];
   submittedAt: string;
   fillDurationSeconds: number | null;
+}
+
+export interface AdminMutualPair {
+  id: string;
+  status: 'waiting' | 'matched' | 'a_done' | 'b_done' | 'both_done' | 'expired' | 'cancelled';
+  a: {
+    userId: string;
+    displayName: string;
+    email: string;
+    surveyId: string;
+    surveyTitle: string;
+    category: string | null;
+    filledAt: string | null;
+  };
+  b: {
+    userId: string;
+    displayName: string;
+    email: string;
+    surveyId: string | null;
+    surveyTitle: string | null;
+    category: string | null;
+    filledAt: string | null;
+  } | null;
+  matchedAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+}
+
+export function useAdminMutualPairs(status?: string) {
+  return useQuery<AdminMutualPair[]>({
+    queryKey: ['admin', 'mutual', status ?? 'all'],
+    queryFn: async () => {
+      const { data } = await api.get<AdminMutualPair[]>('/admin/mutual', { params: status ? { status } : undefined });
+      return data;
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useForceCancelMutualPair() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, reason }: { id: string; reason: string }) => {
+      const { data } = await api.post(`/admin/mutual/${id}/cancel`, { reason });
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'mutual'] });
+      qc.invalidateQueries({ queryKey: ['admin', 'stats'] });
+    },
+  });
+}
+
+export function useAdminMatchMutualNow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post('/admin/mutual/match-now');
+      return data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['admin', 'mutual'] });
+    },
+  });
 }
 
 export function usePlatformStats() {

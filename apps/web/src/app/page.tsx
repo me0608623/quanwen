@@ -1,358 +1,312 @@
-﻿import Link from "next/link";
+import Link from "next/link";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { MarketingNav } from "@/components/marketing/marketing-nav";
 
-type SurveyTile = {
-  title: string;
-  subtitle: string;
-  kind: "single" | "multi" | "likert" | "nps" | "ranking" | "open" | "matrix" | "slider";
-  pos: string;
-  delay: string;
-};
-
-const navItems = ["平台優勢", "解決方案", "題型範本", "方案價格", "客戶故事", "資源中心", "客服支援"];
-const trustBrands = ["Retail", "Finance", "Automotive", "Healthcare", "SaaS", "Public Sector"];
-
-const journey = [
-  { title: "建立問卷", desc: "使用範本與題型組合，快速建立專業問卷" },
-  { title: "推送與回收", desc: "跨裝置填答流暢，提升回收率與完成率" },
-  { title: "洞察分析", desc: "即時彙整數據，快速產出可行決策資訊" },
-];
-
-const TILES: SurveyTile[] = [
-  { title: "單選題", subtitle: "品牌偏好", kind: "single", pos: "top-[8%] left-[6%]", delay: "0ms" },
-  { title: "多選題", subtitle: "使用情境", kind: "multi", pos: "top-[18%] left-[30%]", delay: "380ms" },
-  { title: "Likert 量表", subtitle: "滿意度 1-5", kind: "likert", pos: "top-[10%] right-[16%]", delay: "760ms" },
-  { title: "NPS", subtitle: "推薦意願 0-10", kind: "nps", pos: "top-[36%] left-[12%]", delay: "520ms" },
-  { title: "排序題", subtitle: "需求優先級", kind: "ranking", pos: "top-[42%] left-[39%]", delay: "1100ms" },
-  { title: "開放題", subtitle: "改善建議", kind: "open", pos: "top-[34%] right-[9%]", delay: "240ms" },
-  { title: "矩陣題", subtitle: "功能評分", kind: "matrix", pos: "bottom-[20%] left-[24%]", delay: "920ms" },
-  { title: "滑桿題", subtitle: "價格敏感度", kind: "slider", pos: "bottom-[10%] right-[18%]", delay: "1300ms" },
-];
-
-const highlights = [
+const aiLayers = [
   {
-    no: "01",
-    title: "進階題型與邏輯流程",
-    subtitle: "讓回覆更精準可用",
-    desc: "支援多種題型、條件跳題與回覆驗證，減少無效樣本並提升資料品質。",
+    title: "Layer 1 行為訊號偵測",
+    description:
+      "即時比對填答耗時、作答頻率與點擊模式，第一時間攔下機器人與亂填樣本。",
   },
   {
-    no: "02",
-    title: "團隊協作與權限分層",
-    subtitle: "大型專案也能穩定推進",
-    desc: "可依角色分配權限與檢視範圍，建立可追蹤、可審核的協作流程。",
+    title: "Layer 2 邏輯與注意力檢核",
+    description:
+      "自動插入反向題與注意力檢核題，快速淘汰答非所問或注意力渙散的回覆。",
   },
   {
-    no: "03",
-    title: "企業級安全與整合",
-    subtitle: "兼顧治理與擴充",
-    desc: "支援稽核需求、資料保護與 API 串接，讓問卷流程更容易融入既有系統。",
-  },
-];
-
-const industries = ["餐飲", "汽車", "金融保險", "醫療", "旅遊", "公部門", "零售", "科技"];
-
-const footerCols = [
-  {
-    title: "產品方案",
-    items: ["Basic", "Pro", "Team", "Enterprise", "Experience", "方案比較"],
-  },
-  {
-    title: "產業應用",
-    items: ["餐飲", "汽車", "金融保險", "醫療", "旅遊", "公部門", "零售", "科技"],
-  },
-  {
-    title: "商業情境",
-    items: ["市場研究", "活動管理", "客戶經營", "行銷優化", "人資調查", "課程回饋"],
-  },
-  {
-    title: "擴充服務",
-    items: ["Audience", "Event Tickets", "Lead Capture", "身份驗證", "Webhook / API"],
-  },
-  {
-    title: "資源",
-    items: ["部落格", "指南文件", "線上活動", "支援中心"],
-  },
-  {
-    title: "關於",
-    items: ["公司介紹", "合作夥伴", "客戶故事", "工作機會", "新聞", "聯絡我們"],
+    title: "Layer 3 AI 灰區裁決",
+    description:
+      "分數落在灰區時才啟動深度語義分析，讓可疑樣本有更精準的最終判定。",
   },
 ];
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[#f7fafc] text-slate-900">
-      <section className="relative overflow-hidden bg-[#071a36] text-white">
-        <MosaicBg />
-        <div className="relative z-10 mx-auto max-w-7xl px-6 pb-16 pt-6 lg:px-10 lg:pb-24">
-          <header className="mb-14 flex flex-wrap items-center justify-between gap-4 border-b border-white/15 pb-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-[10px] bg-white text-lg font-black text-[#0f6d8a]">券</div>
-              <div>
-                <div className="text-lg font-bold">quanwen-logo</div>
-                <div className="text-[11px] tracking-[1.5px] text-cyan-100/80">QUANWEN SURVEY CLOUD</div>
-              </div>
-            </div>
+    <main className="min-h-screen bg-[var(--q-canvas)] text-[var(--q-body)]">
+      <MarketingNav />
 
-            <nav className="hidden items-center gap-5 text-[13px] text-white/85 xl:flex">
-              {navItems.map((item) => (
-                <a key={item} className="transition-colors hover:text-white" href="#">
-                  {item}
-                </a>
-              ))}
-              <button className="rounded-md border border-white/25 px-3 py-1.5 hover:bg-white/10">繁體中文</button>
-            </nav>
-
-            <div className="flex items-center gap-2">
-              <Link href="/auth/login" className="rounded-[10px] border border-white/30 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10">
-                登入
+      <section className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
+        <div className="grid items-center gap-10 lg:grid-cols-2">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--q-muted)]">
+              AI 把關的雙邊問卷平台
+            </p>
+            <h1 className="mt-4 font-serif text-4xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl lg:text-6xl">
+              發問卷找對的人，
+              <br />
+              填問卷賺回報。
+            </h1>
+            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--q-body-strong)]">
+              付費發案、精準媒合受眾；填問卷的人賺現金、7-11／全家禮券或積分。
+              沒預算？也能用互惠交換互填拿樣本。AI 全程把關品質、還能幫你生成問卷草稿。
+            </p>
+            <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--q-muted)]">
+              券問是台灣首個「AI 把關 + 雙邊自助」的問卷媒合平台 —— 付費取樣、互惠交換、賺積分換現金，一個帳號全包。
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link
+                href="/auth/register"
+                className="rounded-md bg-[var(--q-primary)] px-5 py-3 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)]"
+              >
+                免費開始
               </Link>
-              <Link href="/auth/register" className="rounded-[10px] bg-cyan-300 px-4 py-2 text-sm font-bold text-slate-900 hover:bg-cyan-200">
-                註冊
-              </Link>
-            </div>
-          </header>
-
-          <div className="grid gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:items-end">
-            <div>
-              <p className="mb-4 inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-cyan-100">
-                企業級雲端問卷平台
-              </p>
-              <h1 className="mb-5 text-4xl font-extrabold leading-[1.15] tracking-tight lg:text-6xl">
-                不只收集回覆，
-                <br />
-                更把資料轉成決策動能
-              </h1>
-              <p className="mb-8 max-w-2xl text-base leading-relaxed text-slate-200/90 lg:text-lg">
-                從問卷設計、樣本回收到結果洞察，一站式整合調查流程，
-                讓團隊用更短時間得到更可信的結論。
-              </p>
-              <Link href="/auth/register" className="inline-flex rounded-[10px] bg-cyan-300 px-6 py-3 text-sm font-bold text-slate-900 shadow-lg shadow-cyan-300/25 hover:-translate-y-0.5 hover:bg-cyan-200">
-                免費建立問卷
-              </Link>
-            </div>
-
-            <div className="rounded-2xl border border-white/20 bg-white/10 p-5 backdrop-blur-sm">
-              <div className="mb-3 text-xs font-semibold tracking-wide text-cyan-100">三步完成調查任務</div>
-              <div className="space-y-3">
-                {journey.map((item, idx) => (
-                  <div key={item.title} className="rounded-xl border border-white/15 bg-slate-900/30 p-3.5">
-                    <div className="mb-1 text-sm font-bold text-white">{idx + 1}. {item.title}</div>
-                    <div className="text-xs text-slate-200/85">{item.desc}</div>
-                  </div>
-                ))}
-              </div>
+              <a
+                href="#modes"
+                className="rounded-md border border-[var(--q-hairline)] px-5 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-card)]"
+              >
+                看四種使用方式
+              </a>
             </div>
           </div>
 
-          <div className="mt-12 flex flex-wrap items-center gap-2 text-xs text-cyan-50/85">
-            {trustBrands.map((b) => (
-              <span key={b} className="rounded-full border border-white/20 bg-white/10 px-3 py-1">{b}</span>
+          <div className="rounded-xl bg-[var(--q-surface-dark)] p-6 text-[var(--q-on-dark)] sm:p-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-on-dark-soft)]">
+              一個帳號 · 四種使用方式
+            </p>
+            <div className="mt-6 space-y-3">
+              {[
+                { icon: "💰", title: "付費發問卷", desc: "設獎勵+受眾，AI 媒合精準填答者" },
+                { icon: "🎁", title: "填問卷賺回報", desc: "現金 / 7-11 禮券 / 積分 + 每日轉盤" },
+                { icon: "🤝", title: "互惠交換", desc: "沒預算？互填問卷拿樣本" },
+                { icon: "✨", title: "AI 協助製作", desc: "AI 生成問卷草稿 + 反機器人題" },
+              ].map((m) => (
+                <div
+                  key={m.title}
+                  className="flex items-center gap-3 rounded-lg border border-white/10 bg-[var(--q-surface-dark-soft)] px-4 py-3"
+                >
+                  <span className="text-xl">{m.icon}</span>
+                  <div>
+                    <p className="text-sm font-semibold text-[var(--q-on-dark)]">{m.title}</p>
+                    <p className="text-xs text-[var(--q-on-dark-soft)]">{m.desc}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]">
+        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-3 px-4 py-5 text-xs font-medium text-[var(--q-muted)] sm:px-6 lg:px-8">
+          <span>Google · LINE · Apple 登入</span>
+          <span>綠界 ECPay 金流託管</span>
+          <span>7-11 / 全家 禮券兌換</span>
+          <span>應用層 AES-256 個資加密</span>
+        </div>
+      </section>
+
+      <section id="modes" className="py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
+            四種使用方式，一個帳號全包
+          </h2>
+          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
+            無論你是想取得樣本、還是想賺取回報，都能找到適合的模式。
+          </p>
+          <div className="mt-10 grid gap-4 md:grid-cols-2">
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">💰</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">付費發問卷 · 精準媒合</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                設定獎勵與受眾條件（年齡 / 性別 / 地區 / 職業 / 興趣），系統把問卷推給最符合的填答者，
+                並用 AI 三層審核擋掉灌水。每一分預算都花在真樣本。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">🎁</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">填問卷 · 直接賺回報</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                完成問卷拿現金、7-11／全家／星巴克禮券或積分；積分可在商城兌換、或折抵。
+                每天還能免費轉一次轉盤加碼，最高 200 點。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">🤝</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">互惠交換 · 零預算拿樣本</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                沒有預算也能取得回覆：發一份互惠問卷進池，系統幫你配對另一個有問卷的人，
+                雙方互填、AI 審過即同時解鎖。<a href="#mutual-flow" className="text-[var(--q-primary)] underline">看互惠運作 →</a>
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">✨</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">AI 協助製作 + 個人化推薦</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                發問卷方可讓 AI 生成問卷草稿、並建議在中段插入反機器人題；
+                填問卷方填好個人資料後，平台主動推薦最適合你的問卷來填、賺更多回報。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section
+        id="mutual-flow"
+        className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]"
+      >
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-on-dark-soft)]">
+            模式之一 · 互惠交換
+          </p>
+          <h2 className="mt-3 font-serif text-3xl leading-tight tracking-[-0.01em] sm:text-4xl">
+            沒預算？互惠也能拿到真實樣本
+          </h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 01</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">發一份互惠問卷</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                問卷送進配對池，免設獎勵、免鎖預算，先讓系統幫你找最合適的互填對手。
+              </p>
+            </article>
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 02</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">30 秒內配對對手</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                同分類優先媒合；若同分類暫時不足，系統自動改用 FIFO 配對，讓流量不空轉。
+              </p>
+            </article>
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 03</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">
+                互填後 AI 審過再解鎖
+              </h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                任一方品質不過會自動退件，並把你的問卷放回池中，直到拿到符合標準的回覆。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
+            拒絕垃圾數據，每一分預算都花在真樣本
+          </h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            {aiLayers.map((layer) => (
+              <article key={layer.title} className="rounded-xl bg-[var(--q-surface-card)] p-6">
+                <h3 className="text-lg font-semibold text-[var(--q-ink)]">{layer.title}</h3>
+                <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">{layer.description}</p>
+              </article>
             ))}
           </div>
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 py-16 lg:px-10">
-        <h2 className="mb-8 text-2xl font-extrabold tracking-tight lg:text-3xl">最專業的產業解決方案</h2>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {industries.map((name) => (
-            <div key={name} className="rounded-xl border border-slate-200 bg-white px-4 py-4 text-sm font-semibold shadow-sm">{name}</div>
-          ))}
-        </div>
-      </section>
-
-      <section className="mx-auto max-w-7xl px-6 pb-16 lg:px-10">
-        <div className="grid gap-4 lg:grid-cols-3">
-          {highlights.map((item) => (
-            <article key={item.no} className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="mb-2 text-xs font-black tracking-[1.4px] text-cyan-700">{item.no}</div>
-              <h3 className="text-xl font-bold leading-tight">{item.title}</h3>
-              <p className="mt-1 text-sm font-semibold text-cyan-700">{item.subtitle}</p>
-              <p className="mt-3 text-sm leading-relaxed text-slate-600">{item.desc}</p>
-              <button className="mt-5 rounded-lg border border-cyan-200 px-3 py-1.5 text-xs font-bold text-cyan-700 hover:bg-cyan-50">了解更多</button>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="bg-slate-900 text-white">
-        <div className="mx-auto max-w-7xl px-6 py-14 lg:px-10">
-          <div className="mb-8 flex items-end justify-between">
-            <div>
-              <div className="mb-2 text-xs font-semibold tracking-widest text-cyan-200/80">CASE</div>
-              <h2 className="text-2xl font-extrabold">客戶故事與導入成果</h2>
+          <div className="mt-10 rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-6">
+            <div className="flex items-center justify-between text-xs font-semibold text-[var(--q-muted)]">
+              <span>品質分數軸</span>
+              <span>灰區 AI 介入</span>
             </div>
-            <div className="text-xs text-slate-300">03 / 05</div>
-          </div>
-
-          <div className="rounded-2xl border border-white/15 bg-white/10 p-6 backdrop-blur-sm">
-            <p className="text-base leading-relaxed text-slate-100/95">
-              「導入平台後，我們在活動報名與客戶調查的執行效率明顯提升，
-              問卷品質與跨部門協作也更穩定。」
+            <div className="mt-4 h-3 rounded-full bg-[var(--q-surface-cream-strong)]">
+              <div className="relative h-full w-[74%] rounded-full bg-[var(--q-primary)]">
+                <span className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[var(--q-canvas)] bg-[var(--q-accent-teal)]" />
+              </div>
+            </div>
+            <p className="mt-4 text-sm text-[var(--q-muted)]">
+              分數落在約 40–75 的灰區樣本，才會交由 AI 灰區裁決做深度語義分析。
             </p>
-            <div className="mt-4 text-sm font-semibold text-cyan-100">企業客戶，行銷營運主管</div>
-          </div>
-
-          <div className="mt-5 flex justify-end gap-2 text-xs">
-            <button className="rounded-md border border-white/25 px-3 py-1.5 hover:bg-white/10">prev</button>
-            <button className="rounded-md border border-white/25 px-3 py-1.5 hover:bg-white/10">next</button>
           </div>
         </div>
       </section>
 
-      <section className="bg-[#0f6d8a] text-white">
-        <div className="mx-auto max-w-7xl px-6 py-14 text-center lg:px-10">
-          <h2 className="mb-3 text-3xl font-extrabold">現在就開始你的問卷調查</h2>
-          <p className="mx-auto mb-7 max-w-2xl text-slate-100/90">多元題型與進階分析功能，協助你打造更高品質的調查流程。</p>
-          <Link href="/auth/register" className="inline-flex rounded-[10px] bg-white px-6 py-3 text-sm font-bold text-[#0f6d8a] hover:bg-cyan-50">
-            免費建立問卷
+      <section className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]">
+        <div className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
+          <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-7">
+            <h2 className="font-serif text-3xl tracking-[-0.01em]">雙邊媒合，讓問卷方找到對的人</h2>
+            <ul className="mt-6 space-y-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+              <li>受眾篩選媒合，優先導入符合條件的填答者。</li>
+              <li>AI 品質過濾，自動擋下低品質與可疑樣本。</li>
+              <li>綠界自動分潤與退款，平台零持股金流託管。</li>
+            </ul>
+          </article>
+          <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-7">
+            <h2 className="font-serif text-3xl tracking-[-0.01em]">填答者拿到想要的在地獎勵</h2>
+            <ul className="mt-6 space-y-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+              <li>填答賺現金、7-11 / 全家禮券與積分回饋。</li>
+              <li>通過驗證即入帳「我的收益」，流程透明可追蹤。</li>
+              <li>收益面板可同時查看 NT$、禮券與託管狀態。</li>
+            </ul>
+            <div className="mt-6 rounded-lg border border-white/10 bg-[var(--q-surface-dark-soft)] p-4">
+              <p className="text-xs text-[var(--q-on-dark-soft)]">我的收益</p>
+              <p className="mt-2 text-2xl font-semibold text-[var(--q-on-dark)]">NT$ 2,860</p>
+              <p className="mt-2 text-xs text-[var(--q-accent-teal)]">綠界託管中 · 入帳成功</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section className="py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
+            一個帳號，發問卷、填問卷、跑互惠
+          </h2>
+          <div className="mt-8 grid gap-4 rounded-xl bg-[var(--q-surface-card)] p-6 md:grid-cols-3">
+            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
+              <p className="text-xs font-semibold text-[var(--q-muted)]">發問卷</p>
+              <p className="mt-3 text-sm text-[var(--q-body)]">
+                建立受眾條件、設定預算與獎勵，發布後由系統自動媒合與審核。
+              </p>
+            </article>
+            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
+              <p className="text-xs font-semibold text-[var(--q-muted)]">填問卷</p>
+              <p className="mt-3 text-sm text-[var(--q-body)]">
+                依偏好接案填答，驗證通過後收益立即進入待領獎勵與我的收益面板。
+              </p>
+            </article>
+            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
+              <p className="text-xs font-semibold text-[var(--q-muted)]">互惠</p>
+              <p className="mt-3 text-sm text-[var(--q-body)]">
+                沒有預算也能上線，透過互填交換快速累積有效樣本數。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl tracking-[-0.01em] sm:text-4xl">信任三件套</h2>
+          <div className="mt-8 grid gap-4 md:grid-cols-3">
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <h3 className="text-lg font-semibold">信譽積分系統</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                為每位填答者建立永久信任檔案，提升高品質用戶的接案優先權。
+              </p>
+            </article>
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <h3 className="text-lg font-semibold">綠界金流託管</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                預算自動鎖定與發放，平台帳上維持零持股，流程合規可稽核。
+              </p>
+            </article>
+            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
+              <h3 className="text-lg font-semibold">端到端個資加密</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+                敏感資料採用 AES-256-GCM 保護，從傳輸到儲存都維持高強度安全。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-[var(--q-primary)] py-20 text-[var(--q-on-primary)]">
+        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] sm:text-4xl">
+            準備好收到真實的回覆了嗎？
+          </h2>
+          <p className="mt-4 text-base text-[var(--q-on-primary)]/90">
+            免費註冊，幾分鐘就能發出第一份問卷，或立刻開始互惠交換。
+          </p>
+          <Link
+            href="/auth/register"
+            className="mt-8 inline-block rounded-md bg-[var(--q-canvas)] px-6 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-soft)]"
+          >
+            免費開始
           </Link>
         </div>
       </section>
 
-      <footer className="border-t border-slate-200 bg-white">
-        <div className="mx-auto max-w-7xl px-6 py-12 lg:px-10">
-          <div className="grid gap-8 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-            {footerCols.map((col) => (
-              <div key={col.title}>
-                <h4 className="mb-3 text-sm font-bold text-slate-900">{col.title}</h4>
-                <ul className="space-y-1.5 text-xs text-slate-600">
-                  {col.items.map((item) => (
-                    <li key={item}><a href="#" className="hover:text-cyan-700">{item}</a></li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-
-          <div className="mt-10 space-y-1 text-xs text-slate-500">
-            <p>使用條款與條件｜隱私權保護政策</p>
-            <p>券問科技股份有限公司（公司資訊可於此更新）</p>
-            <p>© 2026 QuanWen, all rights reserved.</p>
-          </div>
-        </div>
-      </footer>
+      <MarketingFooter />
     </main>
-  );
-}
-
-function MosaicBg() {
-  return (
-    <div className="pointer-events-none absolute inset-0 overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_18%_18%,rgba(34,211,238,0.24),transparent_32%),radial-gradient(circle_at_84%_28%,rgba(59,130,246,0.23),transparent_38%),radial-gradient(circle_at_68%_82%,rgba(16,185,129,0.21),transparent_42%)]" />
-      <div className="absolute inset-0 opacity-25 [background-image:linear-gradient(to_right,rgba(255,255,255,0.11)_1px,transparent_1px),linear-gradient(to_bottom,rgba(255,255,255,0.11)_1px,transparent_1px)] [background-size:36px_36px]" />
-
-      <div className="absolute -left-24 top-20 h-72 w-72 rounded-full bg-cyan-400/20 blur-3xl animate-[q-home-glow_8s_ease-in-out_infinite]" />
-      <div className="absolute right-0 top-1/3 h-80 w-80 rounded-full bg-blue-500/20 blur-3xl animate-[q-home-glow_9s_ease-in-out_infinite]" />
-      <div className="absolute bottom-0 left-1/3 h-80 w-80 rounded-full bg-emerald-400/20 blur-3xl animate-[q-home-glow_10s_ease-in-out_infinite]" />
-
-      <div className="absolute inset-0 hidden lg:block animate-[q-home-drift_14s_ease-in-out_infinite]">
-        {TILES.map((tile) => (
-          <QuestionTile key={`${tile.title}-${tile.pos}`} tile={tile} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-function QuestionTile({ tile }: { tile: SurveyTile }) {
-  return (
-    <div
-      className={`absolute ${tile.pos} w-[220px] rounded-2xl border border-white/20 bg-slate-900/35 p-3.5 backdrop-blur-md shadow-[0_18px_40px_-20px_rgba(8,145,178,0.45)] animate-[q-home-float_7s_ease-in-out_infinite]`}
-      style={{ animationDelay: tile.delay }}
-    >
-      <div className="mb-2 flex items-center justify-between">
-        <span className="rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-cyan-100">{tile.title}</span>
-        <span className="text-[10px] text-slate-300/80">{tile.subtitle}</span>
-      </div>
-      <TileBody kind={tile.kind} />
-    </div>
-  );
-}
-
-function TileBody({ kind }: { kind: SurveyTile["kind"] }) {
-  if (kind === "single" || kind === "multi") {
-    return (
-      <div className="space-y-2">
-        {[1, 2, 3].map((n) => (
-          <div key={n} className="flex items-center gap-2">
-            <span className={`h-3 w-3 rounded-full border ${n === 2 ? "border-cyan-300 bg-cyan-300/30" : "border-white/45"}`} />
-            <span className="h-2 w-full rounded bg-white/25" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (kind === "likert") {
-    return (
-      <div>
-        <div className="mb-2 h-2 w-32 rounded bg-white/20" />
-        <div className="grid grid-cols-5 gap-1">
-          {[0, 1, 2, 3, 4].map((n) => (
-            <span key={n} className={`h-2.5 rounded-full ${n === 3 ? "bg-cyan-300/80" : "bg-white/30"}`} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (kind === "nps") {
-    return (
-      <div>
-        <div className="mb-2 h-2 w-36 rounded bg-white/20" />
-        <div className="grid grid-cols-11 gap-1">
-          {Array.from({ length: 11 }).map((_, i) => (
-            <span key={i} className={`h-2.5 rounded-sm ${i >= 8 ? "bg-emerald-300/70" : "bg-white/28"}`} />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (kind === "ranking") {
-    return (
-      <div className="space-y-1.5">
-        {["A", "B", "C"].map((l, idx) => (
-          <div key={l} className="flex items-center gap-2">
-            <span className="inline-flex h-4 w-4 items-center justify-center rounded bg-cyan-300/35 text-[9px] text-cyan-100">{idx + 1}</span>
-            <span className="h-2 w-full rounded bg-white/25" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  if (kind === "open") {
-    return (
-      <div className="space-y-1.5">
-        <div className="h-2 w-full rounded bg-white/25" />
-        <div className="h-2 w-11/12 rounded bg-white/25" />
-        <div className="h-2 w-8/12 rounded bg-white/25" />
-      </div>
-    );
-  }
-
-  if (kind === "matrix") {
-    return (
-      <div className="space-y-1.5">
-        {[0, 1, 2].map((r) => (
-          <div key={r} className="grid grid-cols-4 gap-1.5">
-            {[0, 1, 2, 3].map((c) => (
-              <span key={`${r}-${c}`} className={`h-2 rounded ${r === 1 && c === 2 ? "bg-cyan-300/80" : "bg-white/25"}`} />
-            ))}
-          </div>
-        ))}
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <div className="mb-2 h-2 w-28 rounded bg-white/20" />
-      <div className="h-2.5 w-full rounded-full bg-white/30">
-        <div className="h-full w-3/5 rounded-full bg-cyan-300/80" />
-      </div>
-    </div>
   );
 }

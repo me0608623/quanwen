@@ -1,6 +1,6 @@
 ﻿"use client";
 
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Controller, useForm } from "react-hook-form";
@@ -18,7 +18,6 @@ import { extractApiError } from "@/lib/extract-error";
 import { AuthShell } from "../_components/auth-shell";
 import { AuthDivider, OAuthButtons } from "../_components/oauth-buttons";
 import { PasswordInput } from "../_components/password-input";
-import { RoleToggle, type Role } from "../_components/role-toggle";
 
 const RegisterSchema = z
   .object({
@@ -49,7 +48,6 @@ function RegisterForm() {
   const searchParams = useSearchParams();
   const oauthError = searchParams.get("error");
   const registerMutation = useRegister();
-  const [role, setRole] = useState<Role>("respondent");
 
   const form = useForm<RegisterInput>({
     resolver: zodResolver(RegisterSchema),
@@ -65,10 +63,10 @@ function RegisterForm() {
   const password = form.watch("password");
 
   const onSubmit = ({ confirmPassword: _confirmPassword, terms: _terms, ...data }: RegisterInput) =>
-    registerMutation.mutate({ ...data, role });
+    registerMutation.mutate({ ...data, role: "respondent" });
 
   return (
-    <AuthShell audience={role}>
+    <AuthShell audience="respondent">
       {oauthError && (
         <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           {OAUTH_ERRORS[oauthError] ?? "註冊發生錯誤，請稍後再試。"}
@@ -85,11 +83,7 @@ function RegisterForm() {
         </p>
       </div>
 
-      <div className="mb-6">
-        <RoleToggle value={role} onChange={setRole} />
-      </div>
-
-      <OAuthButtons intent="register" role={role} />
+      <OAuthButtons intent="register" role="respondent" />
       <AuthDivider text="或使用 Email 註冊" />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

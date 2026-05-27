@@ -538,6 +538,42 @@ export class WalletService {
     return { totalEarned, pendingRewards, thisMonth, bySurvey, monthly };
   }
 
+  // ─── 通用積分發放（轉盤、活動獎勵等，與 survey 無關）──────────────────────
+
+  async grantPoints(userId: string, pointsAmount: number, note: string): Promise<void> {
+    if (pointsAmount <= 0) return;
+    await this.ensureWallet(userId);
+    const now = new Date();
+
+    const [txn] = await this.db
+      .insert(transactions)
+      .values({
+        userId,
+        type: 'points_in',
+        amount: pointsAmount,
+        status: 'success',
+        note,
+        completedAt: now,
+      })
+      .returning();
+
+    await this.db.insert(journalEntries).values([
+      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+      { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
+    ]);
+
+    await this.db
+      .update(wallets)
+      .set({
+        pointsBalance: sql`points_balance + ${pointsAmount}`,
+        version: sql`version + 1`,
+        updatedAt: now,
+      })
+      .where(eq(wallets.userId, userId));
+
+    this.logger.log(`Bonus points granted: user=${userId.slice(0, 8)} points=${pointsAmount} (${note})`);
+  }
+
   // ─── 發放積分（受試者完成積分類型問卷時呼叫）─────────────────────────────
 
   async issuePoints(params: {

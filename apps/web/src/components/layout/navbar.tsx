@@ -6,6 +6,8 @@ import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { useMe, useLogout, isPlaceholderEmail } from '@/hooks/use-auth';
 import { useUnreadCount } from '@/hooks/use-notifications';
+import { useWallet } from '@/hooks/use-wallet';
+import { useMyMutualPairs } from '@/hooks/use-mutual';
 
 function Avatar({ src, name }: { src: string | null | undefined; name: string }) {
   if (src) {
@@ -28,18 +30,44 @@ function Avatar({ src, name }: { src: string | null | undefined; name: string })
   );
 }
 
+// 非 admin 共用 nav
+const USER_TABS = [
+  { href: '/dashboard', label: '發問卷', matches: ['/dashboard', '/surveys'] },
+  { href: '/tasks',     label: '填問卷', matches: ['/tasks', '/earnings', '/shop'] },
+  { href: '/mutual',    label: '互惠',   matches: ['/mutual'] },
+  { href: '/spin',      label: '🎡 轉盤', matches: ['/spin'] },
+] as const;
+
+// admin 專屬 nav
+const ADMIN_TABS = [
+  { href: '/admin',              label: '總覽',     matches: ['/admin'] as string[] },
+  { href: '/admin/surveys',      label: '問卷審核', matches: ['/admin/surveys'] },
+  { href: '/admin/responses',    label: '可疑填答', matches: ['/admin/responses'] },
+  { href: '/admin/kyc',          label: 'KYC',     matches: ['/admin/kyc'] },
+  { href: '/admin/withdrawals',  label: '提領審核', matches: ['/admin/withdrawals'] },
+  { href: '/admin/appeals',      label: '申訴',     matches: ['/admin/appeals'] },
+  { href: '/admin/mutual',       label: '互惠',     matches: ['/admin/mutual'] },
+] as const;
+
+function formatNT(n: number | undefined): string {
+  if (n === undefined || n === null) return '—';
+  return `NT$${n.toLocaleString()}`;
+}
+
 export function Navbar() {
   const pathname = usePathname();
   const { data: me, isLoading } = useMe();
   const { data: unread } = useUnreadCount();
+  const { data: wallet } = useWallet();
+  const { data: mutualPairs } = useMyMutualPairs();
   const logout = useLogout();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Never show on auth / onboarding pages
   if (pathname.startsWith('/auth') || pathname.startsWith('/onboarding')) return null;
 
-  // Show a thin skeleton bar while the user query is in flight so the page
-  // doesn't jump when the navbar suddenly appears
+  // Show a thin skeleton bar while the user query is in flight
   if (isLoading) {
     return (
       <div className="sticky top-0 z-50 h-[53px] border-b border-border bg-background/80 backdrop-blur-sm animate-pulse" />
@@ -48,69 +76,71 @@ export function Navbar() {
 
   if (!me) return null;
 
-  const isSurveyor = me.role === 'surveyor';
   const isAdmin = me.role === 'admin';
   const hasPlaceholderEmail = isPlaceholderEmail(me.email);
 
-  const navLinks = isAdmin
-    ? [
-        { href: '/admin', label: '總覽' },
-        { href: '/admin/surveys', label: '問卷審核' },
-        { href: '/admin/responses', label: '可疑填答' },
-        { href: '/admin/withdrawals', label: '提領審核' },
-      ]
-    : isSurveyor
-    ? [
-        { href: '/dashboard', label: '我的問卷' },
-        { href: '/dashboard/surveys/new', label: '+ 新增' },
-        { href: '/wallet', label: '錢包' },
-        { href: '/dashboard/profile', label: '個人資料' },
-        { href: '/settings/accounts', label: '帳號' },
-      ]
-    : [
-        { href: '/tasks', label: '填問卷' },
-        { href: '/earnings', label: '我的收益' },
-        { href: '/wallet', label: '錢包' },
-        { href: '/shop', label: '🛒 商城' },
-        { href: '/profile', label: '個人資料' },
-        { href: '/settings/accounts', label: '帳號' },
-      ];
+  // Pick the tab set + home destination based on role
+  const tabs = isAdmin ? ADMIN_TABS : USER_TABS;
+  const homeHref = isAdmin ? '/admin' : '/dashboard';
 
-  const isActive = (href: string) =>
-    pathname === href || (href !== '/' && pathname.startsWith(href + '/'));
+  const isActive = (matches: readonly string[]) =>
+    matches.some((m) => pathname === m || pathname.startsWith(m + '/'));
+
+  // 「輪到我填」的互惠配對數 — 顯示在 /mutual tab 右上角
+  const mutualActionCount = (mutualPairs ?? []).filter((p) => p.nextAction === 'fill_other').length;
+  const badgeFor = (href: string): number => {
+    if (href === '/mutual') return mutualActionCount;
+    return 0;
+  };
 
   return (
     <>
-      <nav className="sticky top-0 z-50 border-b border-border bg-background/80 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-5xl items-center justify-between px-4 py-3">
+      <nav className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-sm">
+        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           {/* Logo */}
-          <Link
-            href={isSurveyor ? '/dashboard' : isAdmin ? '/admin' : '/tasks'}
-            className="text-base font-bold tracking-tight"
-          >
+          <Link href={homeHref} className="shrink-0 text-base font-bold tracking-tight">
             券問 <span className="text-primary">QuanWen</span>
           </Link>
 
-          {/* Desktop nav links */}
-          <div className="hidden sm:flex items-center gap-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                className={[
-                  'rounded-md px-3 py-1.5 text-sm transition-colors',
-                  isActive(link.href)
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                ].join(' ')}
-              >
-                {link.label}
-              </Link>
-            ))}
+          {/* Desktop primary tabs */}
+          <div className="hidden sm:flex flex-1 items-center justify-center gap-1">
+            {tabs.map((tab) => {
+              const count = badgeFor(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  className={[
+                    'relative rounded-md px-4 py-1.5 text-sm transition-colors',
+                    isActive(tab.matches)
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                  ].join(' ')}
+                >
+                  {tab.label}
+                  {count > 0 && (
+                    <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
+                      {count > 9 ? '9+' : count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
           </div>
 
-          {/* Right: notifications + user + hamburger */}
+          {/* Right cluster: wallet + notifications + avatar menu */}
           <div className="flex items-center gap-2">
+            {/* Wallet pill — only for non-admin */}
+            {!isAdmin && (
+              <Link
+                href="/wallet"
+                className="hidden md:flex items-center gap-1.5 rounded-full border border-border bg-muted/40 px-3 py-1 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+              >
+                <span className="inline-block h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                錢包 {formatNT(wallet?.cashBalance)}
+              </Link>
+            )}
+
             {/* 通知鈴鐺 */}
             <Link href="/notifications" className="relative rounded-md p-1.5 hover:bg-muted">
               <svg
@@ -134,21 +164,47 @@ export function Navbar() {
               )}
             </Link>
 
-            {/* Avatar + name (desktop only) */}
-            <div className="hidden sm:flex items-center gap-1.5">
-              <Avatar src={me.avatarUrl} name={me.displayName} />
-              <span className="text-sm text-muted-foreground truncate max-w-[100px]">
-                {me.displayName}
-              </span>
+            {/* Avatar dropdown trigger (desktop only) */}
+            <div className="hidden sm:block relative">
+              <button
+                onClick={() => setMenuOpen((v) => !v)}
+                className="flex items-center gap-1.5 rounded-full hover:bg-muted px-1 py-1"
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+              >
+                <Avatar src={me.avatarUrl} name={me.displayName} />
+                <svg className="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {menuOpen && (
+                <>
+                  {/* click-away overlay */}
+                  <button
+                    aria-hidden
+                    tabIndex={-1}
+                    onClick={() => setMenuOpen(false)}
+                    className="fixed inset-0 z-10 cursor-default"
+                  />
+                  <div className="absolute right-0 z-20 mt-2 w-52 rounded-lg border border-border bg-background shadow-lg overflow-hidden">
+                    <div className="px-3 py-2 border-b border-border">
+                      <p className="text-sm font-medium truncate">{me.displayName}</p>
+                      <p className="text-xs text-muted-foreground truncate">{me.email}</p>
+                    </div>
+                    <Link href="/profile" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">個人資料</Link>
+                    <Link href="/wallet" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">錢包</Link>
+                    <Link href="/settings/accounts" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">帳號設定</Link>
+                    <Link href="/settings/security" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">安全</Link>
+                    <button
+                      onClick={() => { setMenuOpen(false); logout(); }}
+                      className="block w-full text-left px-3 py-2 text-sm text-destructive hover:bg-muted border-t border-border"
+                    >
+                      登出
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
-
-            {/* Desktop logout */}
-            <button
-              onClick={logout}
-              className="hidden sm:block rounded-md px-2 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted"
-            >
-              登出
-            </button>
 
             {/* Mobile: hamburger */}
             <button
@@ -172,31 +228,55 @@ export function Navbar() {
         {/* Mobile drawer */}
         {mobileOpen && (
           <div className="sm:hidden border-t border-border bg-background px-4 py-3 space-y-1">
-            {/* User row */}
             <div className="flex items-center gap-2 pb-2 mb-1 border-b border-border">
               <Avatar src={me.avatarUrl} name={me.displayName} />
-              <span className="text-sm font-medium truncate flex-1">{me.displayName}</span>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate">{me.displayName}</p>
+                {!isAdmin && (
+                  <p className="text-xs text-muted-foreground">錢包 {formatNT(wallet?.cashBalance)}</p>
+                )}
+              </div>
             </div>
 
-            {navLinks.map((link) => (
-              <Link
-                key={link.href}
-                href={link.href}
-                onClick={() => setMobileOpen(false)}
-                className={[
-                  'block rounded-md px-3 py-2 text-sm transition-colors',
-                  isActive(link.href)
-                    ? 'bg-primary/10 text-primary font-medium'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted',
-                ].join(' ')}
-              >
-                {link.label}
+            {tabs.map((tab) => {
+              const count = badgeFor(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  onClick={() => setMobileOpen(false)}
+                  className={[
+                    'flex items-center justify-between rounded-md px-3 py-2 text-sm transition-colors',
+                    isActive(tab.matches)
+                      ? 'bg-primary/10 text-primary font-semibold'
+                      : 'text-muted-foreground hover:text-foreground hover:bg-muted',
+                  ].join(' ')}
+                >
+                  <span>{tab.label}</span>
+                  {count > 0 && (
+                    <span className="inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-bold text-white">
+                      {count > 9 ? '9+' : count}
+                    </span>
+                  )}
+                </Link>
+              );
+            })}
+
+            {!isAdmin && (
+              <Link href="/wallet" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+                錢包
               </Link>
-            ))}
+            )}
+            <Link href="/profile" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+              個人資料
+            </Link>
+            <Link href="/settings/accounts" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+              帳號設定
+            </Link>
 
             <button
               onClick={() => { setMobileOpen(false); logout(); }}
-              className="w-full text-left rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted"
+              className="w-full text-left rounded-md px-3 py-2 text-sm text-destructive hover:bg-muted"
             >
               登出
             </button>
@@ -207,7 +287,7 @@ export function Navbar() {
       {/* Placeholder email warning banner */}
       {hasPlaceholderEmail && !isAdmin && pathname !== '/settings/security' && (
         <div className="bg-amber-50 border-b border-amber-200">
-          <div className="mx-auto max-w-5xl px-4 py-2 flex items-center justify-between gap-4">
+          <div className="mx-auto max-w-6xl px-4 py-2 flex items-center justify-between gap-4">
             <p className="text-xs text-amber-700">
               你尚未設定電子郵件，若遺失第三方登入將無法取回帳號。
             </p>
@@ -224,7 +304,7 @@ export function Navbar() {
       {/* Account suspended banner */}
       {me.status === 'suspended' && (
         <div className="bg-destructive/10 border-b border-destructive/20">
-          <div className="mx-auto max-w-5xl px-4 py-2">
+          <div className="mx-auto max-w-6xl px-4 py-2">
             <p className="text-xs text-destructive">
               你的帳號已被停用。如有疑問，請聯絡客服。
             </p>

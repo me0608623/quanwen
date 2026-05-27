@@ -36,6 +36,26 @@ export const questionTypeEnum = pgEnum('question_type', [
   'matrix',          // 矩陣題
 ]);
 
+// 問卷類型：standard 走獎勵媒合，mutual 走互惠配對
+export const surveyTypeEnum = pgEnum('survey_type', [
+  'standard',
+  'mutual',
+]);
+
+// 問卷分類（給 task list 篩選 + mutual 智慧媒合用）
+export const surveyCategoryEnum = pgEnum('survey_category', [
+  'consumer',
+  'academic',
+  'wellness',
+  'workplace',
+  'lifestyle',
+  'tech',
+  'social',
+  'education',
+  'finance',
+  'other',
+]);
+
 // ─── Surveys ──────────────────────────────────────────────────────────────────
 
 export const surveys = pgTable(
@@ -46,6 +66,14 @@ export const surveys = pgTable(
     title: varchar('title', { length: 200 }).notNull(),
     description: text('description'),
     status: surveyStatusEnum('status').notNull().default('draft'),
+    // standard | mutual。mutual 不走獎勵媒合，靠互惠配對解鎖
+    type: surveyTypeEnum('type').notNull().default('standard'),
+    // 分類(optional): 提供 task list 過濾 + 未來 mutual 智慧媒合
+    category: surveyCategoryEnum('category'),
+    // Phase C-2: 發問卷方可決定要不要導入 AI 品質審核 (standard 才有意義)
+    aiReviewEnabled: boolean('ai_review_enabled').notNull().default(true),
+    // Phase C-3: 外部平台連結 (Google Forms 等)。非空 → mutual 走「截圖證明 + 互評」流程
+    externalUrl: text('external_url'),
 
     // 獎勵設定
     rewardType: rewardTypeEnum('reward_type').notNull().default('cash'),

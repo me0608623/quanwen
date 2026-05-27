@@ -2,7 +2,7 @@ import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
 import { eq, and, desc, gte, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyResponses, users, transactions } from '../db/schema';
+import { surveys, surveyResponses, users, transactions, mutualPairs } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SuspiciousAnalyzerService } from './suspicious-analyzer.service';
@@ -260,7 +260,7 @@ export class AdminService {
   // ─── 平台統計 ────────────────────────────────────────────────────────────────
 
   async getPlatformStats() {
-    const [allUsers, allSurveys, allResponses, revenueRows, thisMonthRevenueRows] =
+    const [allUsers, allSurveys, allResponses, revenueRows, thisMonthRevenueRows, allMutual] =
       await Promise.all([
         this.db.select({ id: users.id, role: users.role }).from(users),
         this.db.select({ id: surveys.id, status: surveys.status }).from(surveys),
@@ -283,6 +283,7 @@ export class AdminService {
               sql`completed_at >= date_trunc('month', NOW())`,
             ),
           ),
+        this.db.select({ id: mutualPairs.id, status: mutualPairs.status }).from(mutualPairs),
       ]);
 
     const surveyorCount = allUsers.filter((u) => u.role === 'surveyor').length;
@@ -297,6 +298,11 @@ export class AdminService {
       (r) => r.antiCheatScore !== null && r.antiCheatScore >= 60,
     ).length;
 
+    const mutualCounts = allMutual.reduce<Record<string, number>>((acc, p) => {
+      acc[p.status] = (acc[p.status] ?? 0) + 1;
+      return acc;
+    }, {});
+
     return {
       totalUsers: allUsers.length,
       totalSurveyors: surveyorCount,
@@ -306,6 +312,110 @@ export class AdminService {
       suspiciousResponses,
       platformRevenue: Number(revenueRows[0]?.total ?? 0),
       platformRevenueThisMonth: Number(thisMonthRevenueRows[0]?.total ?? 0),
+      mutualCounts,
+      mutualTotal: allMutual.length,
     };
+  }
+
+  // ─── Phase B 互惠：admin 看全部 pair 並可手動取消 ────────────────────────
+
+  async listAllMutualPairs(statusFilter?: string) {
+    const rows = await this.db
+      .select()
+      .from(mutualPairs)
+      .orderBy(desc(mutualPairs.createdAt));
+
+    const filtered = statusFilter
+      ? rows.filter((r) => r.status === statusFilter)
+      : rows;
+
+    // 撈 user displayName + survey title
+    const userIds = new Set<string>();
+    const surveyIds = new Set<string>();
+    for (const r of filtered) {
+      userIds.add(r.aUserId);
+      surveyIds.add(r.aSurveyId);
+      if (r.bUserId) userIds.add(r.bUserId);
+      if (r.bSurveyId) surveyIds.add(r.bSurveyId);
+    }
+
+    const userRows = userIds.size
+      ? await this.db
+          .select({ id: users.id, displayName: users.displayName, email: users.email })
+          .from(users)
+      : [];
+    const surveyRows = surveyIds.size
+      ? await this.db
+          .select({ id: surveys.id, title: surveys.title, category: surveys.category })
+          .from(surveys)
+      : [];
+
+    const userById = new Map(userRows.map((u) => [u.id, u]));
+    const surveyById = new Map(surveyRows.map((s) => [s.id, s]));
+
+    return filtered.map((r) => ({
+      id: r.id,
+      status: r.status,
+      a: {
+        userId: r.aUserId,
+        displayName: userById.get(r.aUserId)?.displayName ?? '(unknown)',
+        email: userById.get(r.aUserId)?.email ?? '',
+        surveyId: r.aSurveyId,
+        surveyTitle: surveyById.get(r.aSurveyId)?.title ?? '(unknown)',
+        category: surveyById.get(r.aSurveyId)?.category ?? null,
+        filledAt: r.aFilledAt,
+      },
+      b: r.bUserId
+        ? {
+            userId: r.bUserId,
+            displayName: userById.get(r.bUserId)?.displayName ?? '(unknown)',
+            email: userById.get(r.bUserId)?.email ?? '',
+            surveyId: r.bSurveyId,
+            surveyTitle: r.bSurveyId ? (surveyById.get(r.bSurveyId)?.title ?? '(unknown)') : null,
+            category: r.bSurveyId ? (surveyById.get(r.bSurveyId)?.category ?? null) : null,
+            filledAt: r.bFilledAt,
+          }
+        : null,
+      matchedAt: r.matchedAt,
+      expiresAt: r.expiresAt,
+      createdAt: r.createdAt,
+    }));
+  }
+
+  async forceCancelMutualPair(pairId: string, reason: string, adminId: string): Promise<void> {
+    const rows = await this.db
+      .select()
+      .from(mutualPairs)
+      .where(eq(mutualPairs.id, pairId))
+      .limit(1);
+    const pair = rows[0];
+    if (!pair) throw new NotFoundException('配對不存在');
+    if (pair.status === 'both_done' || pair.status === 'cancelled' || pair.status === 'expired') {
+      return; // 已是終端狀態，無 op
+    }
+
+    await this.db
+      .update(mutualPairs)
+      .set({ status: 'cancelled', updatedAt: new Date() })
+      .where(eq(mutualPairs.id, pairId));
+
+    this.logger.warn(`Admin force-cancelled mutual pair ${pairId}: ${reason} by ${adminId.slice(0, 8)}`);
+
+    await this.notifications.create({
+      userId: pair.aUserId,
+      type: 'system',
+      title: '互惠配對被取消 (admin)',
+      body: `管理員手動取消配對：${reason}`,
+      metadata: { pairId },
+    });
+    if (pair.bUserId) {
+      await this.notifications.create({
+        userId: pair.bUserId,
+        type: 'system',
+        title: '互惠配對被取消 (admin)',
+        body: `管理員手動取消配對：${reason}`,
+        metadata: { pairId },
+      });
+    }
   }
 }

@@ -5,7 +5,6 @@ import {
   Body,
   UseGuards,
   Req,
-  ForbiddenException,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ProfileService } from './profile.service';
@@ -38,7 +37,6 @@ export class ProfileController {
     @Body(new ZodValidationPipe(UpdateRespondentProfileSchema)) dto: UpdateRespondentProfileDto,
   ) {
     const user = req.user as AuthenticatedUser;
-    if (user.role !== 'respondent') throw new ForbiddenException('僅受試者可更新此 profile');
     return this.profileService.upsertRespondentProfile(user.id, dto);
   }
 
@@ -48,7 +46,6 @@ export class ProfileController {
     @Body(new ZodValidationPipe(UpdateSurveyorProfileSchema)) dto: UpdateSurveyorProfileDto,
   ) {
     const user = req.user as AuthenticatedUser;
-    if (user.role !== 'surveyor') throw new ForbiddenException('僅問券方可更新此 profile');
     return this.profileService.upsertSurveyorProfile(user.id, dto);
   }
 }

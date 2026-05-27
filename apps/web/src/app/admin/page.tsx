@@ -87,6 +87,19 @@ export default function AdminOverviewPage() {
         </div>
       </section>
 
+      {/* 互惠配對統計 */}
+      <section>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">互惠配對</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
+          <StatCard label="池中等待" value={stats.mutualCounts?.waiting ?? 0}
+            sub={(stats.mutualCounts?.waiting ?? 0) > 0 ? '配對中' : '無'} />
+          <StatCard label="配對中" value={(stats.mutualCounts?.matched ?? 0) + (stats.mutualCounts?.a_done ?? 0) + (stats.mutualCounts?.b_done ?? 0)} sub="進行中" />
+          <StatCard label="已解鎖" value={stats.mutualCounts?.both_done ?? 0} sub="雙方都完成" />
+          <StatCard label="超時" value={stats.mutualCounts?.expired ?? 0} sub="72hr 內未完成" />
+          <StatCard label="取消" value={stats.mutualCounts?.cancelled ?? 0} sub="AI 退件" />
+        </div>
+      </section>
+
       {/* 收入統計 */}
       <section>
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide mb-3">平台收入（手續費）</h2>

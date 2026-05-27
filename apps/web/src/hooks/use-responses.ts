@@ -9,6 +9,7 @@ export interface AvailableSurvey {
   id: string;
   title: string;
   description?: string;
+  category?: string | null;
   rewardPoints: number;
   targetCount: number;
   completedCount: number;
@@ -64,14 +65,25 @@ export interface MyResponseRecord {
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
 
-export function useAvailableSurveys() {
+export function useAvailableSurveys(category?: string) {
   return useQuery<AvailableSurvey[]>({
-    queryKey: ['tasks', 'available'],
+    queryKey: ['tasks', 'available', category ?? 'all'],
     queryFn: async () => {
-      const { data } = await api.get('/tasks');
+      const { data } = await api.get('/tasks', { params: category ? { category } : undefined });
       return data;
     },
     staleTime: 30_000,
+  });
+}
+
+export function useTaskCategoryCounts() {
+  return useQuery<Record<string, number>>({
+    queryKey: ['tasks', 'category-counts'],
+    queryFn: async () => {
+      const { data } = await api.get('/tasks/category-counts');
+      return data;
+    },
+    staleTime: 60_000,
   });
 }
 

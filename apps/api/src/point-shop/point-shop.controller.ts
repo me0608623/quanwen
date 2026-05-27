@@ -1,6 +1,6 @@
 import {
   Controller, Get, Post, Param, Req,
-  UseGuards, HttpCode, HttpStatus, ForbiddenException,
+  UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { PointShopService } from './point-shop.service';
@@ -30,9 +30,6 @@ export class PointShopController {
   @HttpCode(HttpStatus.CREATED)
   redeem(@Param('itemId') itemId: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    if (user.role !== 'respondent') {
-      throw new ForbiddenException('僅受試者可使用積分商城');
-    }
     return this.shop.redeem(user.id, itemId);
   }
 

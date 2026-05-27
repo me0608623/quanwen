@@ -59,12 +59,11 @@ export default function OnboardingPage() {
   const { data: tags = [], isLoading: tagsLoading } = useTags();
   const updateProfile = useUpdateRespondentProfile();
 
-  // Redirect surveyor to their onboarding page; redirect already-onboarded users away
+  // 已 onboarding 過的人直接跳到 /dashboard（互惠/問卷/填答都從那裡進）
   useEffect(() => {
     if (!me) return;
-    if (me.role === 'surveyor') { router.replace('/onboarding/surveyor'); return; }
     if ((profile as RespondentProfile | null)?.isOnboardingDone) {
-      router.replace('/tasks');
+      router.replace('/dashboard');
     }
   }, [me, profile, router]);
 

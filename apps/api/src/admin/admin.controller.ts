@@ -5,6 +5,7 @@ import {
 import type { Request } from 'express';
 import { AdminService } from './admin.service';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
+import { MutualService } from '../mutual/mutual.service';
 import { PlatformHealthService } from './platform-health.service';
 import { WithdrawalRiskService } from './withdrawal-risk.service';
 import { AppealsService } from '../responses/appeals.service';
@@ -39,6 +40,7 @@ export class AdminController {
     private readonly appeals: AppealsService,
     private readonly reconciliation: ReconciliationService,
     private readonly multiAccountDetector: MultiAccountDetectorService,
+    private readonly mutualService: MutualService,
   ) {}
 
   // ─── 統計總覽 ────────────────────────────────────────────────────────────────
@@ -47,11 +49,11 @@ export class AdminController {
     return this.adminService.getPlatformStats();
   }
 
-  /** GET /admin/health-summary — AI 平台健康摘要 */
+  /** GET /admin/health-summary — AI 平台健康摘要 (預設 30 分鐘 cache, ?force=1 強制重算) */
   @Get('health-summary')
-  async getHealthSummary() {
+  async getHealthSummary(@Query('force') force?: string) {
     const stats = await this.adminService.getPlatformStats();
-    return this.platformHealth.summarize(stats);
+    return this.platformHealth.summarize(stats, { force: force === '1' || force === 'true' });
   }
 
   /** GET /admin/surveys/:id/ai-review — AI 給審核諮詢意見（不改 DB）*/
@@ -164,6 +166,35 @@ export class AdminController {
   @Get('users/:id/multi-account-scan')
   scanMultiAccount(@Param('id') id: string) {
     return this.multiAccountDetector.scanUser(id);
+  }
+
+  // ─── 互惠配對管理（Phase B）─────────────────────────────────────────────
+
+  /** GET /admin/mutual?status=matched — 列出所有互惠配對 */
+  @Get('mutual')
+  listMutualPairs(@Query('status') status?: string) {
+    return this.adminService.listAllMutualPairs(status);
+  }
+
+  /** POST /admin/mutual/match-now — 立刻跑一次配對(demo / 不想等 30 秒 cron) */
+  @Post('mutual/match-now')
+  @HttpCode(HttpStatus.OK)
+  async matchNow() {
+    await this.mutualService.matchWaitingPairs();
+    return { message: 'matcher cron triggered' };
+  }
+
+  /** POST /admin/mutual/:id/cancel — 強制取消配對 */
+  @Post('mutual/:id/cancel')
+  @HttpCode(HttpStatus.OK)
+  async forceCancelMutual(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(z.object({ reason: z.string().min(1).max(500) }))) dto: { reason: string },
+  ) {
+    const user = req.user as AuthenticatedUser;
+    await this.adminService.forceCancelMutualPair(id, dto.reason, user.id);
+    return { message: '配對已取消' };
   }
 
   // ─── 申訴管理（Phase 6）────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useAvailableSurveys, useMyResponses, useRespondentAssistant } from '@/hooks/use-responses';
+import { useAvailableSurveys, useMyResponses, useRespondentAssistant, useTaskCategoryCounts } from '@/hooks/use-responses';
+import { SURVEY_CATEGORY_LABELS, type SurveyCategory } from '@/hooks/use-surveys';
 import { useState } from 'react';
 
 const TAB = { available: '可填問卷', history: '填答紀錄' } as const;
@@ -16,7 +17,9 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function TasksPage() {
   const [tab, setTab] = useState<TabKey>('available');
-  const { data: surveys = [], isLoading: surveysLoading, isError: surveysError } = useAvailableSurveys();
+  const [category, setCategory] = useState<SurveyCategory | ''>('');
+  const { data: surveys = [], isLoading: surveysLoading, isError: surveysError } = useAvailableSurveys(category || undefined);
+  const { data: catCounts = {} } = useTaskCategoryCounts();
   const { data: history = [], isLoading: historyLoading, isError: historyError } = useMyResponses();
 
   // KPI 計算
@@ -74,6 +77,39 @@ export default function TasksPage() {
         ))}
       </div>
 
+      {/* Category filter (only on available tab) */}
+      {tab === 'available' && (
+        <div className="mb-4 flex items-center gap-2">
+          <label className="text-xs font-semibold text-muted-foreground">分類:</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as SurveyCategory | '')}
+            className="rounded-md border border-input bg-background px-2 py-1 text-xs"
+          >
+            <option value="">全部 ({Object.values(catCounts).reduce((a, b) => a + b, 0)})</option>
+            {(Object.keys(SURVEY_CATEGORY_LABELS) as SurveyCategory[]).map((k) => {
+              const n = catCounts[k] ?? 0;
+              return (
+                <option key={k} value={k}>
+                  {SURVEY_CATEGORY_LABELS[k]} ({n})
+                </option>
+              );
+            })}
+            {(catCounts.uncategorized ?? 0) > 0 && (
+              <option value="" disabled>未分類 ({catCounts.uncategorized})</option>
+            )}
+          </select>
+          {category && (
+            <button
+              onClick={() => setCategory('')}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              清除
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Available surveys */}
       {tab === 'available' && (
         <div className="space-y-3">
@@ -106,7 +142,14 @@ export default function TasksPage() {
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold truncate">{s.title}</p>
+                  <div className="flex items-center gap-2">
+                    {s.category && (
+                      <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-[10px] font-medium">
+                        {SURVEY_CATEGORY_LABELS[s.category as SurveyCategory] ?? s.category}
+                      </span>
+                    )}
+                    <p className="font-semibold truncate">{s.title}</p>
+                  </div>
                   {s.description && (
                     <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
                       {s.description}

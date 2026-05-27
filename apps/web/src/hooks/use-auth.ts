@@ -67,7 +67,7 @@ export function useLogin() {
     onSuccess: ({ user, token }) => {
       setToken(token);
       queryClient.setQueryData(['auth', 'me'], user);
-      router.push(user.role === 'surveyor' ? '/dashboard' : '/tasks');
+      router.push(user.role === 'admin' ? '/admin' : '/dashboard');
     },
   });
 }
@@ -89,26 +89,8 @@ export function useRegister() {
     onSuccess: ({ user, token }) => {
       setToken(token);
       queryClient.setQueryData(['auth', 'me'], user);
-      router.push(user.role === 'surveyor' ? '/onboarding/surveyor' : '/onboarding');
-    },
-  });
-}
-
-export function useSelectRole() {
-  const queryClient = useQueryClient();
-  const router = useRouter();
-
-  return useMutation({
-    mutationFn: async (dto: { role: 'surveyor' | 'respondent'; displayName?: string }) => {
-      const { data } = await api.post<{ user: AuthUser; token: string }>('/auth/select-role', dto);
-      return data;
-    },
-    onSuccess: ({ user, token }) => {
-      setToken(token);
-      queryClient.setQueryData(['auth', 'me'], user);
-      // Clear any stale profile data — role just changed so old profile cache is invalid
-      queryClient.removeQueries({ queryKey: ['profile'] });
-      router.push(user.role === 'surveyor' ? '/onboarding/surveyor' : '/onboarding');
+      // profile 自動建立 + 已 onboarding 完成, 直接進 dashboard
+      router.push(user.role === 'admin' ? '/admin' : '/dashboard');
     },
   });
 }

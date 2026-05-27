@@ -26,10 +26,19 @@ interface StatsInput {
 @Injectable()
 export class PlatformHealthService {
   private readonly logger = new Logger(PlatformHealthService.name);
+  private cache: { result: PlatformHealthSummary; expiresAt: number } | null = null;
+  private readonly CACHE_TTL_MS = 30 * 60 * 1000; // 30 分鐘
+
   constructor(private readonly zai: ZaiClient) {}
 
-  async summarize(stats: StatsInput): Promise<PlatformHealthSummary> {
+  async summarize(stats: StatsInput, options: { force?: boolean } = {}): Promise<PlatformHealthSummary> {
+    if (!options.force && this.cache && this.cache.expiresAt > Date.now()) {
+      this.logger.log('platform health summary served from cache');
+      return this.cache.result;
+    }
+
     const prompt = this.buildPrompt(stats);
+    let result: PlatformHealthSummary;
     try {
       // Phase II.5/II.6: prompt 從 registry 取，env feature flag 可切換版本
       const promptEntry = resolvePrompt(PLATFORM_HEALTH);
@@ -42,15 +51,15 @@ export class PlatformHealthService {
           promptVersion: promptEntry.version,
         },
       );
-      const result = parsePlatformHealth(raw);
-      return {
-        ...result,
-        generatedAt: new Date().toISOString(),
-      };
+      const parsed = parsePlatformHealth(raw);
+      result = { ...parsed, generatedAt: new Date().toISOString() };
     } catch (err) {
       this.logger.error('AI 平台摘要失敗，回退規則式分析', err);
-      return this.fallback(stats);
+      result = this.fallback(stats);
     }
+
+    this.cache = { result, expiresAt: Date.now() + this.CACHE_TTL_MS };
+    return result;
   }
 
   private buildPrompt(stats: StatsInput): string {

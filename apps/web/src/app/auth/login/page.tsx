@@ -18,7 +18,6 @@ import { extractApiError } from "@/lib/extract-error";
 import { AuthShell } from "../_components/auth-shell";
 import { AuthDivider, OAuthButtons } from "../_components/oauth-buttons";
 import { PasswordInput } from "../_components/password-input";
-import { RoleToggle, type Role } from "../_components/role-toggle";
 
 const LoginSchema = z.object({
   email: z.string().min(1, "請輸入 Email"),
@@ -40,7 +39,6 @@ function LoginForm() {
   const oauthError = searchParams.get("error");
   const redirectTo = searchParams.get("redirect");
   const loginMutation = useLogin();
-  const [role, setRole] = useState<Role>("respondent");
   const [sessionExpired, setSessionExpired] = useState(false);
 
   useEffect(() => {
@@ -62,14 +60,14 @@ function LoginForm() {
       { email: data.email.trim(), password: data.password },
       {
         onSuccess: () => {
-          router.push(redirectTo?.startsWith("/") ? redirectTo : "/tasks");
+          router.push(redirectTo?.startsWith("/") ? redirectTo : "/dashboard");
         },
       }
     );
 
   return (
     <>
-      <AuthShell scene="immersive" audience={role}>
+      <AuthShell scene="immersive" audience="respondent">
       {sessionExpired && (
         <div className="mb-4 animate-[fadeIn_0.35s_ease-out] rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           登入已逾時，請重新登入。
@@ -92,12 +90,8 @@ function LoginForm() {
         </p>
       </div>
 
-      <div className="mb-6 animate-[fadeIn_0.55s_ease-out]">
-        <RoleToggle value={role} onChange={setRole} />
-      </div>
-
       <div className="animate-[fadeIn_0.65s_ease-out]">
-        <OAuthButtons intent="login" role={role} />
+        <OAuthButtons intent="login" role="respondent" />
       </div>
 
       <AuthDivider text="或使用 Email 登入" />

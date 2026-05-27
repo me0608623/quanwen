@@ -68,6 +68,7 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         type        survey_type NOT NULL DEFAULT 'standard',
         category    survey_category,
         ai_review_enabled BOOLEAN NOT NULL DEFAULT true,
+        external_url TEXT,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
         audience_criteria JSONB,

@@ -23,6 +23,11 @@ export default function NotificationsPage() {
     if (!n.isRead) markRead.mutate(n.id);
     // 導向相關頁面
     const meta = n.metadata as Record<string, string> | undefined;
+    if (meta?.pairId) {
+      // 互惠系統通知（matched / a_filled / unlocked / cancelled / expired）
+      router.push(`/mutual/${meta.pairId}`);
+      return;
+    }
     if (meta?.surveyId) {
       if (n.type === 'survey_approved' || n.type === 'survey_rejected') {
         router.push(`/dashboard/surveys/${meta.surveyId}`);
@@ -72,7 +77,9 @@ export default function NotificationsPage() {
             ].join(' ')}
           >
             <div className="flex items-start gap-3">
-              <span className="text-xl shrink-0 mt-0.5">{TYPE_ICONS[n.type]}</span>
+              <span className="text-xl shrink-0 mt-0.5">
+                {(n.metadata as Record<string, unknown> | undefined)?.pairId ? '🤝' : TYPE_ICONS[n.type]}
+              </span>
               <div className="flex-1 min-w-0">
                 <div className="flex items-center justify-between gap-2">
                   <p className={`text-sm font-medium truncate ${!n.isRead ? 'text-foreground' : 'text-muted-foreground'}`}>

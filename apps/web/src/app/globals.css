@@ -301,3 +301,43 @@
     opacity: 0.9;
   }
 }
+
+@layer base {
+  :root {
+    --q-primary: #cc785c;
+    --q-primary-active: #a9583e;
+    --q-primary-disabled: #e6dfd8;
+    --q-accent-teal: #5db8a6;
+    --q-accent-amber: #e8a55a;
+    --q-canvas: #faf9f5;
+    --q-surface-soft: #f5f0e8;
+    --q-surface-card: #efe9de;
+    --q-surface-cream-strong: #e8e0d2;
+    --q-surface-dark: #181715;
+    --q-surface-dark-elevated: #252320;
+    --q-surface-dark-soft: #1f1e1b;
+    --q-hairline: #e6dfd8;
+    --q-hairline-soft: #ebe6df;
+    --q-ink: #141413;
+    --q-body-strong: #252523;
+    --q-body: #3d3d3a;
+    --q-muted: #6c6a64;
+    --q-muted-soft: #8e8b82;
+    --q-on-primary: #ffffff;
+    --q-on-dark: #faf9f5;
+    --q-on-dark-soft: #a09d96;
+    --q-success: #5db872;
+    --q-warning: #d4a017;
+    --q-error: #c64545;
+  }
+}
+
+@layer components {
+  .q-container {
+    @apply mx-auto w-full max-w-6xl px-4 sm:px-6 lg:px-8;
+  }
+
+  .q-band {
+    @apply py-20;
+  }
+}

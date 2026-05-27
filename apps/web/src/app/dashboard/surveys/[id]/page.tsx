@@ -326,8 +326,27 @@ export default function SurveyDetailPage() {
         )}
       </section>
 
-      {/* Stats（非草稿） */}
-      {survey.status !== 'draft' && (
+      {/* Stats（非草稿）— mutual 與 standard 分流 */}
+      {survey.status !== 'draft' && survey.type === 'mutual' && (
+        <section className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🤝</span>
+            <h2 className="font-semibold">互惠模式</h2>
+          </div>
+          <p className="text-sm text-muted-foreground">
+            這份問卷不付費取樣，靠系統自動配對另一份互惠問卷的發起人。
+          </p>
+          <p className="text-sm">
+            想看當前配對狀態？到{' '}
+            <Link href="/mutual" className="font-medium text-primary hover:underline">
+              我的互惠
+            </Link>{' '}
+            查看完整列表（配對中 / 輪到我填 / 已解鎖）。
+          </p>
+        </section>
+      )}
+
+      {survey.status !== 'draft' && survey.type !== 'mutual' && (
         <section className="rounded-lg border border-border p-4 space-y-4">
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>

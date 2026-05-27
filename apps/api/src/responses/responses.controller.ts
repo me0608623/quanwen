@@ -42,19 +42,24 @@ export class TasksController {
     private readonly reputation: ReputationService,
   ) {}
 
-  /** GET /tasks — 可填問卷列表（依受眾媒合篩選） */
+  /** GET /tasks?category=... — 可填問卷列表（依受眾媒合 + optional category 篩選） */
   @Get()
-  getAvailable(@Req() req: Request) {
+  getAvailable(@Req() req: Request, @Query('category') category?: string) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
-    return this.responsesService.getAvailableSurveys(user.id);
+    return this.responsesService.getAvailableSurveys(user.id, category);
+  }
+
+  /** GET /tasks/category-counts — 各 category 的可填問卷計數 */
+  @Get('category-counts')
+  getCategoryCounts(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.responsesService.getCategoryCounts(user.id);
   }
 
   /** GET /tasks/history — 自己的填答紀錄 */
   @Get('history')
   getMyResponses(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.responsesService.getMyResponses(user.id);
   }
 
@@ -62,7 +67,6 @@ export class TasksController {
   @Get('appeals')
   getMyAppeals(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.appeals.getMyAppeals(user.id);
   }
 
@@ -70,7 +74,6 @@ export class TasksController {
   @Get('reputation/history')
   getMyReputationHistory(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.reputation.getHistory(user.id, 20);
   }
 
@@ -83,7 +86,6 @@ export class TasksController {
     @Body(new ZodValidationPipe(CreateAppealSchema)) dto: CreateAppealDto,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.appeals.createAppeal(id, user.id, dto.reason);
   }
 
@@ -91,7 +93,6 @@ export class TasksController {
   @Get('assistant')
   getAssistant(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.respondentAssistant.recommend(user.id);
   }
 
@@ -111,15 +112,9 @@ export class TasksController {
     @Body(new ZodValidationPipe(SubmitResponseSchema)) dto: SubmitResponseDto,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertRespondent(user);
     return this.responsesService.submitResponse(id, user.id, dto);
   }
 
-  private assertRespondent(user: AuthenticatedUser) {
-    if (user.role !== 'respondent') {
-      throw new ForbiddenException('僅受試者可使用此功能');
-    }
-  }
 }
 
 // ─── 問券方統計（掛在 /surveys/:id/stats）──────────────────────────────────────
@@ -137,7 +132,6 @@ export class ResponsesController {
   @Get(':id/stats')
   getStats(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     return this.responsesService.getSurveyStats(id, user.id);
   }
 
@@ -145,7 +139,6 @@ export class ResponsesController {
   @Get(':id/ai-insights')
   async getAiInsights(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     const stats = await this.responsesService.getSurveyStats(id, user.id);
     return this.aiInsights.analyze(stats);
   }
@@ -158,7 +151,6 @@ export class ResponsesController {
     @Req() req: Request,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     const stats = await this.responsesService.getSurveyStats(surveyId, user.id);
     const q = stats.questionStats.find((x: { questionId: string }) => x.questionId === questionId);
     if (!q) throw new ForbiddenException('題目不存在或無權存取');
@@ -170,7 +162,6 @@ export class ResponsesController {
   @Get(':id/trend')
   getTrend(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     return this.responsesService.getSurveyTrend(id, user.id);
   }
 
@@ -182,7 +173,6 @@ export class ResponsesController {
     @Res() res: ExpressResponse,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     const buf = await this.exportSvc.generateStatsPdf(id, user.id);
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_report.pdf"`);
@@ -199,7 +189,6 @@ export class ResponsesController {
     @Query('minScore') minScore?: string,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     const isClean = clean === '1' || clean === 'true';
     const buf = await this.exportSvc.generateResponsesExcel(id, user.id, {
       cleanOnly: isClean,
@@ -221,7 +210,6 @@ export class ResponsesController {
     @Query('minScore') minScore?: string,
   ) {
     const user = req.user as AuthenticatedUser;
-    this.assertSurveyor(user);
     const isClean = clean === '1' || clean === 'true';
     const csv = await this.responsesService.exportSurveyResponsesCsv(id, user.id, {
       cleanOnly: isClean,
@@ -233,9 +221,4 @@ export class ResponsesController {
     res.send('\uFEFF' + csv); // BOM for Excel 相容
   }
 
-  private assertSurveyor(user: AuthenticatedUser) {
-    if (user.role !== 'surveyor') {
-      throw new ForbiddenException('僅問券方可使用此功能');
-    }
-  }
 }

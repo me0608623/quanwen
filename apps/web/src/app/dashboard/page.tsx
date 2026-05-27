@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { useMySurveys, useDeleteSurvey, useSurveyorAssistant } from '@/hooks/use-surveys';
+import { useMySurveys, useDeleteSurvey, useSurveyorAssistant, SURVEY_CATEGORY_LABELS } from '@/hooks/use-surveys';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -96,15 +96,28 @@ export default function DashboardPage() {
             >
               <div className="flex items-center justify-between gap-4">
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1.5">
+                  <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BG[survey.status] ?? ''}`}>
                       {STATUS_LABELS[survey.status] ?? survey.status}
                     </span>
-                    <span className="text-xs text-muted-foreground">
-                      {survey.completedCount}/{survey.targetCount} 份
-                    </span>
-                    <span className="text-xs text-muted-foreground">·</span>
-                    <span className="text-xs font-medium text-[#126b8a]">NT${survey.rewardPoints}</span>
+                    {survey.category && (
+                      <span className="rounded-full bg-slate-100 text-slate-700 px-2 py-0.5 text-xs">
+                        {SURVEY_CATEGORY_LABELS[survey.category]}
+                      </span>
+                    )}
+                    {survey.type === 'mutual' ? (
+                      <span className="rounded-full bg-amber-100 text-amber-800 px-2 py-0.5 text-xs font-medium">
+                        🤝 互惠
+                      </span>
+                    ) : (
+                      <>
+                        <span className="text-xs text-muted-foreground">
+                          {survey.completedCount}/{survey.targetCount} 份
+                        </span>
+                        <span className="text-xs text-muted-foreground">·</span>
+                        <span className="text-xs font-medium text-[#126b8a]">NT${survey.rewardPoints}</span>
+                      </>
+                    )}
                   </div>
                   <p className="font-medium truncate">{survey.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">

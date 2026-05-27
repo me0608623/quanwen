@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateSurvey, SurveyQuestion, AiDraftResult } from '@/hooks/use-surveys';
+import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, type SurveyCategory } from '@/hooks/use-surveys';
+import { usePricingAdvice } from '@/hooks/use-pricing';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
+import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-card';
 
 const defaultQuestion = (): SurveyQuestion => ({
   type: 'single_choice',
@@ -21,11 +23,38 @@ export default function NewSurveyPage() {
   const router = useRouter();
   const createSurvey = useCreateSurvey();
 
+  const [type, setType] = useState<'standard' | 'mutual'>('standard');
+  const [category, setCategory] = useState<SurveyCategory | ''>('');
+  const [aiReviewEnabled, setAiReviewEnabled] = useState(true);
+  const [externalUrl, setExternalUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [rewardPoints, setRewardPoints] = useState(0);
   const [targetCount, setTargetCount] = useState(100);
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
+
+  // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
+  const pricingAdvice = usePricingAdvice();
+  const adviseMutate = pricingAdvice.mutate;
+  const questionsSig = JSON.stringify(
+    questions.map((q) => [q.type, q.isRequired, q.options?.length ?? 0, q.config]),
+  );
+  useEffect(() => {
+    if (type !== 'standard') return;
+    const handle = setTimeout(() => {
+      adviseMutate({
+        questions: questions.map((q) => ({
+          type: q.type,
+          isRequired: q.isRequired,
+          options: q.options,
+          config: q.config,
+        })),
+        introChars: description.length,
+      });
+    }, 600);
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [questionsSig, type, description, adviseMutate]);
 
   const applyAiDraft = (draft: AiDraftResult) => {
     setTitle(draft.title);
@@ -52,8 +81,12 @@ export default function NewSurveyPage() {
       const survey = await createSurvey.mutateAsync({
         title: title || '未命名問卷',
         description: description || undefined,
-        rewardPoints,
-        targetCount,
+        type,
+        category: category || undefined,
+        aiReviewEnabled: type === 'mutual' ? true : aiReviewEnabled,
+        externalUrl: type === 'mutual' && externalUrl.trim() ? externalUrl.trim() : undefined,
+        rewardPoints: type === 'mutual' ? 0 : rewardPoints,
+        targetCount: type === 'mutual' ? 9999 : targetCount,
         questions,
       });
       router.push(`/dashboard/surveys/${survey.id}`);
@@ -76,6 +109,54 @@ export default function NewSurveyPage() {
           ← 返回
         </button>
       </div>
+
+      {/* Type selector */}
+      <section className="space-y-3 rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">問卷類型</h2>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <button
+            type="button"
+            onClick={() => setType('standard')}
+            className={`text-left rounded-lg border-2 px-4 py-3 transition-colors ${
+              type === 'standard'
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-lg">💰</span>
+              <span className="font-semibold text-sm">標準（付費取樣）</span>
+              {type === 'standard' && (
+                <span className="ml-auto text-xs font-medium text-primary">✓</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              設定獎勵點數，平台媒合受試者來填寫。需要預算鎖定 + AI 審核。
+            </p>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setType('mutual')}
+            className={`text-left rounded-lg border-2 px-4 py-3 transition-colors ${
+              type === 'mutual'
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-lg">🤝</span>
+              <span className="font-semibold text-sm">互惠（兩人互填）</span>
+              {type === 'mutual' && (
+                <span className="ml-auto text-xs font-medium text-primary">✓</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              不付錢，系統幫你配對另一個有問卷的人。雙方填完就解鎖看對方填答。
+            </p>
+          </button>
+        </div>
+      </section>
 
       {/* AI Draft */}
       <AiDraftPanel onApply={applyAiDraft} />
@@ -108,30 +189,106 @@ export default function NewSurveyPage() {
           />
         </div>
 
-        <div className="flex gap-4">
-          <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium">獎勵點數（NT$）</label>
-            <input
-              type="number"
-              min={0}
-              max={1000}
-              value={rewardPoints}
-              onChange={(e) => setRewardPoints(Number(e.target.value))}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
-          <div className="flex-1">
-            <label className="mb-1 block text-sm font-medium">目標收集份數</label>
-            <input
-              type="number"
-              min={1}
-              max={10000}
-              value={targetCount}
-              onChange={(e) => setTargetCount(Number(e.target.value))}
-              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-            />
-          </div>
+        <div>
+          <label className="mb-1 block text-sm font-medium">分類（optional）</label>
+          <select
+            value={category}
+            onChange={(e) => setCategory(e.target.value as SurveyCategory | '')}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+          >
+            <option value="">— 未分類 —</option>
+            {(Object.keys(SURVEY_CATEGORY_LABELS) as SurveyCategory[]).map((k) => (
+              <option key={k} value={k}>{SURVEY_CATEGORY_LABELS[k]}</option>
+            ))}
+          </select>
+          <p className="mt-1 text-xs text-muted-foreground">
+            未來 mutual 媒合會優先配對同分類問卷; task list 也可依此篩選。
+          </p>
         </div>
+
+        {type === 'standard' && (
+          <>
+          <div className="flex gap-4">
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium">獎勵點數（NT$）</label>
+              <input
+                type="number"
+                min={0}
+                max={1000}
+                value={rewardPoints}
+                onChange={(e) => setRewardPoints(Number(e.target.value))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+            <div className="flex-1">
+              <label className="mb-1 block text-sm font-medium">目標收集份數</label>
+              <input
+                type="number"
+                min={1}
+                max={10000}
+                value={targetCount}
+                onChange={(e) => setTargetCount(Number(e.target.value))}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </div>
+          <PricingAdviceCard
+            advice={pricingAdvice.data}
+            loading={pricingAdvice.isPending}
+            currentReward={rewardPoints}
+            onApplyFair={setRewardPoints}
+          />
+          </>
+        )}
+
+        {type === 'mutual' && (
+          <>
+            <div className="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+              互惠問卷沒有金錢獎勵與配額限制 — 系統會自動幫你配對另一個有 mutual 問卷的人。
+            </div>
+            <div>
+              <label className="mb-1 block text-sm font-medium">外部問卷連結（optional）</label>
+              <input
+                type="url"
+                value={externalUrl}
+                onChange={(e) => setExternalUrl(e.target.value)}
+                placeholder="https://forms.gle/... （用 Google 表單等外部平台時填）"
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                若你的問卷在外部平台（Google Forms 等），填這裡。配對後雙方各自去填、上傳完成截圖，
+                互相確認後即可互評信譽（平台無法 AI 審核外部填答）。<br />
+                留空則用站內題目（下方編輯），走 AI 品質審核流程。
+              </p>
+            </div>
+          </>
+        )}
+
+        {type === 'standard' && (
+          <div className="rounded-md border border-border bg-muted/20 px-3 py-3">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={aiReviewEnabled}
+                onChange={(e) => setAiReviewEnabled(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <div>
+                <p className="text-sm font-medium">導入 AI 品質審核</p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  開啟後，受試者填答會經過 AI 三層品質審核（行為訊號 + 邏輯檢核 + AI 語意分析），
+                  過濾灌水 / 機器人。建議在題目中段安插 1–2 題「注意力檢核題」加強防呆
+                  — 上架後可在問卷詳情頁用「AI 反機器人題建議」自動產生。
+                </p>
+                {!aiReviewEnabled && (
+                  <p className="mt-1.5 rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
+                    ⚠️ 關閉後問卷會直接上架、不過 AI 審核，填答品質需自行把關。
+                  </p>
+                )}
+              </div>
+            </label>
+          </div>
+        )}
       </section>
 
       {/* Questions */}

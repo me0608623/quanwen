@@ -12,7 +12,7 @@ import * as bcrypt from 'bcryptjs';
 import { createSign, randomBytes, createHash } from 'crypto';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { users, oauthAccounts } from '../db/schema';
+import { users, oauthAccounts, respondentProfiles, surveyorProfiles } from '../db/schema';
 import type { NewUser } from '../db/schema';
 import { RegisterDto } from './dto/register.dto';
 import { LoginDto } from './dto/login.dto';
@@ -82,6 +82,9 @@ export class AuthService {
 
       const user = inserted[0];
       const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
+
+      // Phase A: 一帳號全功能 — 註冊時同時建立兩種 profile，避免「沒 profile 看不到媒合 / 收益不被計入」
+      await this.ensureBothProfiles(user.id);
 
       // Send verification email non-blocking — registration succeeds even if mail fails
       void this.sendVerificationEmail(user.id);
@@ -247,13 +250,16 @@ export class AuthService {
           email,
           displayName: profile.displayName,
           avatarUrl: profile.avatarUrl,
-          role: 'respondent',       // default; user can change via /auth/select-role
+          role: 'respondent',       // default; 一帳號全功能, role 欄位僅用於 admin 區分
           emailVerified: !email.endsWith('.placeholder'),
         } as NewUser)
         .returning({ id: users.id });
       userId = newUser[0].id;
       isNewUser = true;
     }
+
+    // Phase A: OAuth 新用戶也補建兩種 profile
+    await this.ensureBothProfiles(userId);
 
     await this.db.insert(oauthAccounts).values({
       userId,
@@ -281,44 +287,18 @@ export class AuthService {
     return { user, token: this.signToken({ sub: user.id, email: user.email, role: user.role }), isNewUser };
   }
 
-  // ─── Role Selection (for new OAuth users) ─────────────────────────────────
+  // ─── Phase A: 自動建 profile（一帳號全功能必須）──────────────────────────
 
-  async selectRole(userId: string, role: 'surveyor' | 'respondent', displayName?: string) {
-    // Idempotency: only allow selection if role has never been explicitly chosen
-    // (new OAuth users have a default role but roleSelectedAt is null)
-    const existing = await this.db
-      .select({ roleSelectedAt: users.roleSelectedAt })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    if (existing[0]?.roleSelectedAt) {
-      throw new BadRequestException('角色已設定，無法再次選擇');
-    }
-
-    const trimmed = displayName?.trim();
+  async ensureBothProfiles(userId: string): Promise<void> {
+    // 兩個 profile 表都對 user_id 做了 UNIQUE，ON CONFLICT DO NOTHING 即可冪等
     await this.db
-      .update(users)
-      .set({ role, roleSelectedAt: new Date(), ...(trimmed ? { displayName: trimmed } : {}), updatedAt: new Date() })
-      .where(eq(users.id, userId));
-
-    const rows = await this.db
-      .select({
-        id: users.id,
-        email: users.email,
-        displayName: users.displayName,
-        avatarUrl: users.avatarUrl,
-        role: users.role,
-        status: users.status,
-        emailVerified: users.emailVerified,
-      })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1);
-
-    const user = rows[0];
-    const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
-    return { user, token };
+      .insert(respondentProfiles)
+      .values({ userId, isOnboardingDone: false })
+      .onConflictDoNothing();
+    await this.db
+      .insert(surveyorProfiles)
+      .values({ userId, isOnboardingDone: false })
+      .onConflictDoNothing();
   }
 
   // ─── Update Display Name ───────────────────────────────────────────────────

@@ -19,6 +19,8 @@ import { AiAuditModule } from '../ai-audit/ai-audit.module';
     forwardRef(() => require('../wallet/wallet.module').WalletModule),
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     forwardRef(() => require('../responses/responses.module').ResponsesModule),
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    forwardRef(() => require('../mutual/mutual.module').MutualModule),
   ],
   controllers: [AdminController],
   providers: [

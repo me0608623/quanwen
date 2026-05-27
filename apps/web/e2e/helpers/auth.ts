@@ -1,10 +1,22 @@
 import { Page, expect } from '@playwright/test';
 
-/** demo 帳號 — 由 API 在啟動時自動 seed */
+/**
+ * Phase A 後：一帳號全功能, role 只有 user/admin 真的有意義。
+ * 預設 seed 三個帳號 (apps/api/src/db/seed.ts):
+ *   - user@quanwen.com  / 000  → admin    (landing /admin)
+ *   - user1@quanwen.com / 000  → 一般用戶  (landing /dashboard)
+ *   - user2@quanwen.com / 000  → 一般用戶  (landing /dashboard)
+ *
+ * 「surveyor / respondent」這兩個鍵保留是給 legacy spec 引用,語意上都對映一般用戶 (#1 / #2)。
+ */
 export const ACCOUNTS = {
-  aa: { email: 'aa@aa.aa', password: 'aa', role: 'respondent' as const, landing: '/tasks' },
-  bb: { email: 'bb@bb.bb', password: 'bb', role: 'surveyor' as const,  landing: '/dashboard' },
-  cc: { email: 'cc@cc.cc', password: 'cc', role: 'admin' as const,     landing: '/admin' },
+  admin:      { email: 'user@quanwen.com',  password: '000', landing: '/admin' as const },
+  surveyor:   { email: 'user1@quanwen.com', password: '000', landing: '/dashboard' as const },
+  respondent: { email: 'user2@quanwen.com', password: '000', landing: '/dashboard' as const },
+  // 別名
+  aa:         { email: 'user2@quanwen.com', password: '000', landing: '/dashboard' as const },
+  bb:         { email: 'user1@quanwen.com', password: '000', landing: '/dashboard' as const },
+  cc:         { email: 'user@quanwen.com',  password: '000', landing: '/admin' as const },
 };
 
 export async function login(page: Page, who: keyof typeof ACCOUNTS) {
@@ -19,7 +31,7 @@ export async function login(page: Page, who: keyof typeof ACCOUNTS) {
 
 export async function logout(page: Page) {
   await page.goto('/');
-  // 嘗試點登出按鈕（位置可能在 navbar）
+  // 點頭像 dropdown → 登出
   const logoutBtn = page.getByRole('button', { name: /登出|logout/i });
   if (await logoutBtn.isVisible({ timeout: 1000 }).catch(() => false)) {
     await logoutBtn.click();
@@ -27,8 +39,6 @@ export async function logout(page: Page) {
   await page.context().clearCookies();
 }
 
-export async function expectAuthenticated(page: Page, expectedRole: 'respondent' | 'surveyor' | 'admin') {
-  // 確認進入該 role 的 landing 頁
-  const landing = ACCOUNTS[expectedRole === 'respondent' ? 'aa' : expectedRole === 'surveyor' ? 'bb' : 'cc'].landing;
-  await expect(page).toHaveURL(new RegExp(landing));
+export async function expectAuthenticated(page: Page, expectedLanding: '/admin' | '/dashboard' | '/tasks') {
+  await expect(page).toHaveURL(new RegExp(expectedLanding));
 }

@@ -39,9 +39,46 @@ export class ResponsesService {
     private readonly reputation: ReputationService,
   ) {}
 
+  // ─── 受試者：分類別計數（給 task list 的 filter UI 用） ────────────────────
+
+  async getCategoryCounts(respondentId: string): Promise<Record<string, number>> {
+    const rows = await this.db
+      .select({
+        category: surveys.category,
+        id: surveys.id,
+        completedCount: surveys.completedCount,
+        targetCount: surveys.targetCount,
+        expiresAt: surveys.expiresAt,
+      })
+      .from(surveys)
+      .where(and(eq(surveys.status, 'published'), eq(surveys.type, 'standard')));
+
+    const submittedRows = await this.db
+      .select({ surveyId: surveyResponses.surveyId })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.respondentId, respondentId),
+          eq(surveyResponses.status, 'submitted'),
+        ),
+      );
+    const submitted = new Set(submittedRows.map((r) => r.surveyId));
+    const now = new Date();
+
+    const counts: Record<string, number> = {};
+    for (const s of rows) {
+      if (submitted.has(s.id)) continue;
+      if (s.expiresAt && new Date(s.expiresAt) < now) continue;
+      if (s.completedCount >= s.targetCount) continue;
+      const key = s.category ?? 'uncategorized';
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }
+
   // ─── 受試者：取得可填的問卷列表（媒合篩選）──────────────────────────────────
 
-  async getAvailableSurveys(respondentId: string) {
+  async getAvailableSurveys(respondentId: string, category?: string) {
     // 取出受試者 profile（用於媒合篩選）
     const profileRows = await this.db
       .select()
@@ -61,11 +98,26 @@ export class ResponsesService {
 
     // 抓所有 published 且未過期的問卷
     // Phase 7.6: 高獎勵優先（高信譽分受試者更傾向找好任務）
+    // Phase B: mutual 問卷不該出現在標準任務市場(走 /mutual 配對機制)
+    const allowedCategories = [
+      'consumer', 'academic', 'wellness', 'workplace', 'lifestyle',
+      'tech', 'social', 'education', 'finance', 'other',
+    ] as const;
+    type Cat = typeof allowedCategories[number];
+    const normalizedCategory = category && (allowedCategories as readonly string[]).includes(category)
+      ? (category as Cat)
+      : undefined;
+
+    const whereClause = normalizedCategory
+      ? and(eq(surveys.status, 'published'), eq(surveys.type, 'standard'), eq(surveys.category, normalizedCategory))
+      : and(eq(surveys.status, 'published'), eq(surveys.type, 'standard'));
+
     const allPublished = await this.db
       .select({
         id: surveys.id,
         title: surveys.title,
         description: surveys.description,
+        category: surveys.category,
         rewardPoints: surveys.rewardPoints,
         targetCount: surveys.targetCount,
         completedCount: surveys.completedCount,
@@ -75,7 +127,7 @@ export class ResponsesService {
         publishedAt: surveys.publishedAt,
       })
       .from(surveys)
-      .where(eq(surveys.status, 'published'))
+      .where(whereClause)
       .orderBy(desc(surveys.rewardPoints), desc(surveys.publishedAt));
 
     // 已填過的問卷 id

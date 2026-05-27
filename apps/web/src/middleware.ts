@@ -14,16 +14,15 @@ const PROTECTED_PREFIXES = [
   '/surveys',
   '/admin',
   '/shop',
+  '/mutual',
+  '/spin',
 ];
 
 // Auth pages — redirect already-logged-in users away
 const AUTH_PREFIXES = ['/auth/login', '/auth/register', '/login'];
 
-// Surveyor-only routes — redirect respondents away
-const SURVEYOR_ONLY_PREFIXES = ['/dashboard'];
-
-// Respondent-only routes — redirect surveyors away
-const RESPONDENT_ONLY_PREFIXES = ['/tasks', '/earnings', '/profile', '/shop'];
+// Admin-only prefixes (admin role gates real authorization in API; this is just UX nicety)
+const ADMIN_PREFIXES = ['/admin'];
 
 /** Decode JWT payload without signature verification (safe for routing hints only). */
 function decodeJwtRole(token: string): string | null {
@@ -45,6 +44,7 @@ export function middleware(request: NextRequest) {
 
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname.startsWith(p));
   const isAuthPage = AUTH_PREFIXES.some((p) => pathname.startsWith(p));
+  const isAdminPath = ADMIN_PREFIXES.some((p) => pathname.startsWith(p));
 
   // ── Not logged in: redirect to login ───────────────────────────────────────
   if (isProtected && !token) {
@@ -54,28 +54,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // ── Already logged in: redirect away from auth pages ───────────────────────
-  if (token && (isAuthPage || pathname === '/')) {
+  // ── Already logged in: redirect away from auth pages to /dashboard ─────────────
+  if (token && isAuthPage) {
     const role = decodeJwtRole(token);
-    const dest = role === 'admin' ? '/admin' : role === 'surveyor' ? '/dashboard' : '/tasks';
+    const dest = role === 'admin' ? '/admin' : '/dashboard';
     return NextResponse.redirect(new URL(dest, request.url));
   }
 
-  // ── Role-based access guards ────────────────────────────────────────────────
-  if (token) {
+  // ── Admin-only path: non-admin users get bounced to /dashboard ──────────────────
+  if (token && isAdminPath) {
     const role = decodeJwtRole(token);
-
-    if (role === 'respondent' && SURVEYOR_ONLY_PREFIXES.some((p) => pathname.startsWith(p))) {
-      return NextResponse.redirect(new URL('/tasks', request.url));
-    }
-
-    if (role === 'surveyor' && RESPONDENT_ONLY_PREFIXES.some((p) => pathname.startsWith(p))) {
+    if (role !== 'admin') {
       return NextResponse.redirect(new URL('/dashboard', request.url));
-    }
-
-    // Admin can only access /admin — redirect to /admin if they visit other role-specific areas
-    if (role === 'admin' && !pathname.startsWith('/admin') && !pathname.startsWith('/settings') && !pathname.startsWith('/notifications')) {
-      return NextResponse.redirect(new URL('/admin', request.url));
     }
   }
 

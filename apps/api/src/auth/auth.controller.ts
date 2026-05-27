@@ -23,7 +23,6 @@ import { randomBytes } from 'crypto';
 import { AuthService } from './auth.service';
 import { RegisterSchema, RegisterDto } from './dto/register.dto';
 import { LoginSchema, LoginDto } from './dto/login.dto';
-import { SelectRoleSchema, SelectRoleDto } from './dto/select-role.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import type { AuthenticatedUser } from './strategies/jwt.strategy';
@@ -144,17 +143,6 @@ export class AuthController {
     return { message: '密碼已重設，請使用新密碼登入' };
   }
 
-  // ─── Role Selection (new OAuth users) ─────────────────────────────────────
-
-  @Post('select-role')
-  @HttpCode(HttpStatus.OK)
-  @UseGuards(JwtAuthGuard)
-  @Throttle({ medium: { ttl: 60_000, limit: 5 } })
-  async selectRole(@Body(new ZodValidationPipe(SelectRoleSchema)) dto: SelectRoleDto, @Req() req: Request) {
-    const user = req.user as AuthenticatedUser;
-    return this.authService.selectRole(user.id, dto.role, dto.displayName);
-  }
-
   // ─── Security ─────────────────────────────────────────────────────────────
 
   @Get('security')
@@ -266,9 +254,7 @@ export class AuthController {
     if (result.isBind) {
       return res.redirect(`${WEB_URL()}/settings/accounts?bound=google`);
     }
-    if (result.isNewUser) {
-      return res.redirect(`${WEB_URL()}/auth/select-role?token=${result.token}`);
-    }
+    // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
     return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
   }
 
@@ -343,9 +329,7 @@ export class AuthController {
       if (bindSession) {
         return res.redirect(`${WEB_URL()}/settings/accounts?bound=line`);
       }
-      if (result.isNewUser) {
-        return res.redirect(`${WEB_URL()}/auth/select-role?token=${result.token}`);
-      }
+      // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
       return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
     } catch (err) {
       this.logger.error('LINE callback error', err);
@@ -440,9 +424,7 @@ export class AuthController {
       if (bindSession) {
         return res.redirect(`${WEB_URL()}/settings/accounts?bound=apple`);
       }
-      if (result.isNewUser) {
-        return res.redirect(`${WEB_URL()}/auth/select-role?token=${result.token}`);
-      }
+      // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
       return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
     } catch (err) {
       this.logger.error('Apple callback error', err);

@@ -35,6 +35,10 @@ drizzle/migrations/*.snap
 
 # Phase L 追加
 *.tsbuildinfo
+
+# Dev 截圖產物（throwaway，不進 repo 歷史）
+screenshot*.png
+take-screenshot.mjs
 playwright-report/
 test-results/
 boot.log
