@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   Logger,
   NotFoundException,
   ForbiddenException,
@@ -23,8 +24,15 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { QualityAuditService } from '../responses/quality-audit.service';
 import { ReputationService } from '../responses/reputation.service';
+import { RedisLockService } from '../common/redis/redis-lock.service';
 
 const MUTUAL_TTL_MS = 72 * 60 * 60 * 1000; // 72 小時超時
+
+// P3: cron 分散式鎖 — key 與 TTL（TTL 略小於各自 cron 間隔，holder 崩潰時下個 tick 能重取）
+const MATCH_LOCK_KEY = 'qw:lock:mutual-match';
+const MATCH_LOCK_TTL_MS = 25_000; // 間隔 30s
+const EXPIRE_LOCK_KEY = 'qw:lock:mutual-expire';
+const EXPIRE_LOCK_TTL_MS = 50_000; // 間隔 60s
 
 interface MutualSide {
   userId: string;
@@ -65,6 +73,9 @@ export class MutualService {
     private readonly notifications: NotificationsService,
     private readonly qualityAudit: QualityAuditService,
     private readonly reputation: ReputationService,
+    // P3: 多實例下用分散式鎖避免 cron 重複執行。
+    // @Optional — service-level 測試以 4 args 手動 new 時為 undefined → cron 直接執行（現狀）。
+    @Optional() private readonly lock?: RedisLockService,
   ) {}
 
   // ─── 我的互惠統計（給用戶看自己的歷史） ───────────────────────────────────
@@ -750,6 +761,16 @@ export class MutualService {
 
   @Cron(CronExpression.EVERY_30_SECONDS)
   async matchWaitingPairs() {
+    // P3: 多實例下只讓一台執行；無 lock（測試 / 單實例）→ 直接跑。
+    if (this.lock) {
+      await this.lock.withLock(MATCH_LOCK_KEY, MATCH_LOCK_TTL_MS, () => this.doMatchWaitingPairs());
+    } else {
+      await this.doMatchWaitingPairs();
+    }
+  }
+
+  /** 實際配對邏輯（與原 matchWaitingPairs 內容相同；測試直呼上方 wrapper 時走這裡） */
+  async doMatchWaitingPairs() {
     const waiting = await this.db
       .select({
         id: mutualPairs.id,
@@ -839,6 +860,16 @@ export class MutualService {
 
   @Cron(CronExpression.EVERY_MINUTE)
   async expireOverduePairs() {
+    // P3: 多實例下只讓一台執行；無 lock（測試 / 單實例）→ 直接跑。
+    if (this.lock) {
+      await this.lock.withLock(EXPIRE_LOCK_KEY, EXPIRE_LOCK_TTL_MS, () => this.doExpireOverduePairs());
+    } else {
+      await this.doExpireOverduePairs();
+    }
+  }
+
+  /** 實際超時清理邏輯（與原 expireOverduePairs 內容相同） */
+  async doExpireOverduePairs() {
     const now = new Date();
     const expired = await this.db
       .select({ id: mutualPairs.id, aUserId: mutualPairs.aUserId, bUserId: mutualPairs.bUserId })

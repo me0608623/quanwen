@@ -103,9 +103,36 @@ docker compose -f docker-compose.yml -f docker-compose.full.yml up -d --build
 docker compose logs -f api | head -50
 
 # 5. Health check
+# liveness（process 活著嗎；不查 DB/Redis，永遠輕量）
 curl http://localhost:3001/api/v1/health
 # → {"status":"ok","uptime":N,"env":"production"}
+
+# readiness（能收流量嗎；查 DB SELECT 1 + Redis ping，strict）
+curl -i http://localhost:3001/api/v1/health/ready
+# 全部 up → 200 {"status":"ok","checks":{"db":{"status":"up",...},"redis":{"status":"up",...}}}
+# DB 或 Redis 任一 down → 503（LB / K8s 應據此把該實例移出輪詢）
 ```
+
+> **探針怎麼接**：LB / orchestrator 的 **liveness** 指向 `/health`（失敗才重啟），
+> **readiness** 指向 `/health/ready`（失敗只是暫時不送流量，不重啟）。
+> Docker Compose 的 container healthcheck 維持用 `/health`（liveness），
+> 避免 DB/Redis 短暫抖動就觸發容器重啟迴圈。
+
+---
+
+## 3a. 多副本部署（scale-out 前提）
+
+開 2 台以上 API 前,以下三件事都已就緒(P2/P3/P4),但**必須有可用的共享 Redis**:
+
+| 機制 | 沒 Redis 時 | 有 Redis 時 |
+|------|------------|------------|
+| **限流**（Throttler） | 逐實例 in-memory（各算各的，會告警 error log） | `qw:throttle:` 前綴跨實例共享計數 |
+| **Cron**（互惠配對 / 超時） | 每台都跑（單實例 OK；多台會重複執行） | `qw:lock:mutual-*` 分散式鎖，只有一台執行 |
+| **Readiness** | `/health/ready` 回 503（strict） | 200 |
+
+- `REDIS_URL` 為唯一開關（已在 `docker-compose.full.yml` 的 api 設為 `redis://redis:6379`）。
+- Redis 掛掉時:限流**降級為逐實例**(仍會擋、不會變無限流)、cron**暫停執行**(避免重複)、readiness 轉 503(LB 自動把實例移出)。皆有 log,不會 silent fail。
+- `ioredis` 在 `apps/api` 的 optionalDependencies；`pnpm install --frozen-lockfile`(CI / Dockerfile)會安裝,故 prod image 內一定有。
 
 ---
 
@@ -119,7 +146,7 @@ curl http://localhost:3001/api/v1/health
 - [ ] CORS origin 限定到自己的 prod domain，不是 `*`
 - [ ] Swagger 在 prod 已關（curl `/docs` 應 404）
 - [ ] `.env` 不在 git；只在 server filesystem 或 secret manager
-- [ ] Rate limit 預設 `short=10/sec, medium=100/min`，可在 ThrottlerModule 調
+- [ ] Rate limit 預設 `short=10/sec, medium=100/min`，可在 ThrottlerModule 調；多副本時需 `REDIS_URL`（`qw:throttle:` 前綴跨實例共享，否則逐實例 in-memory）
 
 ### 法規
 

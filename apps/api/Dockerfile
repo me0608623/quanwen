@@ -1,7 +1,7 @@
 # Phase F.5: API Dockerfile（dev + prod 同 image，build 階段不同）
 # Multi-stage build to keep prod image lean
 FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 WORKDIR /app
 
 # ─── deps stage：只裝 node_modules，cache 友善 ──
@@ -20,7 +20,7 @@ RUN pnpm --filter api build
 
 # ─── runner stage：lean runtime ──
 FROM node:20-alpine AS runner
-RUN corepack enable && corepack prepare pnpm@8.15.0 --activate
+RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 COPY --from=builder /app/node_modules ./node_modules

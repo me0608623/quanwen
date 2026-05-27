@@ -17,6 +17,10 @@ const envSchema = z.object({
   PORT: z.string().regex(/^\d+$/).optional(),
   WEB_URL: z.union([z.string().url(), z.literal('')]).optional(),
 
+  // P2/P3/P4: Redis（限流共享 storage + cron 分散式鎖 + readiness）。
+  // 未設 → throttler 降級 in-memory、cron 直接執行、readiness 回報 redis down。
+  REDIS_URL: z.string().optional(),
+
   // Phase B: PII 加密金鑰（prod 必設，dev 用 fallback）
   PII_ENCRYPTION_KEY: z.string().min(16).optional(),
   PII_KDF_SALT: z.string().min(8).optional(),

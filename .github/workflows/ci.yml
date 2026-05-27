@@ -213,3 +213,42 @@ jobs:
           name: playwright-report
           path: apps/web/playwright-report/
           retention-days: 14
+
+  docker-web:
+    name: Docker build + smoke (web image)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # 在 Linux runner（有網路 + 支援 symlink）驗證 web image：
+    # 本機 Windows build 會卡 standalone symlink EPERM、離線環境會卡 next/font/google
+    # 抓 Google Fonts；這兩個阻斷在 GitHub runner 都不存在，故 image build/run 在此補驗。
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build web image
+        run: docker build -f apps/web/Dockerfile -t quanwen-web:ci .
+
+      - name: Run web container
+        run: |
+          docker run -d --name quanwen-web-ci -p 3000:3000 \
+            -e NODE_ENV=production \
+            -e NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1 \
+            quanwen-web:ci
+
+      - name: Smoke test (standalone server responds)
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ || true)
+            echo "attempt $i -> HTTP $code"
+            if [ -n "$code" ] && [ "$code" -ge 200 ] && [ "$code" -lt 500 ]; then
+              echo "OK: web standalone container is serving (HTTP $code)"
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "FAIL: web container did not respond in time"
+          docker logs quanwen-web-ci || true
+          exit 1
+
+      - name: Teardown
+        if: always()
+        run: docker rm -f quanwen-web-ci || true

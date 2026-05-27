@@ -1,0 +1,28 @@
+# P1: 讓 Docker build context 乾淨且快 —
+# 排除 host 的 node_modules/.next/dist，避免覆蓋 image 內乾淨的 deps 階段、
+# 也避免把 851MB+ node_modules 當 build context 上傳。
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+.turbo
+
+# git / 編輯器 / 日誌
+.git
+.gitignore
+*.log
+
+# 機密與本機設定（絕不進 image）
+.env
+.env.*
+!.env.example
+
+# 測試產物
+coverage
+**/coverage
+playwright-report
+**/playwright-report
+test-results
+**/test-results
