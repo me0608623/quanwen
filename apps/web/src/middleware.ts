@@ -19,7 +19,7 @@ const PROTECTED_PREFIXES = [
 ];
 
 // Auth pages — redirect already-logged-in users away
-const AUTH_PREFIXES = ['/auth/login', '/auth/register', '/login'];
+const AUTH_PREFIXES = ['/auth/login', '/auth/register'];
 
 // Admin-only prefixes (admin role gates real authorization in API; this is just UX nicety)
 const ADMIN_PREFIXES = ['/admin'];
