@@ -8,6 +8,13 @@ export const UpdateRespondentProfileSchema = z.object({
     'student', 'employed_full_time', 'employed_part_time',
     'self_employed', 'unemployed', 'retired', 'homemaker', 'other',
   ]).optional(),
+  industry: z.enum([
+    'info_tech', 'manufacturing', 'engineering_construction', 'healthcare',
+    'education', 'finance', 'legal', 'public_sector', 'service', 'food_beverage',
+    'hospitality_travel', 'retail_wholesale', 'transport_logistics', 'agriculture',
+    'arts_media', 'marketing_pr', 'nonprofit', 'freelance', 'student', 'other',
+  ]).optional(),
+  industryOther: z.string().trim().max(50, '最多 50 字').optional(),
   education: z.enum([
     'junior_high', 'senior_high', 'vocational', 'bachelor', 'master', 'phd', 'other',
   ]).optional(),

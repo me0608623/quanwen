@@ -24,6 +24,7 @@ import {
 import { NotificationsService } from '../notifications/notifications.service';
 import { QualityAuditService } from '../responses/quality-audit.service';
 import { ReputationService } from '../responses/reputation.service';
+import { SpinService } from '../spin/spin.service';
 import { RedisLockService } from '../common/redis/redis-lock.service';
 
 const MUTUAL_TTL_MS = 72 * 60 * 60 * 1000; // 72 小時超時
@@ -73,6 +74,8 @@ export class MutualService {
     private readonly notifications: NotificationsService,
     private readonly qualityAudit: QualityAuditService,
     private readonly reputation: ReputationService,
+    // @Optional — service-level 測試以 4 args 手動 new 時為 undefined（正式 DI 會注入）。
+    @Optional() private readonly spin?: SpinService,
     // P3: 多實例下用分散式鎖避免 cron 重複執行。
     // @Optional — service-level 測試以 4 args 手動 new 時為 undefined → cron 直接執行（現狀）。
     @Optional() private readonly lock?: RedisLockService,
@@ -534,6 +537,12 @@ export class MutualService {
     }
 
     await this.markFilled(pairId, userId, responseId);
+
+    // 完成一份互惠填答 → +1 轉盤抽獎次數（fire-and-forget；rejected 已在上方 throw）
+    this.spin
+      ?.grantChance(userId, 1, '完成互惠填答')
+      .catch((err: unknown) => this.logger.error(`轉盤次數發放失敗 user=${userId}`, err));
+
     return { responseId, pairId };
   }
 

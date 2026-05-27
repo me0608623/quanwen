@@ -135,7 +135,7 @@ export function EarningsChart({ summary }: { summary: EarningsSummary }) {
           </div>
         ) : (
           <div className="h-32 -mx-1" role="img" aria-label={`月度收益面積圖：${monthlySummary}`}>
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={128}>
               <AreaChart data={monthly} margin={{ top: 4, right: 4, bottom: 0, left: -20 }}>
                 <defs>
                   <linearGradient id="earningsFill" x1="0" y1="0" x2="0" y2="1">
@@ -200,7 +200,7 @@ export function EarningsChart({ summary }: { summary: EarningsSummary }) {
             role="img"
             aria-label={`貢獻最高問卷條形圖：${surveysSummary}`}
           >
-            <ResponsiveContainer width="100%" height="100%">
+            <ResponsiveContainer width="100%" height={144}>
               <BarChart
                 data={topSurveys}
                 layout="vertical"

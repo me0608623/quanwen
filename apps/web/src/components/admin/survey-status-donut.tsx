@@ -72,7 +72,7 @@ export function SurveyStatusDonut({ counts }: Props) {
         <p className="text-xs text-muted-foreground">總計 {total}</p>
       </div>
       <div className="h-56">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={224}>
           <PieChart>
             <Pie
               data={data}

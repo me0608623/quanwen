@@ -3,54 +3,18 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUpdateRespondentProfile, useTags, useMyProfile } from '@/hooks/use-profile';
-import type { RespondentProfile, AgeRange, Gender, Occupation, Education } from '@/hooks/use-profile';
+import type { RespondentProfile, AgeRange, Gender, Occupation, Industry, Education } from '@/hooks/use-profile';
 import { useMe } from '@/hooks/use-auth';
 import { extractApiError } from '@/lib/extract-error';
 import { TagSelector } from '@/components/forms/tag-selector';
-
-const AGE_RANGE_OPTIONS = [
-  { value: 'under_18', label: '18 歲以下' },
-  { value: '18_24',    label: '18–24 歲' },
-  { value: '25_34',    label: '25–34 歲' },
-  { value: '35_44',    label: '35–44 歲' },
-  { value: '45_54',    label: '45–54 歲' },
-  { value: '55_plus',  label: '55 歲以上' },
-];
-
-const GENDER_OPTIONS = [
-  { value: 'male',             label: '男性' },
-  { value: 'female',           label: '女性' },
-  { value: 'non_binary',       label: '非二元性別' },
-  { value: 'prefer_not_to_say',label: '不透露' },
-];
-
-const OCCUPATION_OPTIONS = [
-  { value: 'student',            label: '學生' },
-  { value: 'employed_full_time', label: '全職員工' },
-  { value: 'employed_part_time', label: '兼職員工' },
-  { value: 'self_employed',      label: '自雇/創業' },
-  { value: 'unemployed',         label: '待業中' },
-  { value: 'retired',            label: '退休' },
-  { value: 'homemaker',          label: '家庭主婦/夫' },
-  { value: 'other',              label: '其他' },
-];
-
-const EDUCATION_OPTIONS = [
-  { value: 'junior_high', label: '國中' },
-  { value: 'senior_high', label: '高中/高職' },
-  { value: 'vocational',  label: '專科' },
-  { value: 'bachelor',    label: '學士' },
-  { value: 'master',      label: '碩士' },
-  { value: 'phd',         label: '博士' },
-  { value: 'other',       label: '其他' },
-];
-
-const TW_REGIONS = [
-  '台北市','新北市','桃園市','台中市','台南市','高雄市',
-  '基隆市','新竹市','嘉義市','新竹縣','苗栗縣','彰化縣',
-  '南投縣','雲林縣','嘉義縣','屏東縣','宜蘭縣','花蓮縣',
-  '台東縣','澎湖縣','金門縣','連江縣',
-];
+import {
+  AGE_RANGE_OPTIONS,
+  GENDER_OPTIONS,
+  EMPLOYMENT_OPTIONS,
+  INDUSTRY_OPTIONS,
+  EDUCATION_OPTIONS,
+  TW_REGIONS,
+} from '@/lib/profile-options';
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -72,6 +36,8 @@ export default function OnboardingPage() {
     gender: Gender | '';
     region: string;
     occupation: Occupation | '';
+    industry: Industry | '';
+    industryOther: string;
     education: Education | '';
     tagIds: string[];
   }>({
@@ -79,12 +45,24 @@ export default function OnboardingPage() {
     gender: '',
     region: '',
     occupation: '',
+    industry: '',
+    industryOther: '',
     education: '',
     tagIds: [],
   });
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
+
+  // 行業改選非「其他」時，連同清掉自由填寫
+  const setIndustry = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value as Industry | '';
+    setForm((prev) => ({
+      ...prev,
+      industry: value,
+      industryOther: value === 'other' ? prev.industryOther : '',
+    }));
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -124,7 +102,22 @@ export default function OnboardingPage() {
           </select>
         </div>
 
-        <SelectField label="職業" value={form.occupation} onChange={set('occupation')} options={OCCUPATION_OPTIONS} />
+        <SelectField label="就業狀態" value={form.occupation} onChange={set('occupation')} options={EMPLOYMENT_OPTIONS} />
+
+        <div>
+          <SelectField label="行業 / 職業類別" value={form.industry} onChange={setIndustry} options={INDUSTRY_OPTIONS} />
+          {form.industry === 'other' && (
+            <input
+              type="text"
+              value={form.industryOther}
+              onChange={(e) => setForm((prev) => ({ ...prev, industryOther: e.target.value }))}
+              maxLength={50}
+              placeholder="請填寫你的行業（最多 50 字）"
+              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+          )}
+        </div>
+
         <SelectField label="學歷" value={form.education} onChange={set('education')} options={EDUCATION_OPTIONS} />
 
         <div>

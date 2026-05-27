@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, type SurveyCategory } from '@/hooks/use-surveys';
+import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, type SurveyCategory, type AudienceCriteria } from '@/hooks/use-surveys';
 import { usePricingAdvice } from '@/hooks/use-pricing';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-card';
+import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
 
 const defaultQuestion = (): SurveyQuestion => ({
   type: 'single_choice',
@@ -31,6 +32,7 @@ export default function NewSurveyPage() {
   const [description, setDescription] = useState('');
   const [rewardPoints, setRewardPoints] = useState(0);
   const [targetCount, setTargetCount] = useState(100);
+  const [audience, setAudience] = useState<AudienceCriteria>({});
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
@@ -87,6 +89,8 @@ export default function NewSurveyPage() {
         externalUrl: type === 'mutual' && externalUrl.trim() ? externalUrl.trim() : undefined,
         rewardPoints: type === 'mutual' ? 0 : rewardPoints,
         targetCount: type === 'mutual' ? 9999 : targetCount,
+        // 受眾鎖定只對 standard 有意義（mutual 走配對機制）
+        audienceCriteria: type === 'standard' && Object.keys(audience).length > 0 ? audience : undefined,
         questions,
       });
       router.push(`/dashboard/surveys/${survey.id}`);
@@ -290,6 +294,11 @@ export default function NewSurveyPage() {
           </div>
         )}
       </section>
+
+      {/* Audience targeting (standard only — mutual 走配對機制) */}
+      {type === 'standard' && (
+        <AudienceTargeting value={audience} onChange={setAudience} />
+      )}
 
       {/* Questions */}
       <section className="space-y-3">

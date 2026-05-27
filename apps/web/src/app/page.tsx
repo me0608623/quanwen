@@ -1,6 +1,9 @@
 import Link from "next/link";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { LoadingScreen } from "@/components/marketing/animation/loading-screen";
+import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
+import { HeroBackdrop } from "@/components/marketing/animation/hero-backdrop";
 
 const aiLayers = [
   {
@@ -23,10 +26,13 @@ const aiLayers = [
 export default function HomePage() {
   return (
     <main className="min-h-screen bg-[var(--q-canvas)] text-[var(--q-body)]">
+      <LoadingScreen />
+      <ScrollReveal />
       <MarketingNav />
 
-      <section className="mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
-        <div className="grid items-center gap-10 lg:grid-cols-2">
+      <section className="relative isolate overflow-hidden mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
+        <HeroBackdrop />
+        <div className="relative z-10 grid items-center gap-10 lg:grid-cols-2">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--q-muted)]">
               AI 把關的雙邊問卷平台
@@ -46,13 +52,13 @@ export default function HomePage() {
             <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/auth/register"
-                className="rounded-md bg-[var(--q-primary)] px-5 py-3 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)]"
+                className="q-btn-anim rounded-md bg-[var(--q-primary)] px-5 py-3 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)]"
               >
                 免費開始
               </Link>
               <a
                 href="#modes"
-                className="rounded-md border border-[var(--q-hairline)] px-5 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-card)]"
+                className="q-btn-anim rounded-md border border-[var(--q-hairline)] px-5 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-card)]"
               >
                 看四種使用方式
               </a>
@@ -299,7 +305,7 @@ export default function HomePage() {
           </p>
           <Link
             href="/auth/register"
-            className="mt-8 inline-block rounded-md bg-[var(--q-canvas)] px-6 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-soft)]"
+            className="q-btn-anim mt-8 inline-block rounded-md bg-[var(--q-canvas)] px-6 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-soft)]"
           >
             免費開始
           </Link>

@@ -341,3 +341,82 @@
     @apply py-20;
   }
 }
+
+/* ============================================================
+ * 首頁動畫層 (additive — 不改文字與排版)
+ * 命名空間: q-  · 全部可被 prefers-reduced-motion 關閉
+ * ============================================================ */
+
+/* ---- 按鈕動畫 (CSS):hover 微浮起 + 光澤掃過 ---- */
+.q-btn-anim {
+  position: relative;
+  overflow: hidden;
+  will-change: transform;
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    background-color 0.2s ease;
+}
+.q-btn-anim:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 26px -10px rgba(204, 120, 92, 0.55);
+}
+.q-btn-anim:active {
+  transform: translateY(0);
+}
+.q-btn-anim::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-130%) skewX(-18deg);
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.4) 50%,
+    transparent 100%
+  );
+  transition: transform 0.65s ease;
+  pointer-events: none;
+}
+.q-btn-anim:hover::after {
+  transform: translateX(130%) skewX(-18deg);
+}
+
+/* ---- SVG Logo 動畫 keyframes ---- */
+@keyframes q-logo-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+@keyframes q-logo-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.92;
+  }
+  50% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+}
+@keyframes q-logo-orbit {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---- 尊重使用者「減少動態」偏好:整層關閉 ---- */
+@media (prefers-reduced-motion: reduce) {
+  .q-btn-anim {
+    transition: none;
+  }
+  .q-btn-anim:hover {
+    transform: none;
+  }
+  .q-btn-anim::after {
+    display: none;
+  }
+}

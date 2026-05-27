@@ -9,6 +9,13 @@ import { useMyProfile } from '@/hooks/use-profile';
 import { useMyResponses, useMyAppeals, useCreateAppeal, useMyReputationHistory } from '@/hooks/use-responses';
 import type { RespondentProfile } from '@/hooks/use-profile';
 import { ReputationTrend } from '@/components/profile/reputation-trend';
+import {
+  AGE_RANGE_LABELS,
+  GENDER_LABELS,
+  EMPLOYMENT_LABELS,
+  INDUSTRY_LABELS,
+  EDUCATION_LABELS,
+} from '@/lib/profile-options';
 
 const REPUTATION_LEVELS = [
   { min: 90, label: '優質受試者', color: 'text-green-600', bg: 'bg-green-100' },
@@ -20,22 +27,6 @@ const REPUTATION_LEVELS = [
 function getReputationLevel(score: number) {
   return REPUTATION_LEVELS.find((l) => score >= l.min) ?? REPUTATION_LEVELS[3];
 }
-
-const AGE_RANGE_LABELS: Record<string, string> = {
-  under_18: '18 歲以下', '18_24': '18–24 歲', '25_34': '25–34 歲',
-  '35_44': '35–44 歲', '45_54': '45–54 歲', '55_plus': '55 歲以上',
-};
-const GENDER_LABELS: Record<string, string> = {
-  male: '男性', female: '女性', non_binary: '非二元', prefer_not_to_say: '不透露',
-};
-const OCCUPATION_LABELS: Record<string, string> = {
-  student: '學生', employed_full_time: '全職', employed_part_time: '兼職',
-  self_employed: '自雇', unemployed: '待業', retired: '退休', homemaker: '家管', other: '其他',
-};
-const EDUCATION_LABELS: Record<string, string> = {
-  junior_high: '國中', senior_high: '高中/高職', vocational: '專科',
-  bachelor: '學士', master: '碩士', phd: '博士', other: '其他',
-};
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -228,7 +219,17 @@ export default function ProfilePage() {
             {rp.ageRange && <Item label="年齡" value={AGE_RANGE_LABELS[rp.ageRange] ?? rp.ageRange} />}
             {rp.gender && <Item label="性別" value={GENDER_LABELS[rp.gender] ?? rp.gender} />}
             {rp.region && <Item label="縣市" value={rp.region} />}
-            {rp.occupation && <Item label="職業" value={OCCUPATION_LABELS[rp.occupation] ?? rp.occupation} />}
+            {rp.occupation && <Item label="就業狀態" value={EMPLOYMENT_LABELS[rp.occupation] ?? rp.occupation} />}
+            {rp.industry && (
+              <Item
+                label="行業"
+                value={
+                  rp.industry === 'other' && rp.industryOther
+                    ? rp.industryOther
+                    : INDUSTRY_LABELS[rp.industry] ?? rp.industry
+                }
+              />
+            )}
             {rp.education && <Item label="學歷" value={EDUCATION_LABELS[rp.education] ?? rp.education} />}
           </div>
           {rp.tags && rp.tags.length > 0 && (

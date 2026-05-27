@@ -20,6 +20,20 @@ export const SURVEY_CATEGORIES = [
   'tech', 'social', 'education', 'finance', 'other',
 ] as const;
 
+// 受眾鎖定條件（standard 問卷用）— 每個陣列為 OR、欄位間為 AND；空 = 不限
+// 未知欄位由 Zod 預設 strip 掉，僅信任這裡列出的維度
+export const AudienceCriteriaSchema = z.object({
+  ageRange: z.array(z.string().max(20)).max(10).optional(),
+  gender: z.array(z.string().max(20)).max(10).optional(),
+  region: z.array(z.string().max(20)).max(30).optional(),
+  occupation: z.array(z.string().max(30)).max(10).optional(),
+  industry: z.array(z.string().max(40)).max(25).optional(),
+  education: z.array(z.string().max(20)).max(10).optional(),
+  minReputationScore: z.number().int().min(0).max(100).optional(),
+  requiredTagIds: z.array(z.string().uuid()).max(20).optional(),
+  tagMatchMode: z.enum(['any', 'all']).optional(),
+});
+
 export const CreateSurveySchema = z.object({
   title: z.string().min(1).max(200),
   description: z.string().max(2000).optional(),
@@ -35,7 +49,7 @@ export const CreateSurveySchema = z.object({
   targetCount: z.number().int().min(1).max(10000).default(100),
   expiresAt: z.string().datetime().optional(),
   isAnonymous: z.boolean().default(true),
-  audienceCriteria: z.record(z.unknown()).optional(),
+  audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
 });
 

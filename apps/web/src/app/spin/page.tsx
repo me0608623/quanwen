@@ -44,10 +44,13 @@ export default function SpinPage() {
   return (
     <main className="mx-auto max-w-lg px-4 py-10 space-y-6 text-center">
       <div>
-        <h1 className="text-2xl font-bold">🎡 每日轉盤</h1>
+        <h1 className="text-2xl font-bold">🎡 轉盤抽獎</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          每天免費轉一次，最高可得 <span className="font-semibold text-amber-600">200 點</span>！
+          每完成一份問卷 +1 次抽獎機會，最高可得 <span className="font-semibold text-amber-600">200 點</span>！
         </p>
+        <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-100 px-4 py-1.5 text-sm font-semibold text-amber-700">
+          🎟️ 剩餘抽獎次數：{status?.availableChances ?? 0}
+        </div>
       </div>
 
       {/* 轉盤 */}
@@ -91,15 +94,16 @@ export default function SpinPage() {
           disabled={spinning}
           className="rounded-full bg-gradient-to-r from-amber-400 to-orange-500 px-10 py-3 text-base font-bold text-white shadow-lg hover:-translate-y-0.5 transition-transform disabled:opacity-60"
         >
-          {spinning ? '轉動中…' : '免費轉一次'}
+          {spinning ? '轉動中…' : `轉一次（剩 ${status.availableChances} 次）`}
         </button>
       ) : (
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="inline-block rounded-full bg-muted px-4 py-2 text-sm text-muted-foreground">
-            今天已轉過{status?.lastSpin ? `，中了 ${status.lastSpin.pointsWon} 點` : ''} — 明天再來！
+            目前沒有抽獎次數 — 完成一份問卷就能再轉！
           </div>
-          <div>
-            <Link href="/wallet" className="text-sm text-primary hover:underline">查看我的積分 →</Link>
+          <div className="flex justify-center gap-3 text-sm">
+            <Link href="/tasks" className="text-primary hover:underline">去填問卷賺次數 →</Link>
+            <Link href="/mutual" className="text-primary hover:underline">互惠問卷 →</Link>
           </div>
         </div>
       )}

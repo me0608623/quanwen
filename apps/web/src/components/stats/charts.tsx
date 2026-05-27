@@ -57,7 +57,7 @@ export function OptionBarChart({ data, totalAnswers }: { data: OptionDatum[]; to
 
   return (
     <div style={{ width: '100%', height }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer height={height}>
         <BarChart data={dataWithPct} layout="vertical" margin={{ top: 5, right: 60, left: 5, bottom: 5 }}>
           <XAxis type="number" hide />
           <YAxis
@@ -115,7 +115,7 @@ export function QualityDonut({
 
   return (
     <div style={{ width: '100%', height: 200 }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer height={200}>
         <PieChart>
           <Pie
             data={data}
@@ -151,7 +151,7 @@ export function RatingDistribution({ buckets }: { buckets: { value: number; coun
   if (buckets.length === 0) return null;
   return (
     <div style={{ width: '100%', height: 180 }}>
-      <ResponsiveContainer>
+      <ResponsiveContainer height={180}>
         <BarChart data={buckets} margin={{ top: 5, right: 20, left: 5, bottom: 5 }}>
           <XAxis dataKey="value" tick={{ fontSize: 12 }} />
           <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />

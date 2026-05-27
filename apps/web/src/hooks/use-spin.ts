@@ -12,8 +12,11 @@ export interface SpinSegment {
 }
 
 export interface SpinStatus {
+  /** 目前可用的抽獎次數（完成問卷累積） */
+  availableChances: number;
+  earnedTotal: number;
+  spentTotal: number;
   canSpin: boolean;
-  today: string;
   lastSpin: { prizeKey: string; pointsWon: number; spinDate: string } | null;
   segments: SpinSegment[];
 }

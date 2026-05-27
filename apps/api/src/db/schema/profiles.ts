@@ -21,9 +21,18 @@ export const genderEnum = pgEnum('gender', [
   'male', 'female', 'non_binary', 'prefer_not_to_say',
 ]);
 
+// 就業狀態（在不在職、雇用型態）
 export const occupationEnum = pgEnum('occupation', [
   'student', 'employed_full_time', 'employed_part_time',
   'self_employed', 'unemployed', 'retired', 'homemaker', 'other',
+]);
+
+// 行業／職業類別（受眾媒合用，與 occupation 為不同維度）
+export const industryEnum = pgEnum('industry', [
+  'info_tech', 'manufacturing', 'engineering_construction', 'healthcare',
+  'education', 'finance', 'legal', 'public_sector', 'service', 'food_beverage',
+  'hospitality_travel', 'retail_wholesale', 'transport_logistics', 'agriculture',
+  'arts_media', 'marketing_pr', 'nonprofit', 'freelance', 'student', 'other',
 ]);
 
 export const educationEnum = pgEnum('education', [
@@ -41,6 +50,8 @@ export const respondentProfiles = pgTable(
     gender: genderEnum('gender'),
     region: varchar('region', { length: 20 }),          // 縣市
     occupation: occupationEnum('occupation'),
+    industry: industryEnum('industry'),
+    industryOther: varchar('industry_other', { length: 50 }), // industry='other' 時的自由填寫
     education: educationEnum('education'),
     reputationScore: integer('reputation_score').notNull().default(60),
     completionRate: numeric('completion_rate', { precision: 5, scale: 2 }).default('100.00'),

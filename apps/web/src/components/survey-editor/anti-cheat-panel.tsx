@@ -7,6 +7,7 @@ import {
   SurveyQuestion,
   AttentionCheckSuggestion,
 } from '@/hooks/use-surveys';
+import { Spinner } from '@/components/ui/spinner';
 
 interface Props {
   surveyId: string;
@@ -71,9 +72,18 @@ export function AntiCheatPanel({ surveyId, questions, onApplyChecks }: Props) {
           <button
             onClick={() => (acEnabled ? ac.refetch() : setAcEnabled(true))}
             disabled={ac.isLoading || ac.isFetching}
-            className="rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-amber-700 disabled:opacity-60 disabled:hover:translate-y-0"
+            className="inline-flex items-center justify-center gap-1.5 rounded-md bg-amber-600 px-3 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-amber-700 disabled:opacity-60 disabled:hover:translate-y-0"
           >
-            {ac.isLoading || ac.isFetching ? '生成中…' : acEnabled ? '重新生成' : '取得建議'}
+            {ac.isLoading || ac.isFetching ? (
+              <>
+                <Spinner />
+                生成中…
+              </>
+            ) : acEnabled ? (
+              '重新生成'
+            ) : (
+              '取得建議'
+            )}
           </button>
         </div>
 

@@ -11,9 +11,10 @@ import { WalletModule } from '../wallet/wallet.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { SurveysModule } from '../surveys/surveys.module';
 import { AiAuditModule } from '../ai-audit/ai-audit.module';
+import { SpinModule } from '../spin/spin.module';
 
 @Module({
-  imports: [WalletModule, NotificationsModule, forwardRef(() => SurveysModule), AiAuditModule],
+  imports: [WalletModule, NotificationsModule, forwardRef(() => SurveysModule), AiAuditModule, SpinModule],
   controllers: [ResponsesController, TasksController],
   providers: [
     ResponsesService,

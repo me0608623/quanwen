@@ -51,7 +51,12 @@ export class ProfileService {
       .where(eq(respondentProfiles.userId, userId))
       .limit(1);
 
-    const { tagIds, ...profileFields } = dto;
+    const { tagIds, ...rest } = dto;
+    // 行業選非「其他」時清掉自由填寫，避免殘留舊值
+    const profileFields =
+      rest.industry && rest.industry !== 'other'
+        ? { ...rest, industryOther: null }
+        : rest;
     const now = new Date();
 
     let profileId: string;

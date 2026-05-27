@@ -10,6 +10,8 @@ export interface RespondentProfile {
   gender: string | null;
   region: string | null;
   occupation: string | null;
+  industry: string | null;
+  industryOther: string | null;
   education: string | null;
   reputationScore: number;
   completionRate: string | null;
@@ -62,6 +64,11 @@ export type Gender = 'male' | 'female' | 'non_binary' | 'prefer_not_to_say';
 export type Occupation =
   | 'student' | 'employed_full_time' | 'employed_part_time'
   | 'self_employed' | 'unemployed' | 'retired' | 'homemaker' | 'other';
+export type Industry =
+  | 'info_tech' | 'manufacturing' | 'engineering_construction' | 'healthcare'
+  | 'education' | 'finance' | 'legal' | 'public_sector' | 'service' | 'food_beverage'
+  | 'hospitality_travel' | 'retail_wholesale' | 'transport_logistics' | 'agriculture'
+  | 'arts_media' | 'marketing_pr' | 'nonprofit' | 'freelance' | 'student' | 'other';
 export type Education =
   | 'junior_high' | 'senior_high' | 'vocational'
   | 'bachelor' | 'master' | 'phd' | 'other';
@@ -71,6 +78,8 @@ export interface UpdateRespondentProfileDto {
   gender?: Gender;
   region?: string;
   occupation?: Occupation;
+  industry?: Industry;
+  industryOther?: string;
   education?: Education;
   tagIds?: string[];
 }

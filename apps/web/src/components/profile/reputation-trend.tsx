@@ -92,7 +92,7 @@ export function ReputationTrend({ history }: Props) {
       </div>
 
       <div className="h-24 -mx-1">
-        <ResponsiveContainer width="100%" height="100%">
+        <ResponsiveContainer width="100%" height={96}>
           <AreaChart data={points} margin={{ top: 4, right: 4, bottom: 0, left: -28 }}>
             <defs>
               <linearGradient id="repTrendFill" x1="0" y1="0" x2="0" y2="1">

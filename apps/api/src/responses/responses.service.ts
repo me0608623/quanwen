@@ -25,6 +25,7 @@ import { QualityAuditService } from './quality-audit.service';
 import { ReputationService } from './reputation.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { SpinService } from '../spin/spin.service';
 
 @Injectable()
 export class ResponsesService {
@@ -37,6 +38,7 @@ export class ResponsesService {
     private readonly notifications: NotificationsService,
     private readonly qualityAudit: QualityAuditService,
     private readonly reputation: ReputationService,
+    private readonly spin: SpinService,
   ) {}
 
   // ─── 受試者：分類別計數（給 task list 的 filter UI 用） ────────────────────
@@ -348,6 +350,13 @@ export class ResponsesService {
 
       // ── 8. 更新受試者信譽分 ────────────────────────────────────────────────
       await this.updateRespondentStats(respondentId);
+
+      // ── 8.5 完成一份問卷 → +1 轉盤抽獎次數（fire-and-forget）────────────────
+      this.spin
+        .grantChance(respondentId, 1, '完成標準填答')
+        .catch((err: unknown) =>
+          this.logger.error(`轉盤次數發放失敗 respondentId=${respondentId}`, err),
+        );
 
       // ── 9. 自動發放獎勵（fire-and-forget）────────────────────────────────
       if (survey.rewardPoints > 0) {
@@ -827,6 +836,7 @@ interface AudienceCriteria {
   gender?: string[];
   region?: string[];
   occupation?: string[];
+  industry?: string[];
   education?: string[];
   // Phase 7.3: 最低信譽分要求
   minReputationScore?: number;
@@ -841,6 +851,7 @@ type RespondentProfilePartial = {
   gender?: string | null;
   region?: string | null;
   occupation?: string | null;
+  industry?: string | null;
   education?: string | null;
   reputationScore?: number | null;
 };
@@ -855,6 +866,7 @@ function matchAudience(
     ['gender', profile.gender],
     ['region', profile.region],
     ['occupation', profile.occupation],
+    ['industry', profile.industry],
     ['education', profile.education],
   ];
 

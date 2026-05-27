@@ -1,10 +1,11 @@
 /**
- * Phase C-1: 每日轉盤 整合測試
- *  1. 第一次 getStatus → canSpin=true
- *  2. spin → 發積分(呼叫 wallet.grantPoints) + 寫 spin_records
- *  3. 同日二次 spin → BadRequest
- *  4. spin 後 getStatus → canSpin=false + lastSpin
- *  5. pickSegment 命中的 prizeKey 一定在 SPIN_SEGMENTS 內
+ * 轉盤（完成問卷累積抽獎次數版）整合測試
+ *  1. 無次數時 getStatus → canSpin=false, availableChances=0
+ *  2. grantChance → availableChances 累加
+ *  3. spin（有次數）→ 扣 1 次 + 寫 spin_records + 發積分
+ *  4. 無次數 spin → BadRequest
+ *  5. 同日可多次轉（拿到多次次數）
+ *  6. SPIN_SEGMENTS 權重總和 = 100
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
@@ -42,6 +43,13 @@ describe('SpinService (integration)', () => {
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TABLE spin_chances (
+        user_id      UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+        available    INTEGER NOT NULL DEFAULT 0,
+        earned_total INTEGER NOT NULL DEFAULT 0,
+        spent_total  INTEGER NOT NULL DEFAULT 0,
+        updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
       CREATE TABLE spin_records (
         id         UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id    UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -50,7 +58,7 @@ describe('SpinService (integration)', () => {
         spin_date  VARCHAR(10) NOT NULL,
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
-      CREATE UNIQUE INDEX spin_records_user_date_unique ON spin_records(user_id, spin_date);
+      CREATE INDEX spin_records_user_idx ON spin_records(user_id);
     `);
     await client.exec(`INSERT INTO users (id, email, role, display_name) VALUES ('${U1}', 'u1@test.local', 'respondent', 'U1');`);
 
@@ -68,18 +76,29 @@ describe('SpinService (integration)', () => {
   });
 
   beforeEach(async () => {
-    await client.exec(`DELETE FROM spin_records;`);
+    await client.exec(`DELETE FROM spin_records; DELETE FROM spin_chances;`);
     grantCalls = [];
   });
 
-  it('1. 第一次 getStatus → canSpin=true + 8 格', async () => {
+  it('1. 無次數 → canSpin=false, availableChances=0', async () => {
     const s = await service.getStatus(U1);
-    expect(s.canSpin).toBe(true);
+    expect(s.canSpin).toBe(false);
+    expect(s.availableChances).toBe(0);
     expect(s.segments.length).toBe(SPIN_SEGMENTS.length);
     expect(s.lastSpin).toBeNull();
   });
 
-  it('2. spin → 寫紀錄 + 發積分', async () => {
+  it('2. grantChance 累加 availableChances / earnedTotal', async () => {
+    await service.grantChance(U1, 1, '完成標準填答');
+    await service.grantChance(U1, 1, '完成互惠填答');
+    const s = await service.getStatus(U1);
+    expect(s.availableChances).toBe(2);
+    expect(s.earnedTotal).toBe(2);
+    expect(s.canSpin).toBe(true);
+  });
+
+  it('3. spin（有次數）→ 扣 1 次 + 寫紀錄 + 發積分', async () => {
+    await service.grantChance(U1, 1);
     const res = await service.spin(U1);
     expect(SPIN_SEGMENTS.map((x) => x.key)).toContain(res.prizeKey);
 
@@ -87,25 +106,32 @@ describe('SpinService (integration)', () => {
     expect(rows.length).toBe(1);
     expect(rows[0].pointsWon).toBe(res.pointsWon);
 
+    const after = await service.getStatus(U1);
+    expect(after.availableChances).toBe(0);
+    expect(after.spentTotal).toBe(1);
+    expect(after.lastSpin?.prizeKey).toBe(res.prizeKey);
+
     if (res.pointsWon > 0) {
       expect(grantCalls.length).toBe(1);
       expect(grantCalls[0].points).toBe(res.pointsWon);
     }
   });
 
-  it('3. 同日二次 spin → BadRequest', async () => {
-    await service.spin(U1);
+  it('4. 無次數 spin → BadRequest', async () => {
     await expect(service.spin(U1)).rejects.toThrow(BadRequestException);
   });
 
-  it('4. spin 後 getStatus → canSpin=false + lastSpin', async () => {
-    const res = await service.spin(U1);
-    const s = await service.getStatus(U1);
-    expect(s.canSpin).toBe(false);
-    expect(s.lastSpin?.prizeKey).toBe(res.prizeKey);
+  it('5. 同日可多次轉（拿到多次次數）', async () => {
+    await service.grantChance(U1, 2);
+    await service.spin(U1);
+    await service.spin(U1); // 第二次同日不應被擋
+    await expect(service.spin(U1)).rejects.toThrow(BadRequestException); // 次數用完才擋
+
+    const rows = await db.select().from(schema.spinRecords).where(eq(schema.spinRecords.userId, U1));
+    expect(rows.length).toBe(2);
   });
 
-  it('5. SPIN_SEGMENTS 權重總和 = 100', async () => {
+  it('6. SPIN_SEGMENTS 權重總和 = 100', async () => {
     const total = SPIN_SEGMENTS.reduce((sum, s) => sum + s.weight, 0);
     expect(total).toBe(100);
   });

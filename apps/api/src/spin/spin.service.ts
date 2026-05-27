@@ -1,13 +1,13 @@
 import { Injectable, Inject, Logger, BadRequestException } from '@nestjs/common';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, gt, desc, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { spinRecords } from '../db/schema';
+import { spinRecords, spinChances } from '../db/schema';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 
 /**
- * 每日轉盤獎項（初步設定）。
+ * 轉盤獎項（初步設定）。
  * weight 為相對權重，總和 = 100 方便理解成百分比。
  * points 是直接發到錢包的積分。
  */
@@ -30,6 +30,19 @@ export const SPIN_SEGMENTS: SpinSegment[] = [
   { key: 'jackpot',label: '大獎 200 點', points: 200, weight: 2,  color: '#f59e0b' },
 ];
 
+export interface SpinStatus {
+  /** 目前可用的抽獎次數 */
+  availableChances: number;
+  /** 累計賺得 / 已用（顯示用） */
+  earnedTotal: number;
+  spentTotal: number;
+  /** 是否還能轉（availableChances > 0 的便利旗標） */
+  canSpin: boolean;
+  /** 最近一次轉盤結果 */
+  lastSpin: { prizeKey: string; pointsWon: number; spinDate: string } | null;
+  segments: SpinSegment[];
+}
+
 @Injectable()
 export class SpinService {
   private readonly logger = new Logger(SpinService.name);
@@ -46,32 +59,53 @@ export class SpinService {
     return now.toISOString().slice(0, 10);
   }
 
-  /** 今天還能不能轉 */
-  async getStatus(userId: string): Promise<{
-    canSpin: boolean;
-    today: string;
-    lastSpin: { prizeKey: string; pointsWon: number; spinDate: string } | null;
-    segments: SpinSegment[];
-  }> {
-    const today = this.todayTaipei();
-    const rows = await this.db
+  /**
+   * 發放抽獎次數（完成問卷時呼叫）。
+   * 以 upsert 原子累加，避免併發遺失。amount 預設 1。
+   */
+  async grantChance(userId: string, amount = 1, reason?: string): Promise<void> {
+    if (amount <= 0) return;
+    await this.db
+      .insert(spinChances)
+      .values({ userId, available: amount, earnedTotal: amount, spentTotal: 0 })
+      .onConflictDoUpdate({
+        target: spinChances.userId,
+        set: {
+          available: sql`${spinChances.available} + ${amount}`,
+          earnedTotal: sql`${spinChances.earnedTotal} + ${amount}`,
+          updatedAt: new Date(),
+        },
+      });
+    this.logger.log(`grantChance +${amount} user=${userId.slice(0, 8)}${reason ? ` (${reason})` : ''}`);
+  }
+
+  /** 取得抽獎次數與最近結果 + 轉盤格子 */
+  async getStatus(userId: string): Promise<SpinStatus> {
+    const chanceRows = await this.db
+      .select()
+      .from(spinChances)
+      .where(eq(spinChances.userId, userId))
+      .limit(1);
+    const c = chanceRows[0];
+    const available = c?.available ?? 0;
+
+    const lastRows = await this.db
       .select()
       .from(spinRecords)
-      .where(and(eq(spinRecords.userId, userId), eq(spinRecords.spinDate, today)))
+      .where(eq(spinRecords.userId, userId))
+      .orderBy(desc(spinRecords.createdAt))
       .limit(1);
-
-    const last = rows[0]
-      ? { prizeKey: rows[0].prizeKey, pointsWon: rows[0].pointsWon, spinDate: rows[0].spinDate }
+    const last = lastRows[0]
+      ? { prizeKey: lastRows[0].prizeKey, pointsWon: lastRows[0].pointsWon, spinDate: lastRows[0].spinDate }
       : null;
 
-    // segments 不回 weight（避免被前端拿去算機率作弊感）；只回展示用欄位
-    const publicSegments = SPIN_SEGMENTS.map((s) => ({ ...s, weight: s.weight }));
-
     return {
-      canSpin: rows.length === 0,
-      today,
+      availableChances: available,
+      earnedTotal: c?.earnedTotal ?? 0,
+      spentTotal: c?.spentTotal ?? 0,
+      canSpin: available > 0,
       lastSpin: last,
-      segments: publicSegments,
+      segments: SPIN_SEGMENTS.map((s) => ({ ...s })),
     };
   }
 
@@ -86,39 +120,41 @@ export class SpinService {
     return SPIN_SEGMENTS[0]; // fallback
   }
 
-  /** 執行轉盤（每日一次）*/
+  /** 執行轉盤（消耗 1 次抽獎機會）*/
   async spin(userId: string): Promise<{ prizeKey: string; label: string; pointsWon: number }> {
-    const today = this.todayTaipei();
+    // 原子扣 1 次：available > 0 才會更新到，回傳 0 列代表沒次數（同時防併發重複轉）
+    const consumed = await this.db
+      .update(spinChances)
+      .set({
+        available: sql`${spinChances.available} - 1`,
+        spentTotal: sql`${spinChances.spentTotal} + 1`,
+        updatedAt: new Date(),
+      })
+      .where(and(eq(spinChances.userId, userId), gt(spinChances.available, 0)))
+      .returning({ available: spinChances.available });
 
-    // 防重：今天已轉過
-    const existing = await this.db
-      .select({ id: spinRecords.id })
-      .from(spinRecords)
-      .where(and(eq(spinRecords.userId, userId), eq(spinRecords.spinDate, today)))
-      .limit(1);
-    if (existing.length > 0) {
-      throw new BadRequestException('今天已經轉過囉，明天再來！');
+    if (consumed.length === 0) {
+      throw new BadRequestException('沒有抽獎次數囉，完成一份問卷就能再轉一次！');
     }
 
     const seg = this.pickSegment();
 
-    // 寫紀錄（DB 層 race：靠 user+date 唯一性，這裡先簡單插入）
     await this.db.insert(spinRecords).values({
       userId,
       prizeKey: seg.key,
       pointsWon: seg.points,
-      spinDate: today,
+      spinDate: this.todayTaipei(),
     });
 
     // 發積分
     if (seg.points > 0) {
-      await this.wallet.grantPoints(userId, seg.points, `每日轉盤：${seg.label}`);
+      await this.wallet.grantPoints(userId, seg.points, `轉盤中獎：${seg.label}`);
       this.notifications
         .create({
           userId,
           type: 'reward_issued',
           title: `轉盤中獎 ${seg.points} 點！`,
-          body: `今日轉盤轉到「${seg.label}」，${seg.points} 積分已存入錢包。`,
+          body: `轉盤轉到「${seg.label}」，${seg.points} 積分已存入錢包。`,
           metadata: { spin: true, prizeKey: seg.key, points: seg.points },
         })
         .catch((err) => this.logger.error(`spin 通知失敗 user=${userId}`, err));

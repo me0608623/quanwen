@@ -10,12 +10,14 @@ import {
   useDeleteSurvey,
   useBudgetCheck,
   SurveyQuestion,
+  type AudienceCriteria,
 } from '@/hooks/use-surveys';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
 import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-modal';
+import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -48,6 +50,7 @@ export default function SurveyDetailPage() {
   const [description, setDescription] = useState('');
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [minReputation, setMinReputation] = useState(0); // Phase 7.5
+  const [audience, setAudience] = useState<AudienceCriteria>({}); // 受眾鎖定（人口維度）
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false); // Phase G.3
 
@@ -57,6 +60,7 @@ export default function SurveyDetailPage() {
       setDescription(survey.description ?? '');
       setQuestions(survey.questions);
       setMinReputation(Number(survey.audienceCriteria?.minReputationScore ?? 0));
+      setAudience(survey.audienceCriteria ?? {});
     }
   }, [survey]);
 
@@ -70,7 +74,7 @@ export default function SurveyDetailPage() {
 
   const handleSave = async () => {
     const audienceCriteria = {
-      ...(survey?.audienceCriteria ?? {}),
+      ...audience,
       minReputationScore: minReputation > 0 ? minReputation : undefined,
     };
     try {
@@ -251,6 +255,14 @@ export default function SurveyDetailPage() {
           className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
         />
       </section>
+
+      {/* 受眾鎖定 — 人口維度（行業/就業/年齡/性別/學歷/縣市） */}
+      <AudienceTargeting
+        value={audience}
+        onChange={(a) => { setAudience(a); markDirty(); }}
+        showReputation={false}
+        disabled={!canEdit}
+      />
 
       {/* Phase 7.5: 受眾過濾 — 最低信譽分 */}
       <section className="space-y-3 rounded-lg border border-amber-300/40 bg-amber-50/30 p-4">

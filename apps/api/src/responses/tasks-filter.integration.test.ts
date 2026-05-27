@@ -13,6 +13,7 @@ import type { QualityAuditService } from './quality-audit.service';
 import type { ReputationService } from './reputation.service';
 import type { WalletService } from '../wallet/wallet.service';
 import type { NotificationsService } from '../notifications/notifications.service';
+import type { SpinService } from '../spin/spin.service';
 
 const U1 = '11111111-1111-1111-1111-111111111111'; // respondent
 const SURVEYOR = '99999999-9999-9999-9999-999999999999';
@@ -43,6 +44,7 @@ describe('Tasks category filter (integration)', () => {
       CREATE TYPE gender    AS ENUM ('male','female','non_binary','prefer_not_to_say');
       CREATE TYPE occupation AS ENUM ('student','employed_full_time','employed_part_time','self_employed','unemployed','retired','homemaker','other');
       CREATE TYPE education AS ENUM ('junior_high','senior_high','vocational','bachelor','master','phd','other');
+      CREATE TYPE industry AS ENUM ('info_tech','manufacturing','engineering_construction','healthcare','education','finance','legal','public_sector','service','food_beverage','hospitality_travel','retail_wholesale','transport_logistics','agriculture','arts_media','marketing_pr','nonprofit','freelance','student','other');
       CREATE TABLE respondent_profiles (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id         UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -50,6 +52,8 @@ describe('Tasks category filter (integration)', () => {
         gender          gender,
         region          VARCHAR(20),
         occupation      occupation,
+        industry        industry,
+        industry_other  VARCHAR(50),
         education       education,
         reputation_score INTEGER NOT NULL DEFAULT 60,
         completion_rate NUMERIC(5,2) DEFAULT 100.00,
@@ -158,6 +162,7 @@ describe('Tasks category filter (integration)', () => {
       {} as NotificationsService,
       {} as QualityAuditService,
       {} as ReputationService,
+      {} as SpinService,
     );
   });
 

@@ -52,6 +52,7 @@ export interface AudienceCriteria {
   gender?: string[];
   region?: string[];
   occupation?: string[];
+  industry?: string[];
   education?: string[];
   minReputationScore?: number;
   // Phase G.6
