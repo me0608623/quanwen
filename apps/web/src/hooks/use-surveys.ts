@@ -5,21 +5,37 @@ import { api } from '@/lib/api';
 
 // ─── AI Insights ──────────────────────────────────────────────────────────────
 
+export type ReportType = 'simple' | 'detailed';
+
 export interface SurveyAiInsights {
+  reportType: ReportType;
   summary: string;
   keyFindings: string[];
   concerns: string[];
   recommendations: string[];
+  // detailed 報告才有：
+  questionBreakdown?: Array<{ question: string; insight: string }>;
+  crossFindings?: string[];
+  methodology?: string;
   sampleSize: number;
   generatedAt: string;
 }
 
-/** 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）*/
-export function useSurveyAiInsights(surveyId: string, enabled = false) {
+/**
+ * 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）
+ * @param reportType simple = 精簡摘要；detailed = 詳細報告（逐題 + 交叉 + 方法）
+ */
+export function useSurveyAiInsights(
+  surveyId: string,
+  enabled = false,
+  reportType: ReportType = 'simple',
+) {
   return useQuery<SurveyAiInsights>({
-    queryKey: ['surveys', surveyId, 'ai-insights'],
+    queryKey: ['surveys', surveyId, 'ai-insights', reportType],
     queryFn: async () => {
-      const { data } = await api.get<SurveyAiInsights>(`/surveys/${surveyId}/ai-insights`);
+      const { data } = await api.get<SurveyAiInsights>(
+        `/surveys/${surveyId}/ai-insights?type=${reportType}`,
+      );
       return data;
     },
     enabled: enabled && !!surveyId,
@@ -223,13 +239,28 @@ export function useAiDraft() {
       language?: string;
       targetAudience?: string;
       preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+      // Phase II.15: 逐題型題數(含學術量表變體)
+      typeSpecs?: Array<{
+        type:
+          | 'single_choice'
+          | 'multiple_choice'
+          | 'text'
+          | 'rating'
+          | 'scale_agreement'
+          | 'scale_frequency';
+        count: number;
+      }>;
       avoidTitles?: string[];
     }) => {
-      const { data } = await api.post<AiDraftResult>('/surveys/ai-draft', {
-        questionCount: 8,
-        language: 'zh-TW',
-        ...dto,
-      });
+      const { data } = await api.post<AiDraftResult>(
+        '/surveys/ai-draft',
+        {
+          questionCount: 8,
+          language: 'zh-TW',
+          ...dto,
+        },
+        { timeout: 120_000 }, // AI 生成較慢,給足時間;逾時轉成錯誤而非無限轉圈
+      );
       return data;
     },
   });
@@ -254,6 +285,7 @@ export function useRegenerateQuestion() {
       const { data } = await api.post<RegenerateQuestionResult>(
         '/surveys/ai-regenerate-question',
         { otherTitles: [], ...dto },
+        { timeout: 120_000 },
       );
       return data;
     },
@@ -407,6 +439,7 @@ export function useAntiCheatSuggestions(surveyId: string, enabled = false) {
     queryFn: async () => {
       const { data } = await api.get<AntiCheatSuggestionResult>(
         `/surveys/${surveyId}/ai-design/anti-cheat`,
+        { timeout: 120_000 },
       );
       return data;
     },
