@@ -1,5 +1,7 @@
 import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { eq, and, inArray, desc } from 'drizzle-orm';
+import { eq, and, inArray, desc, gt } from 'drizzle-orm';
+import { Writable } from 'stream';
+import { once } from 'events';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -9,6 +11,13 @@ import {
   surveyResponses,
   responseAnswers,
 } from '../db/schema';
+import {
+  questionHeaders,
+  pivotAnswerCells,
+  type OptionLabelMap,
+} from '../surveys/export/response-pivoter';
+import { redactPii } from '../surveys/analysis/anonymizer';
+import { toCsvLine } from '../surveys/export/csv-util';
 
 /**
  * Phase R：問卷資料匯出（PDF stats 報表 + Excel raw responses）
@@ -281,5 +290,272 @@ export class ExportService {
       avgQuality,
       questionStats,
     };
+  }
+
+  /**
+   * 串流匯出填答 CSV（批次 keyset → pivot → 去識別化 → 防注入 → 寫入 res）。
+   * 不全量載入，數千份填答記憶體恆定。見「問卷資料儲存與規模化設計.md §5.2」。
+   */
+  async streamResponsesCsv(
+    surveyId: string,
+    surveyorId: string,
+    out: Writable,
+    exportOpts: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<void> {
+    await this.assertOwnedSurvey(surveyId, surveyorId);
+
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, type: surveyQuestions.type, title: surveyQuestions.title })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const optionRows = qIds.length
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+      : [];
+    const optionLabels: OptionLabelMap = {};
+    for (const o of optionRows) optionLabels[o.id] = o.label;
+
+    const minScore = exportOpts.minQualityScore ?? 70;
+    const TEXT_TYPES = new Set<string>(['text', 'matrix']);
+
+    const write = async (chunk: string): Promise<void> => {
+      if (!out.write(chunk)) await once(out, 'drain');
+    };
+
+    // UTF-8 BOM 讓 Excel 正確辨識中文
+    await write('﻿');
+    await write(
+      toCsvLine([
+        'response_id',
+        'submitted_at',
+        'fill_duration_sec',
+        'quality_score',
+        ...questionHeaders(questions),
+      ]) + '\n',
+    );
+
+    const BATCH = 500;
+    let cursor: string | null = null;
+    for (;;) {
+      const base = and(
+        eq(surveyResponses.surveyId, surveyId),
+        inArray(surveyResponses.status, ['submitted', 'rewarded']),
+      );
+      const batch = await this.db
+        .select({
+          id: surveyResponses.id,
+          submittedAt: surveyResponses.submittedAt,
+          fillDurationSeconds: surveyResponses.fillDurationSeconds,
+          qualityScore: surveyResponses.qualityScore,
+        })
+        .from(surveyResponses)
+        .where(cursor ? and(base, gt(surveyResponses.id, cursor)) : base)
+        .orderBy(surveyResponses.id)
+        .limit(BATCH);
+      if (batch.length === 0) break;
+
+      const ids = batch.map((r) => r.id);
+      const answers = await this.db
+        .select()
+        .from(responseAnswers)
+        .where(inArray(responseAnswers.responseId, ids));
+      const byResp = new Map<string, typeof answers>();
+      for (const a of answers) {
+        const arr = byResp.get(a.responseId) ?? [];
+        arr.push(a);
+        byResp.set(a.responseId, arr);
+      }
+
+      for (const r of batch) {
+        if (exportOpts.cleanOnly && (r.qualityScore ?? 0) < minScore) continue;
+        const pivotAnswers = (byResp.get(r.id) ?? []).map((a) => ({
+          questionId: a.questionId,
+          textAnswer: a.textAnswer,
+          selectedOptionIds: (a.selectedOptionIds as string[] | null) ?? null,
+          ratingValue: a.ratingValue,
+        }));
+        const cells = pivotAnswerCells(questions, pivotAnswers, optionLabels).map((c, i) =>
+          TEXT_TYPES.has(questions[i].type) ? redactPii(c) : c,
+        );
+        await write(
+          toCsvLine([
+            r.id,
+            r.submittedAt ? new Date(r.submittedAt).toISOString() : '',
+            r.fillDurationSeconds ?? '',
+            r.qualityScore ?? '',
+            ...cells,
+          ]) + '\n',
+        );
+      }
+
+      cursor = batch[batch.length - 1].id;
+      if (batch.length < BATCH) break;
+    }
+
+    out.end();
+  }
+
+  /**
+   * 串流匯出 Markdown 報告：聚合摘要（總覽 + 逐題分析）。
+   * 不揭露 AI 模型名;文字樣本已在 computeStats 階段去識別化前不夾原始 PII（樣本來自答案文字，由匯出層的 redactPii 守住）。
+   */
+  async streamResponsesMarkdown(
+    surveyId: string,
+    surveyorId: string,
+    out: Writable,
+  ): Promise<void> {
+    const survey = await this.assertOwnedSurvey(surveyId, surveyorId);
+    const stats = await this.computeStats(surveyId);
+
+    const lines: string[] = [];
+    lines.push(`# ${survey.title} — 問卷分析報告`);
+    lines.push('');
+    lines.push(`匯出時間：${new Date().toISOString()}`);
+    lines.push('');
+    lines.push('## 總覽');
+    lines.push('');
+    lines.push('| 指標 | 數量 |');
+    lines.push('| ---- | ----: |');
+    lines.push(`| 總填答 | ${stats.total} |`);
+    lines.push(`| 通過（≥80） | ${stats.passed} |`);
+    lines.push(`| 灰區（50–79） | ${stats.suspicious} |`);
+    lines.push(`| 退件（<50） | ${stats.rejected} |`);
+    lines.push(`| 未審核 | ${stats.unaudited} |`);
+    lines.push(`| 平均品質分 | ${stats.avgQuality ?? '—'} |`);
+    lines.push('');
+    lines.push('## 逐題分析');
+    for (const q of stats.questionStats) {
+      lines.push('');
+      lines.push(`### ${q.title}`);
+      lines.push('');
+      lines.push(`類型：\`${q.type}\`　回應數：${q.responseCount}`);
+      if (q.optionCounts.length > 0) {
+        lines.push('');
+        lines.push('| 選項 | 計數 |');
+        lines.push('| ---- | ----: |');
+        for (const o of q.optionCounts) lines.push(`| ${o.label} | ${o.count} |`);
+      }
+      if (q.avgRating != null) {
+        lines.push('');
+        lines.push(`平均評分：**${q.avgRating.toFixed(2)}**`);
+      }
+    }
+    lines.push('');
+    lines.push('---');
+    lines.push('註：本報告由 AI 數據分析產生；填答者個資已遮蔽。');
+
+    if (!out.write(lines.join('\n'))) await once(out, 'drain');
+    out.end();
+  }
+
+  /**
+   * 串流匯出 Excel（exceljs streaming WorkbookWriter）。
+   * 與 CSV 相同的批次 keyset + pivot + 去識別化模式；每列 commit 後落地，記憶體恆定。
+   */
+  async streamResponsesXlsx(
+    surveyId: string,
+    surveyorId: string,
+    out: Writable,
+    exportOpts: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<void> {
+    await this.assertOwnedSurvey(surveyId, surveyorId);
+
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, type: surveyQuestions.type, title: surveyQuestions.title })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const optionRows = qIds.length
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+      : [];
+    const optionLabels: OptionLabelMap = {};
+    for (const o of optionRows) optionLabels[o.id] = o.label;
+
+    const minScore = exportOpts.minQualityScore ?? 70;
+    const TEXT_TYPES = new Set<string>(['text', 'matrix']);
+
+    // 動態 require 避免 boot 時若未安裝立刻爆
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
+      stream: out,
+      useSharedStrings: false,
+      useStyles: false,
+    });
+    const sheet = workbook.addWorksheet('Responses');
+
+    const header = [
+      'response_id',
+      'submitted_at',
+      'fill_duration_sec',
+      'quality_score',
+      ...questionHeaders(questions),
+    ];
+    sheet.addRow(header).commit();
+
+    const BATCH = 500;
+    let cursor: string | null = null;
+    for (;;) {
+      const base = and(
+        eq(surveyResponses.surveyId, surveyId),
+        inArray(surveyResponses.status, ['submitted', 'rewarded']),
+      );
+      const batch = await this.db
+        .select({
+          id: surveyResponses.id,
+          submittedAt: surveyResponses.submittedAt,
+          fillDurationSeconds: surveyResponses.fillDurationSeconds,
+          qualityScore: surveyResponses.qualityScore,
+        })
+        .from(surveyResponses)
+        .where(cursor ? and(base, gt(surveyResponses.id, cursor)) : base)
+        .orderBy(surveyResponses.id)
+        .limit(BATCH);
+      if (batch.length === 0) break;
+
+      const ids = batch.map((r) => r.id);
+      const answers = await this.db
+        .select()
+        .from(responseAnswers)
+        .where(inArray(responseAnswers.responseId, ids));
+      const byResp = new Map<string, typeof answers>();
+      for (const a of answers) {
+        const arr = byResp.get(a.responseId) ?? [];
+        arr.push(a);
+        byResp.set(a.responseId, arr);
+      }
+
+      for (const r of batch) {
+        if (exportOpts.cleanOnly && (r.qualityScore ?? 0) < minScore) continue;
+        const pivotAnswers = (byResp.get(r.id) ?? []).map((a) => ({
+          questionId: a.questionId,
+          textAnswer: a.textAnswer,
+          selectedOptionIds: (a.selectedOptionIds as string[] | null) ?? null,
+          ratingValue: a.ratingValue,
+        }));
+        const cells = pivotAnswerCells(questions, pivotAnswers, optionLabels).map((c, i) =>
+          TEXT_TYPES.has(questions[i].type) ? redactPii(c) : c,
+        );
+        sheet
+          .addRow([
+            r.id,
+            r.submittedAt ? new Date(r.submittedAt).toISOString() : '',
+            r.fillDurationSeconds ?? '',
+            r.qualityScore ?? '',
+            ...cells,
+          ])
+          .commit();
+      }
+
+      cursor = batch[batch.length - 1].id;
+      if (batch.length < BATCH) break;
+    }
+
+    sheet.commit();
+    await workbook.commit();
   }
 }

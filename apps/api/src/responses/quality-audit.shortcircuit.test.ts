@@ -122,6 +122,7 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         id                  UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         response_id         UUID NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
         question_id         UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+        survey_id           UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         text_answer         TEXT,
         selected_option_ids JSONB,
         rating_value        INTEGER,
@@ -168,8 +169,8 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         ('${RESPONSE_ID}', '${SURVEY_ID}', '${RESPONDENT_ID}', 'rewarded', NOW(),
           120, 85,
           '{"behaviorScore":80,"signalScores":{"timing":90,"attentionCheck":null,"reverseConsistency":null,"textQuality":75,"choicePattern":80},"llmScore":88,"llmReasoning":"質量不錯","llmEvidence":[],"finalScore":85,"status":"passed","flags":[]}'::jsonb);
-      INSERT INTO response_answers (response_id, question_id, text_answer) VALUES
-        ('${RESPONSE_ID}', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '我覺得這份問卷很好');
+      INSERT INTO response_answers (response_id, survey_id, question_id, text_answer) VALUES
+        ('${RESPONSE_ID}', '${SURVEY_ID}', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '我覺得這份問卷很好');
     `);
 
     db = drizzle(client, { schema });
@@ -243,8 +244,8 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
     await client.exec(`
       INSERT INTO survey_responses (id, survey_id, respondent_id, status, submitted_at, fill_duration_seconds) VALUES
         ('${NEW_RESP}', '${SURVEY_ID}', '${SURVEYOR_ID}', 'submitted', NOW(), 60);
-      INSERT INTO response_answers (response_id, question_id, text_answer) VALUES
-        ('${NEW_RESP}', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '不錯');
+      INSERT INTO response_answers (response_id, survey_id, question_id, text_answer) VALUES
+        ('${NEW_RESP}', '${SURVEY_ID}', 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeee1', '不錯');
     `);
     antiCheatCallCount = 0;
     const result = await service.audit(NEW_RESP, { fillDurationSeconds: 60 });

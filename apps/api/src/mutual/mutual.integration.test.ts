@@ -155,6 +155,7 @@ describe('MutualService (integration)', () => {
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         response_id   UUID NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
         question_id   UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+        survey_id     UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         text_answer   TEXT,
         selected_option_ids JSONB,
         rating_value  INTEGER,

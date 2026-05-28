@@ -272,6 +272,7 @@ export class MutualService {
         title: string;
         type: string;
         sortOrder: number;
+        config: Record<string, unknown> | null;
         options: Array<{ id: string; label: string; sortOrder: number }>;
         answer: {
           textAnswer: string | null;
@@ -332,6 +333,7 @@ export class MutualService {
             title: q.title,
             type: q.type,
             sortOrder: q.sortOrder,
+            config: (q.config as Record<string, unknown> | null) ?? null,
             options: q.options.map((o) => ({ id: o.id, label: o.label, sortOrder: o.sortOrder })),
             answer: answerByQ.get(q.id) ?? null,
           })),
@@ -497,6 +499,7 @@ export class MutualService {
       await this.db.insert(responseAnswers).values(
         answers.map((a) => ({
           responseId,
+          surveyId: targetSurveyId, // 反正規化（§3-B1）
           questionId: a.questionId,
           textAnswer: a.textAnswer ?? null,
           selectedOptionIds: a.selectedOptionIds ?? null,

@@ -73,6 +73,8 @@ export const responseAnswers = pgTable(
     questionId: uuid('question_id')
       .notNull()
       .references(() => surveyQuestions.id, { onDelete: 'cascade' }),
+    // 反正規化（設計文件 §3-B1 / ADR-009）。NOT NULL 由 migration response-answers-survey-id-notnull.sql 強制。
+    surveyId: uuid('survey_id').notNull().references(() => surveys.id, { onDelete: 'cascade' }),
     textAnswer: text('text_answer'),
     selectedOptionIds: jsonb('selected_option_ids'), // string[]
     ratingValue: integer('rating_value'),
@@ -81,6 +83,8 @@ export const responseAnswers = pgTable(
   (t) => ({
     responseIdx: index('response_answers_response_idx').on(t.responseId),
     questionIdx: index('response_answers_question_idx').on(t.questionId),
+    // per-survey 聚合查詢用（搭配 survey_id 反正規化）
+    surveyQuestionIdx: index('response_answers_survey_question_idx').on(t.surveyId, t.questionId),
   }),
 );
 

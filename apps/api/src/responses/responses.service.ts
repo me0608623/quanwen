@@ -26,6 +26,7 @@ import { ReputationService } from './reputation.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SpinService } from '../spin/spin.service';
+import { redactPii } from '../surveys/analysis/anonymizer';
 
 @Injectable()
 export class ResponsesService {
@@ -44,36 +45,33 @@ export class ResponsesService {
   // ─── 受試者：分類別計數（給 task list 的 filter UI 用） ────────────────────
 
   async getCategoryCounts(respondentId: string): Promise<Record<string, number>> {
+    // 單一 SQL 下推：排除已填(submitted)、過期、已達配額後，依分類計數。
+    // 取代原本「兩次全表查 + JS 迴圈過濾」(published 達數百份時會全撈)。見設計文件 §3-A4。
     const rows = await this.db
       .select({
         category: surveys.category,
-        id: surveys.id,
-        completedCount: surveys.completedCount,
-        targetCount: surveys.targetCount,
-        expiresAt: surveys.expiresAt,
+        cnt: sql<number>`count(*)::int`,
       })
       .from(surveys)
-      .where(and(eq(surveys.status, 'published'), eq(surveys.type, 'standard')));
-
-    const submittedRows = await this.db
-      .select({ surveyId: surveyResponses.surveyId })
-      .from(surveyResponses)
       .where(
         and(
-          eq(surveyResponses.respondentId, respondentId),
-          eq(surveyResponses.status, 'submitted'),
+          eq(surveys.status, 'published'),
+          eq(surveys.type, 'standard'),
+          sql`(${surveys.expiresAt} IS NULL OR ${surveys.expiresAt} > now())`,
+          sql`${surveys.completedCount} < ${surveys.targetCount}`,
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${surveyResponses}
+            WHERE ${surveyResponses.surveyId} = ${surveys.id}
+              AND ${surveyResponses.respondentId} = ${respondentId}
+              AND ${surveyResponses.status} = 'submitted'
+          )`,
         ),
-      );
-    const submitted = new Set(submittedRows.map((r) => r.surveyId));
-    const now = new Date();
+      )
+      .groupBy(surveys.category);
 
     const counts: Record<string, number> = {};
-    for (const s of rows) {
-      if (submitted.has(s.id)) continue;
-      if (s.expiresAt && new Date(s.expiresAt) < now) continue;
-      if (s.completedCount >= s.targetCount) continue;
-      const key = s.category ?? 'uncategorized';
-      counts[key] = (counts[key] ?? 0) + 1;
+    for (const r of rows) {
+      counts[r.category ?? 'uncategorized'] = Number(r.cnt);
     }
     return counts;
   }
@@ -315,6 +313,7 @@ export class ResponsesService {
       await this.db.insert(responseAnswers).values(
         dto.answers.map((a) => ({
           responseId,
+          surveyId, // 反正規化（§3-B1）：寫入時同步塞，避免 per-survey 聚合需 JOIN
           questionId: a.questionId,
           textAnswer: a.textAnswer,
           selectedOptionIds: a.selectedOptionIds ?? null,
@@ -791,7 +790,7 @@ export class ResponsesService {
 
     const toValue = (a: typeof allAnswers[number] | undefined): unknown => {
       if (!a) return null;
-      if (a.textAnswer) return a.textAnswer;
+      if (a.textAnswer) return redactPii(a.textAnswer);
       if (a.ratingValue !== null && a.ratingValue !== undefined) return a.ratingValue;
       if (a.selectedOptionIds) {
         const ids = a.selectedOptionIds as string[];
@@ -887,7 +886,7 @@ export class ResponsesService {
       const qCells = questions.map((q) => {
         const a = answers.find((ans) => ans.questionId === q.id);
         if (!a) return '';
-        if (a.textAnswer) return `"${a.textAnswer.replace(/"/g, '""')}"`;
+        if (a.textAnswer) return `"${redactPii(a.textAnswer).replace(/"/g, '""')}"`;
         if (a.ratingValue !== null && a.ratingValue !== undefined) return String(a.ratingValue);
         if (a.selectedOptionIds) {
           const ids = a.selectedOptionIds as string[];

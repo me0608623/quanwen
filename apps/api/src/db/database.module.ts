@@ -181,6 +181,7 @@ export { DB_TOKEN as DB };
               id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
               response_id         UUID        NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
               question_id         UUID        NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              survey_id           UUID        NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
               text_answer         TEXT,
               selected_option_ids JSONB,
               rating_value        INTEGER,
@@ -750,13 +751,13 @@ export { DB_TOKEN as DB };
 
           // ── Seed actual answers for aa's response (survey-1 has full questions) ──
           await client.exec(`
-            INSERT INTO response_answers (response_id, question_id, selected_option_ids, rating_value, text_answer)
+            INSERT INTO response_answers (response_id, survey_id, question_id, selected_option_ids, rating_value, text_answer)
             VALUES
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440101',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440101',
                 '[]'::jsonb, NULL, NULL),
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440103',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440103',
                 NULL, 4, NULL),
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440104',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440104',
                 NULL, NULL, '希望加快配送速度，選項更多樣化');
           `);
 
@@ -815,15 +816,15 @@ export { DB_TOKEN as DB };
               ON CONFLICT (survey_id, respondent_id) DO NOTHING;
             `);
             await client.exec(`
-              INSERT INTO response_answers (response_id, question_id, selected_option_ids, rating_value, text_answer)
+              INSERT INTO response_answers (response_id, survey_id, question_id, selected_option_ids, rating_value, text_answer)
               VALUES
-                ('${d.rid}', '44444444-4444-4444-4444-444444440101',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440101',
                   '["${q1Opts[d.q1Pick] ?? ''}"]'::jsonb, NULL, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440102',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440102',
                   '${JSON.stringify(q2Selected)}'::jsonb, NULL, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440103',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440103',
                   NULL, ${d.rating}, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440104',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440104',
                   NULL, NULL, '${d.text.replace(/'/g, "''")}');
             `);
           }

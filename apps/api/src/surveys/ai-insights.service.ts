@@ -1,5 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ZaiClient } from '../ai-audit/zai.client';
+import {
+  insightsCacheKey,
+  getCachedInsight,
+  setCachedInsight,
+} from './analysis/insights-cache';
 
 export type ReportType = 'simple' | 'detailed';
 
@@ -80,6 +85,15 @@ export class AiInsightsService {
       return this.fallback(stats, '樣本數過少（< 3），尚不足以產生統計洞察', reportType);
     }
 
+    // 兩層快取(L1 in-process 30 分鐘 + L2 Redis 跨進程共享,degradation-safe):
+    // 相同 stats + reportType 直接回,免 LLM token。fallback 路徑不入 cache → 下次重試。設計文件 §5.4。
+    const cacheKey = insightsCacheKey(stats, reportType);
+    const hit = await getCachedInsight<SurveyInsights>(cacheKey);
+    if (hit) {
+      this.logger.log(`AI insights cache hit (${reportType})`);
+      return hit;
+    }
+
     const detailed = reportType === 'detailed';
     const prompt = this.buildPrompt(stats, reportType);
     const system = detailed
@@ -126,6 +140,8 @@ export class AiInsightsService {
         base.methodology = m ? m.slice(0, 600) : undefined;
       }
 
+      // 僅快取成功結果（fallback 不快取，方便下次 retry）
+      await setCachedInsight(cacheKey, base);
       return base;
     } catch (err) {
       this.logger.error(`Z.ai AI insights (${reportType}) failed, returning fallback`, err);

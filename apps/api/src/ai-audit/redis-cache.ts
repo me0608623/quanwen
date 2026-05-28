@@ -26,7 +26,7 @@ interface RedisLike {
   status?: string;
 }
 
-const KEY_PREFIX = 'zai:cache:';
+const DEFAULT_KEY_PREFIX = 'zai:cache:';
 
 export class RedisCache {
   private readonly logger = new Logger(RedisCache.name);
@@ -34,11 +34,15 @@ export class RedisCache {
   private enabled = false;
   private initPromise: Promise<void> | null = null;
   private degradeLogged = false;
+  private readonly keyPrefix: string;
 
   constructor(
     private readonly url: string | undefined,
     private readonly ttlMs: number,
-  ) {}
+    keyPrefix: string = DEFAULT_KEY_PREFIX,
+  ) {
+    this.keyPrefix = keyPrefix;
+  }
 
   /** 懶初始化 — 第一次 get/set 才連 Redis */
   private async ensureClient(): Promise<void> {
@@ -92,7 +96,7 @@ export class RedisCache {
     await this.ensureClient();
     if (!this.client || !this.enabled) return undefined;
     try {
-      const v = await this.client.get(KEY_PREFIX + key);
+      const v = await this.client.get(this.keyPrefix + key);
       return v ?? undefined;
     } catch {
       return undefined; // Redis 出錯 → 當 miss，主流程繼續
@@ -103,7 +107,7 @@ export class RedisCache {
     await this.ensureClient();
     if (!this.client || !this.enabled) return;
     try {
-      await this.client.set(KEY_PREFIX + key, value, 'PX', this.ttlMs);
+      await this.client.set(this.keyPrefix + key, value, 'PX', this.ttlMs);
     } catch {
       // 寫失敗無所謂，L1 仍有；下次 miss 再打 LLM
     }

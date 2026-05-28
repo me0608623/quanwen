@@ -226,6 +226,62 @@ export class ResponsesController {
     res.send(JSON.stringify(data, null, 2));
   }
 
+  /** GET /surveys/:id/export.stream.csv — 串流匯出（去識別化 + 防注入；數千份不爆記憶體）*/
+  @Get(':id/export.stream.csv')
+  async exportStreamCsv(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}_stream.csv"`);
+    await this.exportSvc.streamResponsesCsv(id, user.id, res, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+  }
+
+  /** GET /surveys/:id/export.stream.md — 串流匯出 Markdown 報告（聚合摘要）*/
+  @Get(':id/export.stream.md')
+  async exportStreamMd(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_report.md"`);
+    await this.exportSvc.streamResponsesMarkdown(id, user.id, res);
+  }
+
+  /** GET /surveys/:id/export.stream.xlsx — 串流匯出 Excel（去識別化 + 批次）*/
+  @Get(':id/export.stream.xlsx')
+  async exportStreamXlsx(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}_stream.xlsx"`);
+    await this.exportSvc.streamResponsesXlsx(id, user.id, res, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+  }
+
   /** GET /surveys/:id/export — 匯出 CSV */
   @Get(':id/export')
   async exportCsv(
