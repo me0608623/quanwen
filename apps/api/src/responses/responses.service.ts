@@ -738,6 +738,90 @@ export class ResponsesService {
     return result;
   }
 
+  // ─── 問券方：匯出填答 JSON（結構化，給程式/資料分析用）───────────────────
+
+  async exportSurveyResponsesJson(
+    surveyId: string,
+    surveyorId: string,
+    exportOpts: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<{
+    survey: { id: string; title: string };
+    exportedAt: string;
+    totalResponses: number;
+    questions: Array<{ id: string; title: string; type: string; order: number }>;
+    responses: Array<Record<string, unknown>>;
+  }> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId, title: surveys.title })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, type: surveyQuestions.type, sortOrder: surveyQuestions.sortOrder })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const minScore = exportOpts.minQualityScore ?? 70;
+    let responses = await this.db
+      .select({
+        responseId: surveyResponses.id,
+        submittedAt: surveyResponses.submittedAt,
+        fillDurationSeconds: surveyResponses.fillDurationSeconds,
+        qualityScore: surveyResponses.qualityScore,
+      })
+      .from(surveyResponses)
+      .where(and(eq(surveyResponses.surveyId, surveyId), inArray(surveyResponses.status, ['submitted', 'rewarded'])))
+      .orderBy(surveyResponses.submittedAt);
+    if (exportOpts.cleanOnly) {
+      responses = responses.filter((r) => (r.qualityScore ?? 0) >= minScore);
+    }
+
+    const responseIds = responses.map((r) => r.responseId);
+    const allAnswers = responseIds.length
+      ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, responseIds))
+      : [];
+    const qIds = questions.map((q) => q.id);
+    const options = qIds.length
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+      : [];
+
+    const toValue = (a: typeof allAnswers[number] | undefined): unknown => {
+      if (!a) return null;
+      if (a.textAnswer) return a.textAnswer;
+      if (a.ratingValue !== null && a.ratingValue !== undefined) return a.ratingValue;
+      if (a.selectedOptionIds) {
+        const ids = a.selectedOptionIds as string[];
+        return ids.map((id) => options.find((o) => o.id === id)?.label ?? id);
+      }
+      return null;
+    };
+
+    return {
+      survey: { id: surveyId, title: surveyRows[0].title },
+      exportedAt: new Date().toISOString(),
+      totalResponses: responses.length,
+      questions: questions.map((q) => ({ id: q.id, title: q.title, type: q.type, order: q.sortOrder + 1 })),
+      responses: responses.map((r) => {
+        const answers = allAnswers.filter((a) => a.responseId === r.responseId);
+        return {
+          responseId: r.responseId,
+          submittedAt: r.submittedAt,
+          fillDurationSeconds: r.fillDurationSeconds,
+          qualityScore: r.qualityScore,
+          answers: questions.map((q) => ({
+            questionId: q.id,
+            title: q.title,
+            value: toValue(answers.find((a) => a.questionId === q.id)),
+          })),
+        };
+      }),
+    };
+  }
+
   // ─── 問券方：匯出填答 CSV ─────────────────────────────────────────────────
 
   async exportSurveyResponsesCsv(

@@ -135,12 +135,17 @@ export class ResponsesController {
     return this.responsesService.getSurveyStats(id, user.id);
   }
 
-  /** GET /surveys/:id/ai-insights — AI 生成的填答洞察報告 */
+  /** GET /surveys/:id/ai-insights?type=simple|detailed — AI 生成的填答洞察報告 */
   @Get(':id/ai-insights')
-  async getAiInsights(@Param('id') id: string, @Req() req: Request) {
+  async getAiInsights(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('type') type?: string,
+  ) {
     const user = req.user as AuthenticatedUser;
+    const reportType = type === 'detailed' ? 'detailed' : 'simple';
     const stats = await this.responsesService.getSurveyStats(id, user.id);
-    return this.aiInsights.analyze(stats);
+    return this.aiInsights.analyze(stats, reportType);
   }
 
   /** GET /surveys/:id/questions/:qid/sentiment — 開放題情緒分析 */
@@ -198,6 +203,27 @@ export class ResponsesController {
     const suffix = isClean ? '_clean' : '';
     res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}.xlsx"`);
     res.send(buf);
+  }
+
+  /** GET /surveys/:id/export.json — 匯出結構化 JSON（survey + questions + 每筆 answers） */
+  @Get(':id/export.json')
+  async exportJson(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    const data = await this.responsesService.exportSurveyResponsesJson(id, user.id, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}.json"`);
+    res.send(JSON.stringify(data, null, 2));
   }
 
   /** GET /surveys/:id/export — 匯出 CSV */
