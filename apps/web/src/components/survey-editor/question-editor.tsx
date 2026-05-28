@@ -129,20 +129,67 @@ export function QuestionEditor({
         <MatrixConfig question={question} onChange={onChange} />
       )}
 
-      {/* Rating config */}
+      {/* Rating / 學術量表 config */}
       {question.type === 'rating' && (
         <div className="space-y-2 pl-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">最高分：</span>
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">最高分：</span>
+              <input
+                type="number"
+                min={2}
+                max={10}
+                value={(question.config?.maxRating as number) ?? 5}
+                onChange={(e) =>
+                  onChange({ ...question, config: { ...question.config, maxRating: Number(e.target.value) } })
+                }
+                className="w-16 rounded border border-input bg-background px-2 py-1 text-sm"
+              />
+            </div>
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={question.config?.scaleStart === 0}
+                onChange={(e) =>
+                  onChange({
+                    ...question,
+                    config: { ...question.config, scaleStart: e.target.checked ? 0 : 1 },
+                  })
+                }
+              />
+              從 0 分起算（學術量表）
+            </label>
+          </div>
+
+          {/* 量表錨點（兩端文字標籤）— 填了就會在作答頁顯示，例如 非常不同意 … 非常同意 */}
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs text-muted-foreground">錨點：</span>
             <input
-              type="number"
-              min={2}
-              max={10}
-              value={(question.config?.maxRating as number) ?? 5}
+              type="text"
+              maxLength={40}
+              placeholder="最低分標籤（例：非常不同意）"
+              value={(question.config?.minLabel as string) ?? ''}
               onChange={(e) =>
-                onChange({ ...question, config: { ...question.config, maxRating: Number(e.target.value) } })
+                onChange({
+                  ...question,
+                  config: { ...question.config, minLabel: e.target.value || undefined },
+                })
               }
-              className="w-16 rounded border border-input bg-background px-2 py-1 text-sm"
+              className="w-44 rounded border border-input bg-background px-2 py-1 text-xs"
+            />
+            <span className="text-xs text-muted-foreground">…</span>
+            <input
+              type="text"
+              maxLength={40}
+              placeholder="最高分標籤（例：非常同意）"
+              value={(question.config?.maxLabel as string) ?? ''}
+              onChange={(e) =>
+                onChange({
+                  ...question,
+                  config: { ...question.config, maxLabel: e.target.value || undefined },
+                })
+              }
+              className="w-44 rounded border border-input bg-background px-2 py-1 text-xs"
             />
           </div>
 

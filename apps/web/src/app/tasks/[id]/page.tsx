@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { usePublicSurvey, useSubmitResponse, AnswerInput, PublicQuestion, PublicSurvey } from '@/hooks/use-responses';
 import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
+import { RatingScale, RatingScaleConfig } from '@/components/survey-editor/rating-scale';
 
 export default function SurveyFillPage() {
   const { id } = useParams<{ id: string }>();
@@ -323,8 +324,6 @@ function QuestionInput({
   answer?: AnswerInput;
   onChange: (partial: Partial<AnswerInput>) => void;
 }) {
-  const maxRating = (question.config?.maxRating as number) ?? 5;
-
   return (
     <div className="space-y-3">
       <p className="font-medium">
@@ -392,30 +391,13 @@ function QuestionInput({
         />
       )}
 
-      {/* Rating */}
+      {/* Rating / 學術量表 */}
       {question.type === 'rating' && (
-        <div className="flex gap-2">
-          {Array.from({ length: maxRating }, (_, i) => i + 1).map((v) => (
-            <button
-              key={v}
-              type="button"
-              onClick={() => onChange({ ratingValue: v })}
-              className={[
-                'h-10 w-10 rounded-full border text-sm font-medium transition-colors',
-                answer?.ratingValue === v
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border hover:border-primary/60',
-              ].join(' ')}
-            >
-              {v}
-            </button>
-          ))}
-          {answer?.ratingValue && (
-            <span className="self-center text-xs text-muted-foreground ml-1">
-              {answer.ratingValue} / {maxRating}
-            </span>
-          )}
-        </div>
+        <RatingScale
+          config={question.config as RatingScaleConfig | undefined}
+          value={answer?.ratingValue ?? null}
+          onSelect={(v) => onChange({ ratingValue: v })}
+        />
       )}
 
       {/* Phase N.1: Matrix */}

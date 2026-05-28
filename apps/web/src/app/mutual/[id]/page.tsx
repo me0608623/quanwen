@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useMutualPair, useSubmitMutualResponse, useReEnqueueMutual, useSubmitMutualProof, useRateMutual, type MutualQuestion, type MutualUnlocked, type MutualPairDetail } from '@/hooks/use-mutual';
 import { useMe } from '@/hooks/use-auth';
+import { RatingScale, RatingScaleConfig } from '@/components/survey-editor/rating-scale';
 
 type AnswerState = {
   textAnswer?: string;
@@ -287,22 +288,11 @@ function QuestionBlock({
       )}
 
       {q.type === 'rating' && (
-        <div className="flex gap-2">
-          {[1, 2, 3, 4, 5].map((n) => (
-            <button
-              key={n}
-              type="button"
-              onClick={() => onChange({ ratingValue: n })}
-              className={`flex h-10 w-10 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors ${
-                value.ratingValue === n
-                  ? 'border-primary bg-primary text-primary-foreground'
-                  : 'border-border hover:border-primary/50'
-              }`}
-            >
-              {n}
-            </button>
-          ))}
-        </div>
+        <RatingScale
+          config={(q.config as RatingScaleConfig | null) ?? undefined}
+          value={value.ratingValue ?? null}
+          onSelect={(n) => onChange({ ratingValue: n })}
+        />
       )}
 
       {q.type === 'matrix' && (
@@ -402,20 +392,11 @@ function AnswerDisplay({ q }: { q: MutualUnlocked['questions'][number] }) {
 
   if (q.type === 'rating') {
     return (
-      <div className="flex gap-2">
-        {[1, 2, 3, 4, 5].map((n) => (
-          <div
-            key={n}
-            className={`flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-bold ${
-              q.answer?.ratingValue === n
-                ? 'border-primary bg-primary text-primary-foreground'
-                : 'border-border text-muted-foreground'
-            }`}
-          >
-            {n}
-          </div>
-        ))}
-      </div>
+      <RatingScale
+        config={(q.config as RatingScaleConfig | null | undefined) ?? undefined}
+        value={q.answer?.ratingValue ?? null}
+        disabled
+      />
     );
   }
 

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import type { SurveyQuestion } from '@/hooks/use-surveys';
 import { evaluateSkipLogic } from '@/lib/skip-logic';
+import { RatingScale, RatingScaleConfig } from './rating-scale';
 
 interface Props {
   title: string;
@@ -130,23 +131,11 @@ export function SurveyPreviewModal({ title, description, questions, open, onClos
           )}
 
           {q.type === 'rating' && (
-            <div className="flex gap-2 justify-center">
-              {Array.from({ length: (q.config?.maxRating as number) ?? 5 }).map((_, i) => {
-                const value = i + 1;
-                const selected = a.ratingValue === value;
-                return (
-                  <button
-                    key={value}
-                    onClick={() => setAns({ ratingValue: value })}
-                    className={`h-10 w-10 rounded-full border-2 font-bold transition-colors ${
-                      selected ? 'border-[#126b8a] bg-[#126b8a] text-white' : 'border-slate-300 text-slate-600 hover:border-[#126b8a]'
-                    }`}
-                  >
-                    {value}
-                  </button>
-                );
-              })}
-            </div>
+            <RatingScale
+              config={q.config as RatingScaleConfig | undefined}
+              value={a.ratingValue ?? null}
+              onSelect={(value) => setAns({ ratingValue: value })}
+            />
           )}
 
           {(q.type === 'single_choice' || q.type === 'multiple_choice') && (

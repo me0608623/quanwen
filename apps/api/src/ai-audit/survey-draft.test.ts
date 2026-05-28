@@ -178,4 +178,51 @@ describe('normalizeSurveyDraft', () => {
     // sortOrder 連續
     expect(r.questions.map((q) => q.sortOrder)).toEqual([0, 1, 2, 3]);
   });
+
+  it('15. scale_agreement → rating + 固定同意度錨點(0~5)', () => {
+    const r = normalizeSurveyDraft({
+      title: 't',
+      questions: [{ type: 'scale_agreement', title: '我認為此服務值得推薦' }],
+    });
+    expect(r.questions[0]?.type).toBe('rating');
+    expect(r.questions[0]?.config).toEqual({
+      maxRating: 5,
+      scaleStart: 0,
+      minLabel: '非常不同意',
+      maxLabel: '非常同意',
+    });
+  });
+
+  it('16. scale_frequency → rating + 固定頻率錨點(0~5)', () => {
+    const r = normalizeSurveyDraft({
+      title: 't',
+      questions: [{ type: 'scale_frequency', title: '我每天使用此工具' }],
+    });
+    expect(r.questions[0]?.type).toBe('rating');
+    expect(r.questions[0]?.config).toEqual({
+      maxRating: 5,
+      scaleStart: 0,
+      minLabel: '從來沒有',
+      maxLabel: '總是如此',
+    });
+  });
+
+  it('17. rating 帶 AI 給的 minLabel/maxLabel/scaleStart → 保留', () => {
+    const r = normalizeSurveyDraft({
+      title: 't',
+      questions: [
+        {
+          type: 'rating',
+          title: '客製量表',
+          config: { maxRating: 5, scaleStart: 0, minLabel: '極低', maxLabel: '極高' },
+        },
+      ],
+    });
+    expect(r.questions[0]?.config).toEqual({
+      maxRating: 5,
+      scaleStart: 0,
+      minLabel: '極低',
+      maxLabel: '極高',
+    });
+  });
 });

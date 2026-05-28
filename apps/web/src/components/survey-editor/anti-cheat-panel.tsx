@@ -87,6 +87,18 @@ export function AntiCheatPanel({ surveyId, questions, onApplyChecks }: Props) {
           </button>
         </div>
 
+        {(ac.isLoading || ac.isFetching) && (
+          <div className="space-y-1.5" aria-live="polite">
+            <p className="flex items-center gap-1.5 text-xs text-amber-700">
+              <Spinner className="h-3 w-3" />
+              AI 生成中，約需 20–30 秒，請稍候…
+            </p>
+            <div className="h-1 w-full overflow-hidden rounded-full bg-amber-100">
+              <div className="q-progress-bar h-full w-1/3 rounded-full bg-amber-600" />
+            </div>
+          </div>
+        )}
+
         {!acEnabled && (
           <p className="text-xs text-slate-600">
             由 AI 為你產生 1~2 題注意力檢核題（指令型 / 常識型 / 計算型），偵測填問卷的人有沒有亂填。

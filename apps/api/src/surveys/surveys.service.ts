@@ -228,6 +228,17 @@ export class SurveysService {
     targetAudience?: string;
     purpose?: string;
     preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+    // Phase II.15: 逐題型指定題數（含學術量表變體）
+    typeSpecs?: Array<{
+      type:
+        | 'single_choice'
+        | 'multiple_choice'
+        | 'text'
+        | 'rating'
+        | 'scale_agreement'
+        | 'scale_frequency';
+      count: number;
+    }>;
     // Phase II.14: 換個角度再生 — 避開前一版題目 + 換切入角度
     avoidTitles?: string[];
   }): Promise<{
@@ -241,11 +252,25 @@ export class SurveysService {
       multiple_choice: '多選',
       text: '開放問答',
       rating: '評分',
+      scale_agreement: '同意度量表(非常不同意→非常同意 0~5)',
+      scale_frequency: '頻率量表(從來沒有→總是如此 0~5)',
     };
+
+    // Phase II.15: 逐型題數優先；沒給 typeSpecs 時才回退到舊的 preferredTypes
+    const validSpecs = (dto.typeSpecs ?? []).filter((s) => s.count > 0);
+    const specsTotal = validSpecs.reduce((sum, s) => sum + s.count, 0);
+    const specsLine =
+      validSpecs.length > 0
+        ? `各題型題數（務必精確照數量產生，總題數 = ${specsTotal}）：\n` +
+          validSpecs.map((s) => `  - ${TYPE_LABELS[s.type] ?? s.type}：${s.count} 題`).join('\n')
+        : '';
     const preferredLine =
-      dto.preferredTypes && dto.preferredTypes.length > 0
+      validSpecs.length === 0 && dto.preferredTypes && dto.preferredTypes.length > 0
         ? `偏好題型（請優先使用，其餘酌量）：${dto.preferredTypes.map((t) => TYPE_LABELS[t] ?? t).join('、')}`
         : '';
+
+    // 有 typeSpecs 用其加總；否則用 questionCount。上限 30。
+    const totalQuestions = Math.min(validSpecs.length > 0 ? specsTotal : dto.questionCount, 30);
 
     const avoidLine =
       dto.avoidTitles && dto.avoidTitles.length > 0
@@ -255,7 +280,7 @@ export class SurveysService {
     const userPrompt = [
       `主題：${dto.topic}`,
       dto.purpose ? `目的：${dto.purpose}` : '',
-      `題目數量：${dto.questionCount} 題`,
+      specsLine ? specsLine : `題目數量：${totalQuestions} 題`,
       `語言：${dto.language}`,
       dto.targetAudience ? `目標受眾：${dto.targetAudience}` : '',
       preferredLine,
@@ -272,7 +297,7 @@ export class SurveysService {
     });
 
     const parsed = parseAiSurveyDraft(raw);
-    const normalized = normalizeSurveyDraft(parsed, { maxQuestions: dto.questionCount });
+    const normalized = normalizeSurveyDraft(parsed, { maxQuestions: totalQuestions });
 
     // normalized.questions 已是 {type,title,sortOrder,isRequired,config?,options?}
     // 直接當 SurveyQuestionDto[] 回（options 內含 sortOrder）
