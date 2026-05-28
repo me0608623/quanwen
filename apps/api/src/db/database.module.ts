@@ -354,6 +354,106 @@ export { DB_TOKEN as DB };
             );
           `);
 
+          // ── Phase B/II 後續 schema（補回 inline DDL 漂移：與 Drizzle schema 對齊）──
+          // 之前這些表/欄位只進了 Drizzle schema + SQL migration，沒同步到這份 PGlite
+          // inline DDL，導致 USE_PG_MEM 開的是舊 schema（/surveys 500: column "type"
+          // does not exist、mutual cron: relation "mutual_pairs" does not exist）。
+          // PGlite 每次 boot 都是全新空庫，故用裸 CREATE/ALTER（毋須 IF NOT EXISTS 守衛）。
+          await client.exec(`
+            CREATE TYPE survey_type AS ENUM ('standard','mutual');
+            CREATE TYPE survey_category AS ENUM (
+              'consumer','academic','wellness','workplace','lifestyle',
+              'tech','social','education','finance','other'
+            );
+            CREATE TYPE mutual_pair_status AS ENUM (
+              'waiting','matched','a_done','b_done','both_done','expired','cancelled'
+            );
+            CREATE TYPE industry AS ENUM (
+              'info_tech','manufacturing','engineering_construction','healthcare',
+              'education','finance','legal','public_sector','service','food_beverage',
+              'hospitality_travel','retail_wholesale','transport_logistics','agriculture',
+              'arts_media','marketing_pr','nonprofit','freelance','student','other'
+            );
+
+            -- surveys 後加欄位（Phase B 互惠 / 分類 / AI 審核開關 / 外部連結）
+            ALTER TABLE surveys ADD COLUMN type survey_type NOT NULL DEFAULT 'standard';
+            ALTER TABLE surveys ADD COLUMN category survey_category;
+            ALTER TABLE surveys ADD COLUMN ai_review_enabled BOOLEAN NOT NULL DEFAULT true;
+            ALTER TABLE surveys ADD COLUMN external_url TEXT;
+
+            -- respondent_profiles 行業欄位（受眾媒合）
+            ALTER TABLE respondent_profiles ADD COLUMN industry industry;
+            ALTER TABLE respondent_profiles ADD COLUMN industry_other VARCHAR(50);
+
+            -- 互惠配對表（Phase B）
+            CREATE TABLE mutual_pairs (
+              id            UUID               PRIMARY KEY DEFAULT gen_random_uuid(),
+              status        mutual_pair_status NOT NULL DEFAULT 'waiting',
+              a_user_id     UUID               NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              a_survey_id   UUID               NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              a_response_id UUID               REFERENCES survey_responses(id) ON DELETE SET NULL,
+              a_filled_at   TIMESTAMPTZ,
+              b_user_id     UUID               REFERENCES users(id) ON DELETE CASCADE,
+              b_survey_id   UUID               REFERENCES surveys(id) ON DELETE CASCADE,
+              b_response_id UUID               REFERENCES survey_responses(id) ON DELETE SET NULL,
+              b_filled_at   TIMESTAMPTZ,
+              a_proof_url   TEXT,
+              b_proof_url   TEXT,
+              a_rating      INTEGER,
+              b_rating      INTEGER,
+              a_rated_at    TIMESTAMPTZ,
+              b_rated_at    TIMESTAMPTZ,
+              matched_at    TIMESTAMPTZ,
+              expires_at    TIMESTAMPTZ,
+              created_at    TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+              updated_at    TIMESTAMPTZ        NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX mutual_pairs_status_idx ON mutual_pairs(status);
+            CREATE INDEX mutual_pairs_a_user_idx ON mutual_pairs(a_user_id);
+            CREATE INDEX mutual_pairs_b_user_idx ON mutual_pairs(b_user_id);
+            CREATE UNIQUE INDEX mutual_pairs_a_survey_active_unique
+              ON mutual_pairs(a_survey_id)
+              WHERE status IN ('waiting','matched','a_done','b_done');
+
+            -- 轉盤抽獎（spin）
+            CREATE TABLE spin_chances (
+              user_id      UUID        PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+              available    INTEGER     NOT NULL DEFAULT 0,
+              earned_total INTEGER     NOT NULL DEFAULT 0,
+              spent_total  INTEGER     NOT NULL DEFAULT 0,
+              updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE TABLE spin_records (
+              id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              prize_key  VARCHAR(40) NOT NULL,
+              points_won INTEGER     NOT NULL,
+              spin_date  VARCHAR(10) NOT NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX spin_records_user_idx ON spin_records(user_id);
+
+            -- LLM telemetry（Phase II.11）
+            CREATE TABLE zai_call_log (
+              id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+              model             VARCHAR(64)  NOT NULL,
+              prompt_key        VARCHAR(100),
+              prompt_version    VARCHAR(32),
+              prompt_tokens     INTEGER      NOT NULL DEFAULT 0,
+              completion_tokens INTEGER      NOT NULL DEFAULT 0,
+              total_tokens      INTEGER      NOT NULL DEFAULT 0,
+              latency_ms        INTEGER      NOT NULL DEFAULT 0,
+              attempts          INTEGER      NOT NULL DEFAULT 1,
+              finish_reason     VARCHAR(32)  NOT NULL,
+              error_kind        VARCHAR(32),
+              cache_hit         BOOLEAN      NOT NULL DEFAULT false,
+              created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX zai_call_log_created_idx ON zai_call_log(created_at);
+            CREATE INDEX zai_call_log_prompt_key_idx ON zai_call_log(prompt_key);
+            CREATE INDEX zai_call_log_error_idx ON zai_call_log(error_kind);
+          `);
+
           // ── Seed dev users (auto-created on every startup) ──
           // Fixed UUIDs so we can reference these users in other seeds (surveys, etc.)
           const AA_ID = '11111111-1111-1111-1111-111111111111';
