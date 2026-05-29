@@ -12,7 +12,9 @@ import {
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response as ExpressResponse } from 'express';
 import { ResponsesService } from './responses.service';
 import { RespondentAssistantService } from './respondent-assistant.service';
@@ -118,23 +120,34 @@ export class TasksController {
 
 }
 
+const ANON_TOKEN_MAX_LENGTH = 256;
+
 @Controller('public/tasks')
 export class PublicTasksController {
   constructor(private readonly responsesService: ResponsesService) {}
 
   @Get(':id')
-  getPublic(@Param('id') id: string) {
-    return this.responsesService.getPublicSurvey(id);
+  getPublic(
+    @Param('id') id: string,
+    @Headers('x-anon-token') anonToken: string | undefined,
+  ) {
+    const token = (anonToken ?? '').trim().slice(0, ANON_TOKEN_MAX_LENGTH);
+    return this.responsesService.getPublicSurvey(id, undefined, token || undefined);
   }
 
   @Post(':id/submit')
   @HttpCode(HttpStatus.CREATED)
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 10 } })
   submitPublic(
     @Param('id') id: string,
     @Headers('x-anon-token') anonToken: string | undefined,
     @Body(new ZodValidationPipe(SubmitResponseSchema)) dto: SubmitResponseDto,
   ) {
-    return this.responsesService.submitPublicResponse(id, dto, anonToken);
+    const token = (anonToken ?? '').trim();
+    if (token.length > ANON_TOKEN_MAX_LENGTH) {
+      throw new BadRequestException('x-anon-token exceeds maximum length');
+    }
+    return this.responsesService.submitPublicResponse(id, dto, token || undefined);
   }
 }
 

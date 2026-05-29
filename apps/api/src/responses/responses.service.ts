@@ -163,7 +163,7 @@ export class ResponsesService {
 
   // ─── 受試者：取得公開問卷詳情（含題目）────────────────────────────────────
 
-  async getPublicSurvey(surveyId: string, respondentId?: string) {
+  async getPublicSurvey(surveyId: string, respondentId?: string, anonToken?: string) {
     const rows = await this.db
       .select()
       .from(surveys)
@@ -173,16 +173,19 @@ export class ResponsesService {
     const survey = rows[0];
     if (!survey) throw new NotFoundException('問卷不存在或尚未上架');
 
-    // 若受試者已填 → 告知
+    // 若受試者已填 → 告知（支援 authenticated respondentId 和 anonymous token）
     let alreadySubmitted = false;
-    if (respondentId) {
+    const resolvedRespondentId = respondentId ?? (anonToken
+      ? await this.resolveAnonymousRespondentReadOnly(anonToken)
+      : undefined);
+    if (resolvedRespondentId) {
       const existing = await this.db
         .select({ id: surveyResponses.id })
         .from(surveyResponses)
         .where(
           and(
             eq(surveyResponses.surveyId, surveyId),
-            eq(surveyResponses.respondentId, respondentId),
+            eq(surveyResponses.respondentId, resolvedRespondentId),
             eq(surveyResponses.status, 'submitted'),
           ),
         )
@@ -422,6 +425,17 @@ export class ResponsesService {
     }
     const respondentId = await this.resolveAnonymousRespondent(token);
     return this.submitResponse(surveyId, respondentId, dto);
+  }
+
+  private async resolveAnonymousRespondentReadOnly(token: string): Promise<string | undefined> {
+    const digest = createHash('sha256').update(token).digest('hex');
+    const email = `anon+${digest.slice(0, 24)}@guest.quanwen.local`;
+    const existing = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    return existing[0]?.id;
   }
 
   private async resolveAnonymousRespondent(token: string): Promise<string> {

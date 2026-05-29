@@ -30,8 +30,8 @@ interface SurveyJsQuestion {
   maxRateDescription?: string;
   inputType?: string;
   maxLength?: number;
-  rows?: string[];
-  columns?: string[];
+  rows?: string[] | Array<{ value: string; text: string }>;
+  columns?: string[] | Array<{ value: string; text: string }>;
   cellType?: string;
   labelTrue?: string;
   labelFalse?: string;
@@ -170,8 +170,8 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
       return {
         ...base,
         type: 'matrix',
-        rows: rows.map((r, i) => `row${i}`),
-        columns: columns.map((c, i) => `col${i}`),
+        rows: rows.map((r) => ({ value: r, text: r })),
+        columns: columns.map((c) => ({ value: c, text: c })),
         cellType: matrixConfig?.scale === 'multiple' ? 'checkbox' : 'radiogroup',
         rowsVisibleIf: undefined,
       };
