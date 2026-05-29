@@ -136,8 +136,14 @@ describe('quanswenToSurveyJs', () => {
     const model = quanswenToSurveyJs({ questions: [q] });
     const el = model.pages[0].elements[0];
     expect(el.type).toBe('matrix');
-    expect(el.rows).toEqual(['row0', 'row1']);
-    expect(el.columns).toEqual(['col0', 'col1']);
+    expect(el.rows).toEqual([
+      { value: 'Row 1', text: 'Row 1' },
+      { value: 'Row 2', text: 'Row 2' },
+    ]);
+    expect(el.columns).toEqual([
+      { value: 'Col A', text: 'Col A' },
+      { value: 'Col B', text: 'Col B' },
+    ]);
   });
 
   it('falls back to comment for unconfigured matrix', () => {
@@ -241,9 +247,10 @@ describe('extractAnswers', () => {
         options: [],
       },
     ];
-    const data = { q5: { row0: 'col0', row1: 'col1' } };
+    // SurveyJS now uses the actual row/column label strings as keys (not 'row0'/'col0')
+    const data = { q5: { 'Row 1': 'Col A', 'Row 2': 'Col B' } };
     const answers = extractAnswers(data, qs);
-    expect(answers[0].textAnswer).toBe('{"row0":"col0","row1":"col1"}');
+    expect(answers[0].textAnswer).toBe('{"Row 1":"Col A","Row 2":"Col B"}');
   });
 
   it('extracts numeric text answer as string', () => {
