@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, type ReportType } from '@/hooks/use-surveys';
+import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, type ReportType } from '@/hooks/use-surveys';
 import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
 
 interface OptionCount { optionId: string; label: string; count: number }
@@ -80,6 +80,145 @@ function TrendChart({ surveyId }: { surveyId: string }) {
         <span>{visible[0]?.date.slice(5)}</span>
         <span>{visible[visible.length - 1]?.date.slice(5)}</span>
       </div>
+    </section>
+  );
+}
+
+// ─── Respondents Panel（受訪者清單，匿名化 token）───────────────────────────
+
+function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; totalResponses: number }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const { data, isLoading } = useRespondents(surveyId, page, pageSize);
+
+  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
+
+  const STATUS_LABELS: Record<string, string> = {
+    submitted: '已提交',
+    rewarded: '已獎勵',
+    rejected: '已退件',
+    pending_review: '待審核',
+  };
+  const STATUS_CLS: Record<string, string> = {
+    submitted: 'bg-green-100 text-green-700',
+    rewarded: 'bg-blue-100 text-blue-700',
+    rejected: 'bg-red-100 text-red-700',
+    pending_review: 'bg-yellow-100 text-yellow-700',
+  };
+
+  return (
+    <section className="rounded-lg border border-border p-5">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+        受訪者清單（匿名化） · 共 {data?.total ?? totalResponses} 人
+      </h2>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-8 animate-pulse rounded bg-muted" />
+          ))}
+        </div>
+      )}
+
+      {data && data.respondents.length === 0 && (
+        <p className="text-sm text-muted-foreground">尚無受訪者資料</p>
+      )}
+
+      {data && data.respondents.length > 0 && (
+        <>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="pb-2 text-left font-medium">匿名代碼</th>
+                  <th className="pb-2 text-left font-medium">狀態</th>
+                  <th className="pb-2 text-left font-medium">提交時間</th>
+                  <th className="pb-2 text-right font-medium">填答時長</th>
+                  <th className="pb-2 text-right font-medium">品質分</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.respondents.map((r) => (
+                  <tr key={r.anonymousToken + r.submittedAt} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 font-mono text-xs">{r.anonymousToken}</td>
+                    <td className="py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CLS[r.status] ?? 'bg-muted text-muted-foreground'}`}>
+                        {STATUS_LABELS[r.status] ?? r.status}
+                      </span>
+                    </td>
+                    <td className="py-2 text-muted-foreground text-xs">
+                      {r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground text-xs">
+                      {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
+                    </td>
+                    <td className="py-2 text-right">
+                      {r.qualityScore != null ? (
+                        <span className={`font-semibold ${r.qualityScore >= 80 ? 'text-green-600' : r.qualityScore >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {r.qualityScore}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="space-y-2 sm:hidden">
+            {data.respondents.map((r) => (
+              <div key={r.anonymousToken + r.submittedAt} className="rounded-lg border border-border/60 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs">{r.anonymousToken}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CLS[r.status] ?? 'bg-muted text-muted-foreground'}`}>
+                    {STATUS_LABELS[r.status] ?? r.status}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}</span>
+                  <span>
+                    {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
+                    {r.qualityScore != null && (
+                      <span className={`ml-2 font-semibold ${r.qualityScore >= 80 ? 'text-green-600' : r.qualityScore >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                        Q:{r.qualityScore}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                第 {data.page} / {totalPages} 頁
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  上一頁
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  下一頁
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </section>
   );
 }
@@ -192,6 +331,9 @@ export default function SurveyStatsPage() {
 
       {/* 趨勢圖 */}
       <TrendChart surveyId={id} />
+
+      {/* 受訪者清單（匿名化 token） */}
+      <RespondentsPanel surveyId={id} totalResponses={stats.totalResponses} />
 
       {/* 題目統計 */}
       {stats.questionStats.map((q, i) => (

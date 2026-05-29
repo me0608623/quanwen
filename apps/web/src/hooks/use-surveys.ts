@@ -374,6 +374,37 @@ export interface TextSentimentResult {
   generatedAt: string;
 }
 
+// ─── Respondents (anonymized tokens) ────────────────────────────────────────
+
+export interface Respondent {
+  anonymousToken: string;
+  status: string;
+  submittedAt: string | null;
+  fillDurationSeconds: number | null;
+  qualityScore: number | null;
+}
+
+export interface RespondentsPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  respondents: Respondent[];
+}
+
+export function useRespondents(surveyId: string, page = 1, pageSize = 20) {
+  return useQuery<RespondentsPage>({
+    queryKey: ['surveys', surveyId, 'respondents', page, pageSize],
+    queryFn: async () => {
+      const { data } = await api.get<RespondentsPage>(
+        `/surveys/${surveyId}/respondents?page=${page}&pageSize=${pageSize}`,
+      );
+      return data;
+    },
+    enabled: !!surveyId,
+    staleTime: 30_000,
+  });
+}
+
 export function useQuestionSentiment(surveyId: string, questionId: string, enabled = false) {
   return useQuery<TextSentimentResult>({
     queryKey: ['surveys', surveyId, 'sentiment', questionId],

@@ -283,6 +283,10 @@ export default function SurveyDetailPage() {
               index={index}
               onChange={(next) => updateQuestion(index, next)}
               onRemove={() => removeQuestion(index)}
+              jumpTargets={questions
+                .map((qq, idx) => ({ question: qq, idx }))
+                .filter(({ idx }) => idx !== index)
+                .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
               ratingSiblings={questions
                 .map((qq, idx) => ({ q: qq, idx }))
                 .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== index)
@@ -290,7 +294,7 @@ export default function SurveyDetailPage() {
             />
           ) : (
             <div key={index} className="rounded-lg border border-border p-4 text-sm">
-              <span className="text-xs text-muted-foreground">Q{index + 1} ¡P {q.type}</span>
+              <span className="text-xs text-muted-foreground">Q{index + 1} ï¿½P {q.type}</span>
               <p className="mt-1 font-medium">{q.title}</p>
             </div>
           )
