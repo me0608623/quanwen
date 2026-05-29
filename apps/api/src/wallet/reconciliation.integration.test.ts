@@ -184,9 +184,9 @@ describe('ReconciliationService.runDaily (integration)', () => {
     expect(fails).toEqual([]);
     expect(report.unbalancedTransactions).toEqual([]);
 
-    // wallets 加總應等於 problem.surveyor 餘額 + respondent 餘額 = (1000 - 220) + 200 = 980
-    expect(report.totals.walletSum).toBe(980);
-    expect(report.totals.platformFeeRevenue).toBe(20);
+    // wallets 加總應等於 problem.surveyor 餘額 + respondent 餘額 = (1000 - 230) + 200 = 970 (fee=15%: 30)
+    expect(report.totals.walletSum).toBe(970);
+    expect(report.totals.platformFeeRevenue).toBe(30);
     expect(report.totals.rewardPayableOutstanding).toBe(0);
   });
 

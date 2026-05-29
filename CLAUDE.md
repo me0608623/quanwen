@@ -24,6 +24,9 @@ pnpm --filter api test:coverage
 pnpm --filter web test:e2e   # Playwright E2E (full browser)
 pnpm --filter web test:e2e --headed  # Playwright with visible browser
 
+# Run a single test file
+pnpm --filter api test src/wallet/wallet.service.test.ts
+
 # Static analysis
 pnpm lint                    # ESLint across all apps
 pnpm type-check              # tsc --noEmit across all apps
@@ -37,7 +40,9 @@ pnpm --filter api db:generate  # Generate migration files
 pnpm --filter api db:reset     # Wipe + re-seed
 ```
 
-**Test accounts** (password `000` for all): `user@quanwen.com` (admin), `user1@quanwen.com`, `user2@quanwen.com`.
+**Test accounts** (password `000` for all): `user@quanwen.com` (admin → `/admin`), `user1@quanwen.com` (surveyor → `/dashboard`), `user2@quanwen.com` (respondent → `/dashboard`).
+
+**E2E aliases** in `apps/web/e2e/helpers/auth.ts`: `aa`=user2, `bb`=user1, `cc`=admin. Use `login(page, 'aa')` in specs.
 
 **Windows double-click launch**: `start-quanwen.bat` (vault root) auto-starts Docker, waits for Postgres, seeds, then opens two terminal windows for API and Web. `stop-quanwen.bat` shuts them down.
 
@@ -51,12 +56,12 @@ pnpm --filter api db:reset     # Wipe + re-seed
 
 ### API Module Map
 
-Every feature is a NestJS module: `auth`, `profile`, `tags`, `surveys`, `responses`, `mutual`, `wallet`, `notifications`, `admin`, `ai-audit`, `mail`, `kyc`, `point-shop`.
+Every feature is a NestJS module: `auth`, `profile`, `tags`, `surveys`, `responses`, `mutual`, `wallet`, `notifications`, `admin`, `ai-audit`, `mail`, `kyc`, `point-shop`, `spin`, `appeals`, `export`, `reconciliation`.
 
 Pattern inside each module: `controller → service → Drizzle ORM → DB`.
 
 Key cross-cutting modules:
-- `db/` — `@Global()` `DatabaseModule` exports a single `AppDb` (Drizzle) token. All services inject `@Inject(DB_TOKEN) private db: AppDb`.
+- `db/` — `@Global()` `DatabaseModule` exports a single `AppDb` (Drizzle) token. All services inject `@Inject(DB) private db: AppDb`.
 - `ai-audit/` — `ZaiClient` wraps Z.ai GLM-5.1. Used by `SurveysService` (AI draft + async quality audit) and `MutualService` (response quality gate).
 - `common/pipes/zod-validation.pipe.ts` — Applied globally. DTOs use Zod schemas, not class-validator.
 - `common/filters/http-exception.filter.ts` — Global exception filter; standardises error shape.
@@ -78,6 +83,18 @@ Key cross-cutting modules:
 - Zustand is used for lightweight client-only state (e.g. `behavior-tracker`).
 - Auth pages live at `/auth/<name>/page.tsx` — **not** a route group. Navbar hides itself on `/auth/*` via `usePathname()`.
 
+### Response Quality Audit Pipeline
+
+Three layers run sequentially on every submitted response:
+
+1. **Layer 1 — Anti-Cheat** (`AntiCheatService`): deterministic heuristics (fill duration, duplicate detection, suspicious flags). Score 0-100.
+2. **Layer 2 — Behavioral scoring** (`QualityAuditService`): weighted signals — behavior (25%), attention check (20%), reverse-consistency (15%), text relevance (15%), AI-detection (10%), reputation (10%), timing (5%).
+3. **Layer 3 — LLM judge** (`ZaiClient` GLM-5.1): only triggered for gray-zone responses (50-79). Produces `llmScore` + `llmReasoning`.
+
+Final `qualityScore` thresholds: **≥80 = passed** (auto-reward), **50-79 = suspicious** (may trigger LLM), **<50 = rejected** (no reward). Full breakdown stored in `surveyResponses.qualityBreakdown` (JSONB).
+
+`ReputationService` maintains a rolling reputation score per respondent based on their quality history.
+
 ### Mutual Survey Flow
 
 1. Surveyor publishes a `type='mutual'` survey → enters FIFO waiting pool.
@@ -97,7 +114,22 @@ JWT-based. `passport-jwt` validates `Authorization: Bearer <token>` on all `@Use
 
 All monetary amounts are stored as **integers in New Taiwan Dollars (NT$)**. Never use floats.
 
-Double-entry accounting: every `WalletService` mutation creates both a `transactions` record and two `journal_entries` (debit + credit). Survey publication locks budget (`lockedCash`); survey close releases unused budget back to `cashBalance`. Platform takes 10% fee on each reward payout.
+Double-entry accounting: every `WalletService` mutation creates both a `transactions` record and two `journal_entries` (debit + credit). Survey publication locks budget (`lockedCash`); survey close releases unused budget back to `cashBalance`. Platform takes **15%** fee on each reward payout (`PLATFORM_FEE_RATE = 0.15`).
+
+ECPay deposit limits: NT$100–NT$100,000 per transaction. Withdrawal limits: NT$300 minimum, NT$30,000 maximum per day. KYC verification is required before withdrawal.
+
+Reconciliation runs via `ReconciliationService` to cross-check ECPay callbacks against internal transaction records.
+
+### Export Formats
+
+`ExportService` (`apps/api/src/responses/export.service.ts`) supports four formats for survey creators:
+- **PDF** — stats summary via `pdfmake` (non-streaming; demo uses standard 14 fonts; prod needs Noto Sans TC embed for Chinese).
+- **Excel (buffered)** — `exceljs`, two sheets: Responses + Summary. Suitable for smaller datasets.
+- **CSV (streaming)** — keyset-cursor pagination in batches of 500, constant memory. UTF-8 BOM prepended for Excel compatibility.
+- **Excel (streaming)** — `exceljs` streaming WorkbookWriter, same keyset approach.
+- **Markdown** — aggregated stats report.
+
+Text-type answers (`text`, `matrix`) are passed through `redactPii()` before export. `cleanOnly` mode filters responses below a configurable `minQualityScore` (default 70).
 
 ## Key Rules
 
@@ -110,6 +142,7 @@ Double-entry accounting: every `WalletService` mutation creates both a `transact
 ❌ Call respondent wallet "儲值" ✅ "待領獎勵" / "我的收益"
 ❌ Self-collect payments        ✅ ECPay (綠界) payment gateway only
 ❌ Send PII to Z.ai             ✅ De-identify before any AI call
+❌ Platform fee = 10%           ✅ PLATFORM_FEE_RATE = 0.15 (15%)
 ```
 
 ## Tailwind Setup Checklist

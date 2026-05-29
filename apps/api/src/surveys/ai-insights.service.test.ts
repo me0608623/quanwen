@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AiInsightsService } from './ai-insights.service';
 import type { ZaiClient } from '../ai-audit/zai.client';
+import { clearInsightsCache } from './analysis/insights-cache';
 
 // 最小 stats 輸入（3 份以上才會打 LLM）
 const stats = {
@@ -36,6 +37,10 @@ function makeService(chatImpl: (...a: unknown[]) => Promise<string>) {
 }
 
 describe('AiInsightsService — 簡單/詳細報告分級', () => {
+  beforeEach(() => {
+    clearInsightsCache();
+  });
+
   it('simple：LLM 成功 → reportType=simple，無 detailed 區塊', async () => {
     const { svc } = makeService(async () =>
       JSON.stringify({

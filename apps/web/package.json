@@ -35,6 +35,8 @@
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.51.0",
     "recharts": "^3.8.1",
+    "survey-core": "^2.5.26",
+    "survey-react-ui": "^2.5.26",
     "tailwind-merge": "^2.2.2",
     "tailwindcss-animate": "^1.0.7",
     "three": "^0.184.0",

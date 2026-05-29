@@ -84,7 +84,7 @@ export function QuestionEditor({
   };
 
   const addOption = () => {
-    const options = [...(question.options ?? []), { label: '', sortOrder: question.options?.length ?? 0 }];
+    const options = [...(question.options ?? []), { id: crypto.randomUUID(), label: '', sortOrder: question.options?.length ?? 0 }];
     onChange({ ...question, options });
   };
 
@@ -154,7 +154,7 @@ export function QuestionEditor({
       onChange({
         ...question,
         type: 'single_choice',
-        options: question.options?.length ? question.options : [{ label: '', sortOrder: 0 }, { label: '', sortOrder: 1 }],
+        options: question.options?.length ? question.options : [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }],
         config: { ...baseConfig, renderAs: 'dropdown' },
       });
       return;
@@ -163,7 +163,7 @@ export function QuestionEditor({
       onChange({
         ...question,
         type: nextType,
-        options: question.options?.length ? question.options : [{ label: '', sortOrder: 0 }, { label: '', sortOrder: 1 }],
+        options: question.options?.length ? question.options : [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }],
         config: baseConfig,
       });
       return;

@@ -232,6 +232,12 @@ importers:
       recharts:
         specifier: ^3.8.1
         version: 3.8.1(@types/react@18.3.28)(react-dom@18.3.1(react@18.3.1))(react-is@18.3.1)(react@18.3.1)(redux@5.0.1)
+      survey-core:
+        specifier: ^2.5.26
+        version: 2.5.26
+      survey-react-ui:
+        specifier: ^2.5.26
+        version: 2.5.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(survey-core@2.5.26)
       tailwind-merge:
         specifier: ^2.2.2
         version: 2.6.1
@@ -5534,6 +5540,16 @@ packages:
   supports-preserve-symlinks-flag@1.0.0:
     resolution: {integrity: sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w==}
     engines: {node: '>= 0.4'}
+
+  survey-core@2.5.26:
+    resolution: {integrity: sha512-8vF+tejzWJpIp/YXtcaMqi3rjST6NIQCwibHlaSu9Vt/ToQK+6Zny7c//ujxhpdBXi0vc+bRLSQWTWn5SWDdNg==}
+
+  survey-react-ui@2.5.26:
+    resolution: {integrity: sha512-/w/PMeOonn9QpAEdQwDXeauAGtuLF9UqBNragl/kdNwXyx3DQPqQ1sCX30ZahYkhmlE/rLvcynlKACtVEB/JUA==}
+    peerDependencies:
+      react: ^16.5.0 || ^17.0.1 || ^18.1.0 || ^19.0.0
+      react-dom: ^16.5.0 || ^17.0.1 || ^18.1.0 || ^19.0.0
+      survey-core: 2.5.26
 
   swagger-ui-dist@5.17.14:
     resolution: {integrity: sha512-CVbSfaLpstV65OnSjbXfVd6Sta3q3F7Cj/yYuvHMp1P90LztOLs6PfUnKEVAeiIVQt9u2SaPwv0LiH/OyMjHRw==}
@@ -11601,6 +11617,14 @@ snapshots:
       has-flag: 4.0.0
 
   supports-preserve-symlinks-flag@1.0.0: {}
+
+  survey-core@2.5.26: {}
+
+  survey-react-ui@2.5.26(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(survey-core@2.5.26):
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+      survey-core: 2.5.26
 
   swagger-ui-dist@5.17.14: {}
 
