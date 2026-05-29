@@ -16,7 +16,9 @@ import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { QuestionBlockList } from '@/components/survey-editor/question-block-list';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
+import { SurveyEditorShell } from '@/components/survey-editor/survey-editor-shell';
 import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-modal';
 import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
@@ -46,6 +48,7 @@ export default function SurveyDetailPage() {
   const [audience, setAudience] = useState<AudienceCriteria>({});
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!survey) return;
@@ -106,157 +109,77 @@ export default function SurveyDetailPage() {
 
   const removeQuestion = (index: number) => {
     setQuestions((prev) => prev.filter((_, idx) => idx !== index).map((q, idx) => ({ ...q, sortOrder: idx })));
+    // Adjust selected index
+    setSelectedQuestionIndex((prev) => {
+      if (prev === null) return null;
+      if (prev === index) return null;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
     markDirty();
   };
 
-  const addQuestion = () => {
-    setQuestions((prev) => [
-      ...prev,
-      {
-        type: 'single_choice',
+  const addQuestion = (type: SurveyQuestion['type'] = 'single_choice') => {
+    setQuestions((prev) => {
+      const newQ: SurveyQuestion = {
+        type,
         title: '',
         sortOrder: prev.length,
         isRequired: true,
-        options: [{ label: '', sortOrder: 0 }, { label: '', sortOrder: 1 }],
-      },
-    ]);
+        ...(type === 'single_choice' || type === 'multiple_choice'
+          ? { options: [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }] }
+          : {}),
+      };
+      return [...prev, newQ];
+    });
+    setSelectedQuestionIndex(questions.length);
+    markDirty();
+  };
+
+  const handleReorder = (reordered: SurveyQuestion[]) => {
+    setQuestions(reordered);
+    setSelectedQuestionIndex(null);
     markDirty();
   };
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">Loading survey...</div>;
   if (!survey) return <div className="p-10 text-sm text-destructive">Survey not found.</div>;
 
-  return (
-    <main className="mx-auto max-w-4xl space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <button onClick={() => router.push('/dashboard')} className="text-sm text-muted-foreground hover:underline">
-            Back to dashboard
-          </button>
-          <h1 className="mt-1 text-2xl font-bold">{survey.title}</h1>
-          <p className="text-sm text-muted-foreground">{STATUS_LABELS[survey.status] ?? survey.status}</p>
-        </div>
+  // ─── Sidebar: Questions tab content ────────────────────────────
+  const questionsSidebar = (
+    <QuestionBlockList
+      questions={questions}
+      canEdit={canEdit}
+      onReorder={handleReorder}
+      onDelete={removeQuestion}
+      onAdd={addQuestion}
+      selectedIndex={selectedQuestionIndex ?? undefined}
+      onSelect={setSelectedQuestionIndex}
+    />
+  );
 
-        {canEdit && (
-          <div className="flex gap-2">
-            {dirty && (
-              <button
-                onClick={handleSave}
-                disabled={updateSurvey.isPending}
-                className="rounded-md border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
-              >
-                {updateSurvey.isPending ? 'Saving...' : 'Save Draft'}
-              </button>
-            )}
-            <button
-              onClick={handlePublish}
-              disabled={publishSurvey.isPending}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-            >
-              Publish
-            </button>
-            <button onClick={handleDelete} className="text-sm text-destructive hover:underline">
-              Delete
-            </button>
-          </div>
-        )}
+  // ─── Sidebar: Settings tab content ─────────────────────────────
+  const settingsSidebar = (
+    <div className="space-y-4 p-3">
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Target Audience
+        </h3>
+        <AudienceTargeting
+          value={audience}
+          onChange={(next) => {
+            setAudience(next);
+            markDirty();
+          }}
+          showReputation={false}
+          disabled={!canEdit}
+        />
       </div>
 
-      {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
-          Insufficient budget to publish. Required: NT${budgetCheck.requiredAmount.toLocaleString()}, wallet: NT$
-          {budgetCheck.walletBalance.toLocaleString()}. <Link href="/wallet" className="underline">Top up wallet</Link>.
-        </div>
-      )}
-
-      {canEdit && (
-        <section className="space-y-3 rounded-lg border border-border p-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Live Preview</h2>
-            <button
-              type="button"
-              onClick={() => setShowPreview(true)}
-              className="rounded-md border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-            >
-              Open Large Preview
-            </button>
-          </div>
-          <SurveyPreviewPlayer
-            title={livePreviewDraft.title}
-            description={livePreviewDraft.description}
-            questions={livePreviewDraft.questions}
-          />
-        </section>
-      )}
-
-      <SurveyPreviewModal
-        title={livePreviewDraft.title}
-        description={livePreviewDraft.description}
-        questions={livePreviewDraft.questions}
-        open={showPreview}
-        onClose={() => setShowPreview(false)}
-      />
-
-      {canEdit && (
-        <AiDraftPanel
-          onApply={(draft) => {
-            setTitle(draft.title);
-            setDescription(draft.description ?? '');
-            setQuestions(draft.questions.map((q, idx) => ({ ...q, sortOrder: idx })));
-            markDirty();
-          }}
-        />
-      )}
-
-      {survey.questions.length > 0 && <AiImprovePanel surveyId={survey.id} />}
-
-      {canEdit && questions.length > 0 && (
-        <AntiCheatPanel
-          surveyId={survey.id}
-          questions={questions}
-          onApplyChecks={(next) => {
-            setQuestions(next);
-            markDirty();
-          }}
-        />
-      )}
-
-      <section className="space-y-3 rounded-lg border border-border p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic Info</h2>
-        <input
-          type="text"
-          value={title}
-          onChange={(e) => {
-            setTitle(e.target.value);
-            markDirty();
-          }}
-          disabled={!canEdit}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
-        />
-        <textarea
-          value={description}
-          onChange={(e) => {
-            setDescription(e.target.value);
-            markDirty();
-          }}
-          disabled={!canEdit}
-          rows={3}
-          className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
-        />
-      </section>
-
-      <AudienceTargeting
-        value={audience}
-        onChange={(next) => {
-          setAudience(next);
-          markDirty();
-        }}
-        showReputation={false}
-        disabled={!canEdit}
-      />
-
-      <section className="space-y-3 rounded-lg border border-border p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Minimum Reputation</h2>
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          Minimum Reputation
+        </h3>
         <input
           type="range"
           min={0}
@@ -270,46 +193,196 @@ export default function SurveyDetailPage() {
           disabled={!canEdit}
           className="w-full"
         />
-      </section>
+        <span className="text-xs text-muted-foreground">{minReputation}</span>
+      </div>
 
-      <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Questions ({questions.length})</h2>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="w-full rounded-md border border-destructive/30 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          Delete Survey
+        </button>
+      )}
+    </div>
+  );
 
-        {questions.map((q, index) => (
-          canEdit ? (
-            <QuestionEditor
-              key={index}
-              question={q}
-              index={index}
-              onChange={(next) => updateQuestion(index, next)}
-              onRemove={() => removeQuestion(index)}
-              jumpTargets={questions
-                .map((qq, idx) => ({ question: qq, idx }))
-                .filter(({ idx }) => idx !== index)
-                .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
-              ratingSiblings={questions
-                .map((qq, idx) => ({ q: qq, idx }))
-                .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== index)
-                .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
-            />
-          ) : (
-            <div key={index} className="rounded-lg border border-border p-4 text-sm">
-              <span className="text-xs text-muted-foreground">Q{index + 1} �P {q.type}</span>
-              <p className="mt-1 font-medium">{q.title}</p>
-            </div>
-          )
-        ))}
+  // ─── Determine what to show in center content ──────────────────
+  const centerContent = (() => {
+    // If a specific question is selected, show its editor
+    if (selectedQuestionIndex !== null && selectedQuestionIndex < questions.length) {
+      const q = questions[selectedQuestionIndex];
+      return canEdit ? (
+        <QuestionEditor
+          question={q}
+          index={selectedQuestionIndex}
+          onChange={(next) => updateQuestion(selectedQuestionIndex, next)}
+          onRemove={() => removeQuestion(selectedQuestionIndex)}
+          jumpTargets={questions
+            .map((qq, idx) => ({ question: qq, idx }))
+            .filter(({ idx }) => idx !== selectedQuestionIndex)
+            .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
+          ratingSiblings={questions
+            .map((qq, idx) => ({ q: qq, idx }))
+            .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== selectedQuestionIndex)
+            .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
+        />
+      ) : (
+        <div className="rounded-lg border border-border p-4 text-sm">
+          <span className="text-xs text-muted-foreground">Q{selectedQuestionIndex + 1} — {q.type}</span>
+          <p className="mt-1 font-medium">{q.title}</p>
+        </div>
+      );
+    }
 
-        {canEdit && (
-          <button
-            type="button"
-            onClick={addQuestion}
-            className="w-full rounded-lg border-2 border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
-          >
-            + Add Question
-          </button>
+    // Default: show all content (overview mode)
+    return (
+      <div className="space-y-6">
+        {/* Budget warning */}
+        {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
+          <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+            Insufficient budget to publish. Required: NT${budgetCheck.requiredAmount.toLocaleString()}, wallet: NT$
+            {budgetCheck.walletBalance.toLocaleString()}. <Link href="/wallet" className="underline">Top up wallet</Link>.
+          </div>
         )}
-      </section>
-    </main>
+
+        {/* AI Draft panel */}
+        {canEdit && (
+          <AiDraftPanel
+            onApply={(draft) => {
+              setTitle(draft.title);
+              setDescription(draft.description ?? '');
+              setQuestions(draft.questions.map((q, idx) => ({ ...q, sortOrder: idx })));
+              markDirty();
+            }}
+          />
+        )}
+
+        {/* AI Improve */}
+        {survey.questions.length > 0 && <AiImprovePanel surveyId={survey.id} />}
+
+        {/* Anti-cheat */}
+        {canEdit && questions.length > 0 && (
+          <AntiCheatPanel
+            surveyId={survey.id}
+            questions={questions}
+            onApplyChecks={(next) => {
+              setQuestions(next);
+              markDirty();
+            }}
+          />
+        )}
+
+        {/* Basic Info section */}
+        <section className="space-y-3 rounded-lg border border-border p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic Info</h2>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              markDirty();
+            }}
+            disabled={!canEdit}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              markDirty();
+            }}
+            disabled={!canEdit}
+            rows={3}
+            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+          />
+        </section>
+
+        {/* Questions section */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Questions ({questions.length})
+          </h2>
+
+          {questions.map((q, index) =>
+            canEdit ? (
+              <QuestionEditor
+                key={index}
+                question={q}
+                index={index}
+                onChange={(next) => updateQuestion(index, next)}
+                onRemove={() => removeQuestion(index)}
+                jumpTargets={questions
+                  .map((qq, idx) => ({ question: qq, idx }))
+                  .filter(({ idx }) => idx !== index)
+                  .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
+                ratingSiblings={questions
+                  .map((qq, idx) => ({ q: qq, idx }))
+                  .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== index)
+                  .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
+              />
+            ) : (
+              <div key={index} className="rounded-lg border border-border p-4 text-sm">
+                <span className="text-xs text-muted-foreground">Q{index + 1} — {q.type}</span>
+                <p className="mt-1 font-medium">{q.title}</p>
+              </div>
+            ),
+          )}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => addQuestion('single_choice')}
+              className="w-full rounded-lg border-2 border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
+            >
+              + Add Question
+            </button>
+          )}
+        </section>
+      </div>
+    );
+  })();
+
+  return (
+    <>
+      <SurveyEditorShell
+        surveyTitle={title}
+        onTitleChange={(t) => {
+          setTitle(t);
+          markDirty();
+        }}
+        canEdit={canEdit}
+        statusLabel={STATUS_LABELS[survey.status] ?? survey.status}
+        dirty={dirty}
+        savePending={updateSurvey.isPending}
+        publishPending={publishSurvey.isPending}
+        onSave={handleSave}
+        onPublish={handlePublish}
+        onBack={() => router.push('/dashboard')}
+        questionsSidebar={questionsSidebar}
+        settingsSidebar={settingsSidebar}
+        previewOpen={showPreview}
+        onPreviewToggle={() => setShowPreview((prev) => !prev)}
+        previewPane={
+          <SurveyPreviewPlayer
+            title={livePreviewDraft.title}
+            description={livePreviewDraft.description}
+            questions={livePreviewDraft.questions}
+          />
+        }
+      >
+        {centerContent}
+      </SurveyEditorShell>
+
+      {/* Full-screen preview modal */}
+      <SurveyPreviewModal
+        title={livePreviewDraft.title}
+        description={livePreviewDraft.description}
+        questions={livePreviewDraft.questions}
+        open={false}
+        onClose={() => {}}
+      />
+    </>
   );
 }
