@@ -17,8 +17,8 @@ const defaultQuestion = (): SurveyQuestion => ({
   sortOrder: 0,
   isRequired: true,
   options: [
-    { label: '', sortOrder: 0 },
-    { label: '', sortOrder: 1 },
+    { id: crypto.randomUUID(), label: '', sortOrder: 0 },
+    { id: crypto.randomUUID(), label: '', sortOrder: 1 },
   ],
 });
 
@@ -354,6 +354,7 @@ export default function NewSurveyPage() {
         )}
         <button
           type="button"
+          aria-label="Save draft"
           onClick={handleSaveDraft}
           disabled={createSurvey.isPending}
           className="rounded-md bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
