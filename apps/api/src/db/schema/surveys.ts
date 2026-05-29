@@ -80,6 +80,12 @@ export const surveys = pgTable(
     // cash → NT$ 每份金額；points → 每份積分數量
     rewardPoints: integer('reward_points').notNull().default(0),
 
+    // QUA-34: Rush delivery — 4-tier deadline system
+    // standard=14d/1.0x | express=7d/1.2x | urgent=3d/1.5x | critical=24h/1.75x
+    deadlineTier: varchar('deadline_tier', { length: 16 }).notNull().default('standard'),
+    // baseRewardPoints = original reward before rush multiplier; rewardPoints = inflated effective value
+    baseRewardPoints: integer('base_reward_points').notNull().default(0),
+
     // 受眾條件（JSON，儲存篩選規則）
     audienceCriteria: jsonb('audience_criteria'),
 

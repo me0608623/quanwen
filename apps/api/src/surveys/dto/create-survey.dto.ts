@@ -48,6 +48,9 @@ export const CreateSurveySchema = z.object({
   rewardPoints: z.number().int().min(0).max(1000).default(0),
   targetCount: z.number().int().min(1).max(10000).default(100),
   expiresAt: z.string().datetime().optional(),
+  // QUA-34: Rush delivery tier — controls rush multiplier on rewardPoints and default expiresAt
+  // Optional; defaults to 'standard' (1.0x, 14 days) in SurveysService.create
+  deadlineTier: z.enum(['standard', 'express', 'urgent', 'critical']).optional(),
   isAnonymous: z.boolean().default(true),
   audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),

@@ -115,6 +115,21 @@ export const SURVEY_CATEGORY_LABELS: Record<SurveyCategory, string> = {
   other:     '其他',
 };
 
+export type DeadlineTier = 'standard' | 'express' | 'urgent' | 'critical';
+
+export const DEADLINE_TIER_OPTIONS: Array<{
+  value: DeadlineTier;
+  label: string;
+  days: number;
+  multiplier: number;
+  hint: string;
+}> = [
+  { value: 'standard', label: '標準 (14天)',  days: 14, multiplier: 1.00, hint: '基準費率' },
+  { value: 'express',  label: '快速 (7天)',   days: 7,  multiplier: 1.20, hint: '+20% 獎勵' },
+  { value: 'urgent',   label: '緊急 (3天)',   days: 3,  multiplier: 1.50, hint: '+50% 獎勵' },
+  { value: 'critical', label: '超急 (24小時)', days: 1,  multiplier: 1.75, hint: '+75% 獎勵，未達標全額退款' },
+];
+
 export interface Survey {
   id: string;
   title: string;
@@ -125,6 +140,8 @@ export interface Survey {
   aiReviewEnabled?: boolean;
   externalUrl?: string | null;
   rewardPoints: number;
+  baseRewardPoints?: number;
+  deadlineTier?: DeadlineTier;
   targetCount: number;
   completedCount: number;
   expiresAt?: string;

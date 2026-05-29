@@ -26,6 +26,26 @@ import {
 
 // Phase II.12: 原 inline prompt 已移到 prompts.ts 的 SURVEY_DRAFT (v2.0.0)
 
+// ─── QUA-34: Rush delivery tier constants ─────────────────────────────────────
+export type DeadlineTier = 'standard' | 'express' | 'urgent' | 'critical';
+
+export const RUSH_TIERS: Record<DeadlineTier, { days: number; multiplier: number }> = {
+  standard: { days: 14,  multiplier: 1.00 },
+  express:  { days: 7,   multiplier: 1.20 },
+  urgent:   { days: 3,   multiplier: 1.50 },
+  critical: { days: 1,   multiplier: 1.75 },
+};
+
+export function applyRushMultiplier(basePoints: number, tier: DeadlineTier): number {
+  return Math.round(basePoints * RUSH_TIERS[tier].multiplier);
+}
+
+export function tierExpiresAt(tier: DeadlineTier, from = new Date()): Date {
+  const d = new Date(from);
+  d.setDate(d.getDate() + RUSH_TIERS[tier].days);
+  return d;
+}
+
 @Injectable()
 export class SurveysService {
   private readonly logger = new Logger(SurveysService.name);
@@ -40,6 +60,12 @@ export class SurveysService {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   async create(surveyorId: string, dto: CreateSurveyDto) {
+    const tier = (dto.deadlineTier ?? 'standard') as DeadlineTier;
+    const basePoints = dto.rewardPoints ?? 0;
+    const effectivePoints = applyRushMultiplier(basePoints, tier);
+    // If caller explicitly set expiresAt use it; otherwise derive from tier
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : tierExpiresAt(tier);
+
     const inserted = await this.db
       .insert(surveys)
       .values({
@@ -50,9 +76,11 @@ export class SurveysService {
         category: dto.category,
         aiReviewEnabled: dto.aiReviewEnabled ?? true,
         externalUrl: dto.externalUrl,
-        rewardPoints: dto.rewardPoints ?? 0,
+        rewardPoints: effectivePoints,
+        baseRewardPoints: basePoints,
+        deadlineTier: tier,
         targetCount: dto.targetCount ?? 100,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+        expiresAt,
         isAnonymous: dto.isAnonymous ?? true,
         audienceCriteria: dto.audienceCriteria,
       })
