@@ -9,6 +9,8 @@ import { SurveyExportService } from './template-io/survey-export.service';
 import { SurveyImportService } from './template-io/survey-import.service';
 import { ExcelTemplateService } from './template-io/excel-template.service';
 import { ExcelImportService } from './template-io/excel-import.service';
+// Phase 2: Google Forms HTML 匯入
+import { GoogleFormsImportService } from './template-io/google-forms.service';
 import { AiAuditModule } from '../ai-audit/ai-audit.module';
 import { WalletModule } from '../wallet/wallet.module';
 
@@ -24,6 +26,7 @@ import { WalletModule } from '../wallet/wallet.module';
     SurveyImportService,
     ExcelTemplateService,
     ExcelImportService,
+    GoogleFormsImportService,
   ],
   exports: [SurveysService, AiInsightsService],
 })

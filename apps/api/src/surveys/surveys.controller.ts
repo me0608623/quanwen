@@ -24,6 +24,8 @@ import { SurveyExportService } from './template-io/survey-export.service';
 import { SurveyImportService } from './template-io/survey-import.service';
 import { ExcelTemplateService } from './template-io/excel-template.service';
 import { ExcelImportService } from './template-io/excel-import.service';
+import { GoogleFormsImportService } from './template-io/google-forms.service';
+import { GoogleFormsImportSchema, GoogleFormsImportDto } from './template-io/google-forms.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { WalletService } from '../wallet/wallet.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -46,6 +48,7 @@ export class SurveysController {
     private readonly importService: SurveyImportService,
     private readonly excelTemplate: ExcelTemplateService,
     private readonly excelImport: ExcelImportService,
+    private readonly googleFormsImport: GoogleFormsImportService,
   ) {}
 
   /** GET /surveys/assistant — surveyor 專屬 AI 助手「下一步建議」*/
@@ -234,6 +237,25 @@ export class SurveysController {
     }
     const user = req.user as AuthenticatedUser;
     const result = await this.excelImport.importFromXlsx(user.id, file.buffer);
+    return { success: true, data: result };
+  }
+
+  /**
+   * POST /surveys/import/google-forms
+   * 從 Google Forms viewform 匯入問卷。Body 二擇一:
+   *   - { "url": "https://docs.google.com/forms/d/e/<id>/viewform" }
+   *   - { "html": "<整份 viewform HTML>" }
+   * URL 路徑走 SSRF 防護白名單;HTML 路徑供離線/需登入 forms 的 fallback。
+   * 不支援題型(date/time/file_upload 等)會列入 warnings 但不擋整份匯入。
+   */
+  @Post('import/google-forms')
+  @HttpCode(HttpStatus.CREATED)
+  async importGoogleForms(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(GoogleFormsImportSchema)) dto: GoogleFormsImportDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const result = await this.googleFormsImport.importFromGoogleForms(user.id, dto);
     return { success: true, data: result };
   }
 
