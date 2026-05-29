@@ -49,14 +49,17 @@ export default function SurveyDetailPage() {
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
     if (!survey) return;
+    if (dirty && initialized) return; // don't overwrite unsaved edits
     setTitle(survey.title);
     setDescription(survey.description ?? '');
     setQuestions(survey.questions);
     setMinReputation(Number(survey.audienceCriteria?.minReputationScore ?? 0));
     setAudience(survey.audienceCriteria ?? {});
+    setInitialized(true);
   }, [survey]);
 
   const canEdit = survey?.status === 'draft' || survey?.status === 'rejected';
@@ -86,6 +89,7 @@ export default function SurveyDetailPage() {
   const handlePublish = async () => {
     try {
       await publishSurvey.mutateAsync(id);
+      alert('問卷已成功發佈！');
     } catch (err) {
       showAxiosError(err, 'Failed to publish survey.');
     }
@@ -120,6 +124,7 @@ export default function SurveyDetailPage() {
   };
 
   const addQuestion = (type: SurveyQuestion['type'] = 'single_choice') => {
+    let newIndex = 0;
     setQuestions((prev) => {
       const newQ: SurveyQuestion = {
         type,
@@ -130,9 +135,10 @@ export default function SurveyDetailPage() {
           ? { options: [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }] }
           : {}),
       };
+      newIndex = prev.length;
       return [...prev, newQ];
     });
-    setSelectedQuestionIndex(questions.length);
+    setSelectedQuestionIndex(newIndex);
     markDirty();
   };
 
@@ -380,8 +386,8 @@ export default function SurveyDetailPage() {
         title={livePreviewDraft.title}
         description={livePreviewDraft.description}
         questions={livePreviewDraft.questions}
-        open={false}
-        onClose={() => {}}
+        open={showPreview}
+        onClose={() => setShowPreview(false)}
       />
     </>
   );
