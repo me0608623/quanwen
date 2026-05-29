@@ -8,6 +8,8 @@ import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-card';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const defaultQuestion = (): SurveyQuestion => ({
   type: 'single_choice',
@@ -34,6 +36,7 @@ export default function NewSurveyPage() {
   const [targetCount, setTargetCount] = useState(100);
   const [audience, setAudience] = useState<AudienceCriteria>({});
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
+  const livePreviewDraft = useDebouncedValue({ title, description, questions }, 300);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
   const pricingAdvice = usePricingAdvice();
@@ -315,6 +318,10 @@ export default function NewSurveyPage() {
             index={i}
             onChange={(updated) => updateQuestion(i, updated)}
             onRemove={() => removeQuestion(i)}
+            jumpTargets={questions
+              .map((qq, idx) => ({ question: qq, idx }))
+              .filter(({ idx }) => idx !== i)
+              .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
             ratingSiblings={questions
               .map((qq, idx) => ({ q: qq, idx }))
               .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== i)
@@ -329,6 +336,15 @@ export default function NewSurveyPage() {
         >
           + 新增題目
         </button>
+      </section>
+
+      <section className="space-y-3 rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Live Preview</h2>
+        <SurveyPreviewPlayer
+          title={livePreviewDraft.title}
+          description={livePreviewDraft.description}
+          questions={livePreviewDraft.questions}
+        />
       </section>
 
       {/* Actions */}

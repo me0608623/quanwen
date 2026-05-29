@@ -1,5 +1,5 @@
 import { Module, forwardRef } from '@nestjs/common';
-import { ResponsesController, TasksController } from './responses.controller';
+import { PublicTasksController, ResponsesController, TasksController } from './responses.controller';
 import { ResponsesService } from './responses.service';
 import { AntiCheatService } from './anti-cheat.service';
 import { QualityAuditService } from './quality-audit.service';
@@ -15,7 +15,7 @@ import { SpinModule } from '../spin/spin.module';
 
 @Module({
   imports: [WalletModule, NotificationsModule, forwardRef(() => SurveysModule), AiAuditModule, SpinModule],
-  controllers: [ResponsesController, TasksController],
+  controllers: [ResponsesController, TasksController, PublicTasksController],
   providers: [
     ResponsesService,
     AntiCheatService,

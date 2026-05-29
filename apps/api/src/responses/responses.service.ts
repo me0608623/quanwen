@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { createHash } from 'crypto';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -18,6 +19,7 @@ import {
   responseAnswers,
   respondentProfiles,
   respondentTags,
+  users,
 } from '../db/schema';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { AntiCheatService } from './anti-cheat.service';
@@ -288,7 +290,15 @@ export class ResponsesService {
     );
 
     // 極度可疑（score >= 80）→ 直接標記 rejected，不計入配額
-    const finalStatus = antiCheatResult.score >= 80 ? 'rejected' : 'submitted';
+    // Phase 1: openText 字數 > 10 時先進 pending_review（待人工覆核，不先發獎勵）
+    const hasOpenTextOverThreshold = dto.answers.some(
+      (a) => typeof a.textAnswer === 'string' && a.textAnswer.trim().length > 10,
+    );
+    const finalStatus = antiCheatResult.score >= 80
+      ? 'rejected'
+      : hasOpenTextOverThreshold
+        ? 'pending_review'
+        : 'submitted';
 
     // ── 5. 建立 response 記錄 ────────────────────────────────────────────────
     const inserted = await this.db
@@ -386,6 +396,14 @@ export class ResponsesService {
         );
     }
 
+    if (finalStatus === 'pending_review') {
+      return {
+        message: '已收到填答，正在進行人工複核，完成後會決定是否發放獎勵。',
+        responseId,
+        flagged: true,
+      };
+    }
+
     if (finalStatus === 'rejected') {
       return {
         message: '您的填答已記錄，但系統偵測到異常，請確保認真作答。',
@@ -395,6 +413,38 @@ export class ResponsesService {
     }
 
     return { message: '填答成功，感謝您的參與！', responseId, flagged: false };
+  }
+
+  async submitPublicResponse(surveyId: string, dto: SubmitResponseDto, anonToken?: string) {
+    const token = (anonToken ?? '').trim();
+    if (!token) {
+      throw new BadRequestException('Missing x-anon-token');
+    }
+    const respondentId = await this.resolveAnonymousRespondent(token);
+    return this.submitResponse(surveyId, respondentId, dto);
+  }
+
+  private async resolveAnonymousRespondent(token: string): Promise<string> {
+    const digest = createHash('sha256').update(token).digest('hex');
+    const email = `anon+${digest.slice(0, 24)}@guest.quanwen.local`;
+
+    const existing = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+
+    const created = await this.db
+      .insert(users)
+      .values({
+        email,
+        role: 'respondent',
+        displayName: `guest-${digest.slice(0, 8)}`,
+        emailVerified: false,
+      })
+      .returning({ id: users.id });
+    return created[0].id;
   }
 
   // ─── Quality Audit Pipeline 觸發（fire-and-forget）─────────────────────
@@ -415,7 +465,7 @@ export class ResponsesService {
       const newStatus = breakdown.status === 'rejected'
         ? 'rejected'
         : breakdown.status === 'suspicious'
-          ? 'submitted'   // 仍標為 submitted，但 quality_score 會反映疑似
+          ? 'pending_review'
           : 'submitted';
       await this.db
         .update(surveyResponses)
@@ -735,6 +785,83 @@ export class ResponsesService {
       result.push({ date: key, count: countByDate.get(key) ?? 0 });
     }
     return result;
+  }
+
+  // ─── 問券方：受訪者清單（匿名化 token + 提交時間）───────────────────────────
+
+  async getRespondents(
+    surveyId: string,
+    surveyorId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<{
+    total: number;
+    page: number;
+    pageSize: number;
+    respondents: Array<{
+      anonymousToken: string;
+      status: string;
+      submittedAt: string | null;
+      fillDurationSeconds: number | null;
+      qualityScore: number | null;
+    }>;
+  }> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    const offset = (page - 1) * pageSize;
+
+    const [countRows, rows] = await Promise.all([
+      this.db
+        .select({ cnt: sql<number>`COUNT(*)::int` })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded', 'rejected']),
+          ),
+        ),
+      this.db
+        .select({
+          respondentId: surveyResponses.respondentId,
+          status: surveyResponses.status,
+          submittedAt: surveyResponses.submittedAt,
+          fillDurationSeconds: surveyResponses.fillDurationSeconds,
+          qualityScore: surveyResponses.qualityScore,
+        })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded', 'rejected']),
+          ),
+        )
+        .orderBy(desc(surveyResponses.submittedAt))
+        .limit(pageSize)
+        .offset(offset),
+    ]);
+
+    const total = countRows[0]?.cnt ?? 0;
+
+    // 匿名化：用 SHA-256 hash 取代真實 respondentId（只取前 8 碼作為可讀 token）
+    const respondents = rows.map((r) => {
+      const hash = createHash('sha256').update(r.respondentId).digest('hex');
+      return {
+        anonymousToken: hash.slice(0, 8).toUpperCase(),
+        status: r.status,
+        submittedAt: r.submittedAt?.toISOString() ?? null,
+        fillDurationSeconds: r.fillDurationSeconds,
+        qualityScore: r.qualityScore,
+      };
+    });
+
+    return { total, page, pageSize, respondents };
   }
 
   // ─── 問券方：匯出填答 JSON（結構化，給程式/資料分析用）───────────────────

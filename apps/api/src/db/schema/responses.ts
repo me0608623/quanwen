@@ -18,6 +18,7 @@ import { surveyQuestions } from './surveys';
 export const responseStatusEnum = pgEnum('response_status', [
   'in_progress', // 填答中（尚未提交）
   'submitted',   // 已提交，待發獎勵
+  'pending_review', // 初步審核需人工複核，暫不發獎勵
   'rewarded',    // 獎勵已發放
   'rejected',    // 品質審查不通過（反作弊）
 ]);

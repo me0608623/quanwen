@@ -22,7 +22,7 @@ import { EcpayService } from './ecpay.service';
 import { CryptoService } from '../common/crypto.service';
 import { KycService } from '../kyc/kyc.service';
 
-const PLATFORM_FEE_RATE = 0.1; // 10% 手續費
+const PLATFORM_FEE_RATE = 0.15; // 15% 手續費
 const MIN_WITHDRAWAL = 300;
 const MAX_DAILY_WITHDRAWAL = 30_000;
 
@@ -307,7 +307,7 @@ export class WalletService {
         status: txStatus,
         relatedSurveyId: surveyId,
         relatedResponseId: responseId,
-        note: `平台手續費 10%`,
+        note: `平台手續費 15%`,
         completedAt: txStatus === 'success' ? now : null,
       })
       .returning();

@@ -6,6 +6,7 @@ import {
   Param,
   Query,
   Res,
+  Headers,
   UseGuards,
   Req,
   HttpCode,
@@ -117,6 +118,26 @@ export class TasksController {
 
 }
 
+@Controller('public/tasks')
+export class PublicTasksController {
+  constructor(private readonly responsesService: ResponsesService) {}
+
+  @Get(':id')
+  getPublic(@Param('id') id: string) {
+    return this.responsesService.getPublicSurvey(id);
+  }
+
+  @Post(':id/submit')
+  @HttpCode(HttpStatus.CREATED)
+  submitPublic(
+    @Param('id') id: string,
+    @Headers('x-anon-token') anonToken: string | undefined,
+    @Body(new ZodValidationPipe(SubmitResponseSchema)) dto: SubmitResponseDto,
+  ) {
+    return this.responsesService.submitPublicResponse(id, dto, anonToken);
+  }
+}
+
 // ─── 問券方統計（掛在 /surveys/:id/stats）──────────────────────────────────────
 
 @Controller('surveys')
@@ -127,6 +148,23 @@ export class ResponsesController {
     private readonly aiInsights: AiInsightsService,
     private readonly exportSvc: ExportService,
   ) {}
+
+  /** GET /surveys/:id/respondents — 受訪者清單（匿名化 token） */
+  @Get(':id/respondents')
+  getRespondents(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.responsesService.getRespondents(
+      id,
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+    );
+  }
 
   /** GET /surveys/:id/stats — 問券方查看填答統計 */
   @Get(':id/stats')

@@ -2,7 +2,7 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Delete,
   Body,
   Param,
@@ -103,8 +103,8 @@ export class SurveysController {
     return this.surveysService.findOneDetailed(id, user.id);
   }
 
-  // ─── PUT /surveys/:id ──────────────────────────────────────────────────────
-  @Put(':id')
+  // ─── PATCH /surveys/:id ─────────────────────────────────────────────────────
+  @Patch(':id')
   update(
     @Param('id') id: string,
     @Req() req: Request,

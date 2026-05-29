@@ -49,6 +49,18 @@ export class WalletController {
     return this.wallet.getWallet(user.id);
   }
 
+  // GET /wallet/balance - respondent balance API (Phase 1)
+  @Get('balance')
+  async getBalance(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    const wallet = await this.wallet.getWallet(user.id);
+    return {
+      cashBalance: wallet?.cashBalance ?? 0,
+      pointsBalance: wallet?.pointsBalance ?? 0,
+      lockedCash: wallet?.lockedCash ?? 0,
+    };
+  }
+
   // GET /wallet/earnings-summary — 受試者收益摘要
   @Get('earnings-summary')
   async getEarningsSummary(@Req() req: Request) {

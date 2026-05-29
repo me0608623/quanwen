@@ -204,9 +204,9 @@ function PaginatedSurveyForm({
   submitting: boolean;
   submitError: unknown;
 }) {
-  const PAGE_SIZE = 5;
+  const PAGE_SIZE = 1;
   const total = survey.questions.length;
-  const paginated = total > 6;
+  const paginated = total > 0;
   const totalPages = paginated ? Math.ceil(total / PAGE_SIZE) : 1;
   const pageQuestions = paginated
     ? survey.questions.slice(pageIdx * PAGE_SIZE, (pageIdx + 1) * PAGE_SIZE)
