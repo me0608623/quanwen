@@ -7,14 +7,23 @@ import {
   Body,
   Param,
   UseGuards,
+  UseInterceptors,
+  UploadedFile,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
+  BadRequestException,
 } from '@nestjs/common';
-import type { Request } from 'express';
+import { FileInterceptor } from '@nestjs/platform-express';
+import type { Request, Response } from 'express';
 import { SurveysService } from './surveys.service';
 import { SurveyorAssistantService } from './surveyor-assistant.service';
 import { PricingService } from './pricing/pricing.service';
+import { SurveyExportService } from './template-io/survey-export.service';
+import { SurveyImportService } from './template-io/survey-import.service';
+import { ExcelTemplateService } from './template-io/excel-template.service';
+import { ExcelImportService } from './template-io/excel-import.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { WalletService } from '../wallet/wallet.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -33,6 +42,10 @@ export class SurveysController {
     private readonly walletService: WalletService,
     private readonly assistantService: SurveyorAssistantService,
     private readonly pricingService: PricingService,
+    private readonly exportService: SurveyExportService,
+    private readonly importService: SurveyImportService,
+    private readonly excelTemplate: ExcelTemplateService,
+    private readonly excelImport: ExcelImportService,
   ) {}
 
   /** GET /surveys/assistant — surveyor 專屬 AI 助手「下一步建議」*/
@@ -150,6 +163,78 @@ export class SurveysController {
     @Body(new ZodValidationPipe(PricingAdviceSchema)) dto: PricingAdviceDto,
   ) {
     return this.pricingService.advise(dto);
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // 模板匯入 / 匯出(Phase 1)
+  // 設計藍圖:13-系統深度設計/問卷匯入匯出設計.md
+  // ═══════════════════════════════════════════════════════════════════════════
+
+  /**
+   * GET /surveys/:id/export.json
+   * 匯出問卷模板為 QuanWenSurvey v1 JSON。
+   * 非本人問卷 → 403(由 surveysService.findOneDetailed 內擲出)。
+   */
+  @Get(':id/export.json')
+  async exportJson(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const payload = await this.exportService.exportAsJson(id, user.id);
+    const filename = SurveyExportService.safeFilename(payload.survey.title);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    return payload;
+  }
+
+  /**
+   * POST /surveys/import
+   * 匯入 v1 JSON,建立新問卷(status=draft);AI 審核要等呼叫 /publish 才會跑。
+   * Body 為 raw JSON,由 SurveyImportService 內部用 Zod 驗證,失敗回 422 結構化錯誤。
+   */
+  @Post('import')
+  @HttpCode(HttpStatus.CREATED)
+  async importJson(@Req() req: Request, @Body() body: unknown) {
+    const user = req.user as AuthenticatedUser;
+    const result = await this.importService.importFromJson(user.id, body);
+    return { success: true, data: result };
+  }
+
+  /**
+   * GET /surveys/template/xlsx
+   * 下載空白 Excel 樣板(問卷主填好後再透過 /surveys/import/xlsx 上傳)。
+   */
+  @Get('template/xlsx')
+  async downloadExcelTemplate(@Res({ passthrough: true }) res: Response) {
+    const buf = await this.excelTemplate.generate();
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', `attachment; filename="${ExcelTemplateService.FILENAME}"`);
+    return buf;
+  }
+
+  /**
+   * POST /surveys/import/xlsx
+   * 上傳填好的 Excel 樣板 → 解析為 v1 → 走 importer 落 DB(status=draft)。
+   * 檔案上限 5MB;multer memory storage。
+   */
+  @Post('import/xlsx')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async importXlsx(
+    @Req() req: Request,
+    // multer 的 File 型別需 @types/multer;這裡只取我們真正用到的欄位,避開額外依賴
+    @UploadedFile() file: { buffer?: Buffer; originalname?: string; mimetype?: string; size?: number } | undefined,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('缺少 file 欄位(multipart/form-data)');
+    }
+    const user = req.user as AuthenticatedUser;
+    const result = await this.excelImport.importFromXlsx(user.id, file.buffer);
+    return { success: true, data: result };
   }
 
 }
