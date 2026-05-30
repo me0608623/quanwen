@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase DD: MultiAccountDetector 整合測試
  *
  * 紅線「個資 + 反詐」交叉：偵測同銀行 / 同身分證 / 同手機 / 同 user-agent，
@@ -97,6 +97,8 @@ describe('MultiAccountDetectorService (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

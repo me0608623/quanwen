@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase X: 提領流程 service-level 整合測試
  *
  * 涵蓋（紅線「金流不可亂」+「個資加密」+「複式記帳」）：
@@ -108,6 +108,8 @@ describe('WalletService withdrawal flow (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

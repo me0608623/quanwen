@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+﻿import { Global, Module } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
@@ -124,6 +124,8 @@ export { DB_TOKEN as DB };
               description      TEXT,
               status           survey_status NOT NULL DEFAULT 'draft',
               reward_points    INTEGER      NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
               reward_type      reward_type  NOT NULL DEFAULT 'cash',
               audience_criteria JSONB,
               target_count     INTEGER      NOT NULL DEFAULT 100,

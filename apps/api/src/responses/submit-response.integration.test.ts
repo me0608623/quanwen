@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+﻿import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import type { AppDb } from '../db';
@@ -79,6 +79,8 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
         category survey_category,
         reward_type reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
         is_anonymous BOOLEAN NOT NULL DEFAULT true,

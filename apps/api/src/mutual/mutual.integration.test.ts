@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase B — Mutual 互惠流程整合測試
  *
  * 覆蓋:
@@ -78,6 +78,8 @@ describe('MutualService (integration)', () => {
         external_url  TEXT,
         reward_type   reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         audience_criteria JSONB,
         target_count  INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

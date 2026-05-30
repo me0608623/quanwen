@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase II.3-bis: 驗證 LLM service 在 ZAI_API_KEY 缺失時，正確走 rule-based fallback
  *
  * 紅線：LLM 失敗 → 系統仍可用。
@@ -133,6 +133,8 @@ describe('LLM service fallback when ZAI_API_KEY missing (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

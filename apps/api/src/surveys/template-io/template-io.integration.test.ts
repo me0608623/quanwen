@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase 1 + 1.5 — 問卷模板匯入/匯出整合測試
  *
  * 設計藍圖:13-系統深度設計/問卷匯入匯出設計.md
@@ -80,6 +80,8 @@ describe('Template IO (integration)', () => {
         external_url  TEXT,
         reward_type   reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         audience_criteria JSONB,
         target_count  INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

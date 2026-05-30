@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase II.8: quality-audit DB short-circuit 整合測試
  *
  * 若 response.quality_score + quality_breakdown 已存在，audit() 應直接回
@@ -71,6 +71,8 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         external_url TEXT,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         audience_criteria JSONB,
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,

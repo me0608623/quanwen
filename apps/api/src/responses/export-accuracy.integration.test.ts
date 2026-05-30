@@ -1,4 +1,4 @@
-/**
+﻿/**
  * QUA-45: Creator can export data accurately
  *
  * Verifies that ExportService produces output that faithfully reflects the
@@ -71,6 +71,8 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         external_url TEXT,
         reward_type reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
         is_anonymous BOOLEAN NOT NULL DEFAULT true,
