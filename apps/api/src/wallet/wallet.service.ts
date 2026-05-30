@@ -165,31 +165,33 @@ export class WalletService {
       return '1|OK';
     }
 
-    // Payment succeeded — credit wallet
+    // Payment succeeded — credit wallet (all inside a transaction for atomicity)
     const now = new Date();
-    await this.db
-      .update(transactions)
-      .set({
-        status: 'success',
-        note: `ECPay 儲值完成 NT$${txn.amount}（TradeNo: ${result.tradeNo}）`,
-        completedAt: now,
-        metadata: { ecpayTradeNo: result.merchantTradeNo, ecpayServerTradeNo: result.tradeNo },
-      })
-      .where(eq(transactions.id, txn.id));
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(transactions)
+        .set({
+          status: 'success',
+          note: `ECPay 儲值完成 NT$${txn.amount}（TradeNo: ${result.tradeNo}）`,
+          completedAt: now,
+          metadata: { ecpayTradeNo: result.merchantTradeNo, ecpayServerTradeNo: result.tradeNo },
+        })
+        .where(eq(transactions.id, txn.id));
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'escrow_ecpay', debitAmount: txn.amount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${txn.userId}`, debitAmount: 0, creditAmount: txn.amount },
-    ]);
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'escrow_ecpay', debitAmount: txn.amount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${txn.userId}`, debitAmount: 0, creditAmount: txn.amount },
+      ]);
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, txn.userId));
+    });
 
     this.logger.log(`ECPay payment success: user=${txn.userId} amount=${txn.amount} tradeNo=${result.merchantTradeNo}`);
     return '1|OK';
@@ -200,34 +202,36 @@ export class WalletService {
   async mockDeposit(userId: string, amount: number): Promise<void> {
     await this.ensureWallet(userId);
 
-    // 建立 transaction 紀錄
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId,
-        type: 'deposit',
-        amount,
-        status: 'success',
-        note: 'Mock 儲值（開發用）',
-        completedAt: new Date(),
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      // 建立 transaction 紀錄
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId,
+          type: 'deposit',
+          amount,
+          status: 'success',
+          note: 'Mock 儲值（開發用）',
+          completedAt: new Date(),
+        })
+        .returning();
 
-    // 複式記帳分錄：DR escrow_mock / CR surveyor_wallet
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'escrow_mock', debitAmount: amount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: 0, creditAmount: amount },
-    ]);
+      // 複式記帳分錄：DR escrow_mock / CR surveyor_wallet
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'escrow_mock', debitAmount: amount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: 0, creditAmount: amount },
+      ]);
 
-    // 更新錢包餘額
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${amount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, userId));
+      // 更新錢包餘額
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${amount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.userId, userId));
+    });
 
     this.logger.log(`Mock deposit: user=${userId} amount=${amount}`);
   }
