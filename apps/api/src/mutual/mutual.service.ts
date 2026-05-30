@@ -482,31 +482,34 @@ export class MutualService {
     }
 
     const now = new Date();
-    const inserted = await this.db
-      .insert(surveyResponses)
-      .values({
-        surveyId: targetSurveyId,
-        respondentId: userId,
-        status: 'submitted',
-        submittedAt: now,
-      })
-      .returning({ id: surveyResponses.id });
+    // response + answers must be atomic: if answer insert fails, response is orphaned
+    let responseId = '' as string; // assigned inside db.transaction below
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveyResponses)
+        .values({
+          surveyId: targetSurveyId,
+          respondentId: userId,
+          status: 'submitted',
+          submittedAt: now,
+        })
+        .returning({ id: surveyResponses.id });
 
-    const responseId = inserted[0].id;
+      responseId = inserted[0].id;
 
-    // 寫 answers
-    if (answers.length > 0) {
-      await this.db.insert(responseAnswers).values(
-        answers.map((a) => ({
-          responseId,
-          surveyId: targetSurveyId, // 反正規化（§3-B1）
-          questionId: a.questionId,
-          textAnswer: a.textAnswer ?? null,
-          selectedOptionIds: a.selectedOptionIds ?? null,
-          ratingValue: a.ratingValue ?? null,
-        })),
-      );
-    }
+      if (answers.length > 0) {
+        await tx.insert(responseAnswers).values(
+          answers.map((a) => ({
+            responseId: responseId!,
+            surveyId: targetSurveyId, // 反正規化（§3-B1）
+            questionId: a.questionId,
+            textAnswer: a.textAnswer ?? null,
+            selectedOptionIds: a.selectedOptionIds ?? null,
+            ratingValue: a.ratingValue ?? null,
+          })),
+        );
+      }
+    });
 
     // ── AI 品質審核（不能讓對方拿到灌水的填答）──
     try {
