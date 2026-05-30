@@ -138,7 +138,7 @@ function OAuthButton({ provider, icon, label, onClick, isLoading = false, isDisa
   );
 }
 
-export function AuthDivider({ text = "或使用 Email 登入" }: { text?: string }) {
+export function AuthDivider({ text = "或使用電子郵件登入" }: { text?: string }) {
   return (
     <div className="my-6 flex items-center gap-3.5 text-xs tracking-widest text-slate-400">
       <span className="h-px flex-1 bg-slate-200" />

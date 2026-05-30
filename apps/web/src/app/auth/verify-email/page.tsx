@@ -31,7 +31,7 @@ function VerifyEmailContent() {
           <>
             <div className="mb-6 h-16 w-16 animate-spin rounded-full border-4 border-slate-200 border-t-[#1F6FEB]" />
             <h2 className="mb-2 text-2xl font-bold text-slate-900">驗證中</h2>
-            <p className="mb-6 text-sm text-slate-500">正在驗證你的 Email，請稍候。</p>
+            <p className="mb-6 text-sm text-slate-500">正在驗證你的電子郵件，請稍候。</p>
             <Link
               href="/auth/login"
               className="inline-flex h-11 items-center justify-center rounded-[10px] border border-slate-300 px-6 text-sm font-bold text-slate-700 hover:bg-slate-50"
@@ -46,9 +46,9 @@ function VerifyEmailContent() {
             <div className="mb-6 flex h-20 w-20 items-center justify-center rounded-2xl bg-emerald-50">
               <CheckCircle2 className="h-10 w-10 text-emerald-500" />
             </div>
-            <h2 className="mb-3 text-2xl font-bold text-slate-900">Email 驗證成功</h2>
+            <h2 className="mb-3 text-2xl font-bold text-slate-900">電子郵件驗證成功</h2>
             <p className="mb-8 text-sm leading-relaxed text-slate-500">
-              你的 Email 已完成驗證，現在可以繼續使用帳號功能。
+              你的電子郵件已完成驗證，現在可以繼續使用帳號功能。
             </p>
             <Link
               href="/auth/login"

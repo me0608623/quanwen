@@ -22,7 +22,7 @@ import { PasswordInput } from "../_components/password-input";
 const RegisterSchema = z
   .object({
     displayName: z.string().min(2, "顯示名稱至少 2 個字").max(30, "顯示名稱最多 30 個字"),
-    email: z.string().email("請輸入正確的 Email"),
+    email: z.string().email("請輸入正確的電子郵件"),
     password: z
       .string()
       .min(8, "密碼至少 8 碼")
@@ -40,8 +40,8 @@ type RegisterInput = z.infer<typeof RegisterSchema>;
 
 const OAUTH_ERRORS: Record<string, string> = {
   cancelled: "你已取消第三方登入。",
-  oauth_failed: "第三方登入失敗，請稍後再試或改用 Email 註冊。",
-  email_missing: "第三方帳號未提供 Email，請改用 Email 註冊。",
+  oauth_failed: "第三方登入失敗，請稍後再試或改用電子郵件註冊。",
+  email_missing: "第三方帳號未提供電子郵件，請改用電子郵件註冊。",
 };
 
 function RegisterForm() {
@@ -84,7 +84,7 @@ function RegisterForm() {
       </div>
 
       <OAuthButtons intent="register" role="respondent" />
-      <AuthDivider text="或使用 Email 註冊" />
+      <AuthDivider text="或使用電子郵件註冊" />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
