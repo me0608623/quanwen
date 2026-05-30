@@ -556,31 +556,33 @@ export class WalletService {
     await this.ensureWallet(userId);
     const now = new Date();
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId,
-        type: 'points_in',
-        amount: pointsAmount,
-        status: 'success',
-        note,
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId,
+          type: 'points_in',
+          amount: pointsAmount,
+          status: 'success',
+          note,
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
-    ]);
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
+      ]);
 
-    await this.db
-      .update(wallets)
-      .set({
-        pointsBalance: sql`points_balance + ${pointsAmount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, userId));
+      await tx
+        .update(wallets)
+        .set({
+          pointsBalance: sql`points_balance + ${pointsAmount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, userId));
+    });
 
     this.logger.log(`Bonus points granted: user=${userId.slice(0, 8)} points=${pointsAmount} (${note})`);
   }
@@ -599,33 +601,35 @@ export class WalletService {
     await this.ensureWallet(respondentId);
     const now = new Date();
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: respondentId,
-        type: 'points_in',
-        amount: pointsAmount,
-        status: 'success',
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `完成問卷獲得 ${pointsAmount} 積分`,
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: respondentId,
+          type: 'points_in',
+          amount: pointsAmount,
+          status: 'success',
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `完成問卷獲得 ${pointsAmount} 積分`,
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `points_wallet_${respondentId}`, debitAmount: 0, creditAmount: pointsAmount },
-    ]);
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `points_wallet_${respondentId}`, debitAmount: 0, creditAmount: pointsAmount },
+      ]);
 
-    await this.db
-      .update(wallets)
-      .set({
-        pointsBalance: sql`points_balance + ${pointsAmount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, respondentId));
+      await tx
+        .update(wallets)
+        .set({
+          pointsBalance: sql`points_balance + ${pointsAmount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, respondentId));
+    });
 
     this.logger.log(`Points issued: survey=${surveyId} response=${responseId} points=${pointsAmount}`);
 
