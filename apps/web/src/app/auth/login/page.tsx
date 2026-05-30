@@ -99,7 +99,7 @@ function LoginForm() {
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="animate-[fadeIn_0.75s_ease-out]">
           <Label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-slate-900">
-            Email
+            電子郵件
           </Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
@@ -107,7 +107,7 @@ function LoginForm() {
               id="email"
               type="email"
               autoComplete="username"
-              placeholder="you@example.com"
+              placeholder="請輸入電子郵件"
               className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/20"
               {...form.register("email")}
             />

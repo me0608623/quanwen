@@ -310,7 +310,7 @@ export default function SurveyStatsPage() {
           <button
             onClick={() => handleExportXlsx(false)}
             className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs hover:bg-emerald-100"
-            title="Excel: Responses + Summary 兩個 sheet"
+            title="Excel：填答資料 + 摘要兩個工作表"
           >
             📊 Excel
           </button>
