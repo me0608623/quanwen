@@ -872,39 +872,47 @@ export class WalletService {
 
     const now = new Date();
 
-    // 建立 withdraw_complete transaction
-    const [completeTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: txn.userId,
-        type: 'withdraw_complete',
-        amount: txn.amount,
-        status: 'success',
-        note: `提領核准完成（申請單 ${transactionId}）`,
-        metadata: { originalTxnId: transactionId },
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      // Atomic: deduct lockedCash first (guarded), then create records
+      const updated = await tx
+        .update(wallets)
+        .set({
+          lockedCash: sql`locked_cash - ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(and(eq(wallets.userId, txn.userId), sql`locked_cash >= ${txn.amount}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: completeTxn.id, accountName: 'withdraw_pending', debitAmount: txn.amount, creditAmount: 0 },
-      { transactionId: completeTxn.id, accountName: 'escrow_esun', debitAmount: 0, creditAmount: txn.amount },
-    ]);
+      if (updated.length === 0) {
+        throw new BadRequestException('lockedCash 不足，可能已被其他操作消耗');
+      }
 
-    // 更新原申請單 → success；解鎖 lockedCash（真正扣除）
-    await this.db
-      .update(transactions)
-      .set({ status: 'success', completedAt: now })
-      .where(eq(transactions.id, transactionId));
+      // 建立 withdraw_complete transaction
+      const [completeTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: txn.userId,
+          type: 'withdraw_complete',
+          amount: txn.amount,
+          status: 'success',
+          note: `提領核准完成（申請單 ${transactionId}）`,
+          metadata: { originalTxnId: transactionId },
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db
-      .update(wallets)
-      .set({
-        lockedCash: sql`locked_cash - ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx.insert(journalEntries).values([
+        { transactionId: completeTxn.id, accountName: 'withdraw_pending', debitAmount: txn.amount, creditAmount: 0 },
+        { transactionId: completeTxn.id, accountName: 'escrow_esun', debitAmount: 0, creditAmount: txn.amount },
+      ]);
+
+      // 更新原申請單 → success
+      await tx
+        .update(transactions)
+        .set({ status: 'success', completedAt: now })
+        .where(eq(transactions.id, transactionId));
+    });
 
     this.logger.log(`Withdrawal approved: txn=${transactionId} user=${txn.userId} amount=${txn.amount}`);
   }
@@ -920,21 +928,23 @@ export class WalletService {
     if (!txn) throw new NotFoundException('找不到提領申請');
     if (txn.status !== 'pending') throw new BadRequestException('此提領申請狀態不可拒絕');
 
-    // 退回 lockedCash → cashBalance
-    await this.db
-      .update(transactions)
-      .set({ status: 'cancelled', note: `拒絕原因：${reason}` })
-      .where(eq(transactions.id, transactionId));
+    // 退回 lockedCash → cashBalance (atomic: wallet update first, status update inside tx)
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${txn.amount}`,
+          lockedCash: sql`locked_cash - ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, txn.userId), sql`locked_cash >= ${txn.amount}`));
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${txn.amount}`,
-        lockedCash: sql`locked_cash - ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx
+        .update(transactions)
+        .set({ status: 'cancelled', note: `拒絕原因：${reason}` })
+        .where(eq(transactions.id, transactionId));
+    });
 
     this.logger.log(`Withdrawal rejected: txn=${transactionId} reason=${reason}`);
   }
