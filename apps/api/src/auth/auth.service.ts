@@ -21,13 +21,16 @@ import { MailService } from '../mail/mail.service';
 
 const BCRYPT_ROUNDS = 12;
 
-/** Shared password strength validation — same rules as RegisterSchema */
+/** Shared password strength validation — same rules as RegisterSchema and auth.controller.ts validatePasswordPolicy */
 function validatePasswordStrength(password: string): void {
   if (!password || password.length < 8) throw new Error('密碼至少 8 個字元');
   if (password.length > 72) throw new Error('密碼最多 72 個字元');
   if (!/[A-Z]/.test(password)) throw new Error('密碼需包含至少一個大寫字母');
   if (!/[0-9]/.test(password)) throw new Error('密碼需包含至少一個數字');
 }
+// Note: auth.controller.ts has the same check at the HTTP layer. The service-level
+// check here ensures any direct service calls (e.g., from tests or future non-HTTP
+// integrations) also enforce the policy without depending on the controller.
 
 // Short-lived in-memory store for OAuth binding sessions (MVP, non-clustered)
 const bindSessions = new Map<string, { userId: string; provider: string; expiresAt: number }>();
