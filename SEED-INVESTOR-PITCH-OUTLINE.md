@@ -278,22 +278,26 @@ Layer 3 (LLM): 語義理解與邏輯判斷
 - EBITDA：約 (NT$78-79M) — Seed 期正常虧損，資金來自融資
 
 **Year 2 (2027)**：
-- Revenue：NT$800M-1B (擴大銷售)
+- ARR（Year 2 末）：NT$30-50M（與里程碑一致：100+ 簽約）
+- Revenue：NT$30-50M (銷售加速，客戶擴展)
 - Gross Margin：70%
-- Operating Expense：NT$300M (擴大團隊)
-- EBITDA：NT$200-400M
-- 現金流：Positive
+- Operating Expense：NT$80-100M (銷售與行銷擴大)
+- EBITDA：約 (NT$50-70M) — Seed 後期仍投資成長，資金來自 Series A
+- 現金流：接近正向
 
 **Year 3 (2028)**：
-- Revenue：NT$3-5B (滲透率 10-20%)
+- ARR（Year 3 末）：NT$500M+（區域擴展，滲透率 10-20%）
+- Revenue：NT$500M-1B (拓展至亞洲市場)
 - Gross Margin：75%
-- Operating Expense：NT$1B
-- EBITDA：NT$1.2-2B (40%+ margin)
+- Operating Expense：NT$200-300M (區域團隊)
+- EBITDA：NT$200-500M (40%+ margin)
+- 現金流：Positive
 - 路徑：IPO / Series C 融資準備
 
 **關鍵假設**：
 - Year 1 簽約 20-30 個客戶 (Net $3-5M ARR)
 - Year 2 簽約 100+ 客戶 (Net $30-50M ARR)
+- Year 3 客戶數 500+、區域擴展 (Net $500M+ ARR)
 - 客戶留存率 90%+ (低流失)
 - 擴展銷售 (客戶平均合約額年年成長 20%)
 
@@ -462,9 +466,16 @@ Year 1 的核心價值不在數字規模，而在「可預測、可重複的銷�
 
 ---
 
-**版本**：1.1  
+**版本**：1.2  
 **日期**：2026-05-31  
 **擁有人**：VP Marketing + CEO  
 **使用場景**：Seed Round 融資  
-**狀態**：⚠️ 數據已校正 — 待 CEO/VP Marketing 核准後方可用於投資者會議  
-**變更紀錄 v1.1**：(1) ARR 已從 NT$100-200M 校正為 NT$3-5M（與 Q4 里程碑一致）；(2) 94% 識別率加掛「設計目標」免責聲明；(3) FMCG 案例加掛「示意性案例」免責聲明，需替換為真實可驗證案例
+**狀態**：⚠️ 多次數據校正已完成 — 待 CEO/VP Marketing 最終核准後方可用於投資者會議  
+**變更紀錄 v1.1-1.2**：
+- (1) ARR 已從 NT$100-200M 校正為 NT$3-5M（與 Q4 里程碑一致）
+- (2) 94% 識別率加掛「設計目標」免責聲明
+- (3) FMCG 案例加掛「示意性案例」免責聲明，需替換為真實可驗證案例
+- (4) **v1.2 新增：Year 2-3 財務重新對齊**
+  - Year 2 Revenue 從 NT$800M-1B 校正為 NT$30-50M ARR（符合關鍵假設）
+  - Year 3 Revenue 調整為 NT$500M-1B（區域擴展）
+  - 補充 Year 3 假設：500+ 簽約客戶
