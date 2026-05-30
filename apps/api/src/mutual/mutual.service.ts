@@ -484,6 +484,7 @@ export class MutualService {
     const now = new Date();
     // response + answers must be atomic: if answer insert fails, response is orphaned
     let responseId = '' as string; // assigned inside db.transaction below
+    try {
     await this.db.transaction(async (tx) => {
       const inserted = await tx
         .insert(surveyResponses)
@@ -510,6 +511,13 @@ export class MutualService {
         );
       }
     });
+    } catch (err: unknown) {
+      // Concurrent submit race: unique constraint on (surveyId, respondentId) hit
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('你已提交過此配對的填答');
+      }
+      throw err;
+    }
 
     // ── AI 品質審核（不能讓對方拿到灌水的填答）──
     try {
