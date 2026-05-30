@@ -305,6 +305,7 @@ export class ResponsesService {
 
     // ── 5+6. 建立 response 記錄 + 寫入答案（atomic: 避免 orphaned response）──────
     let responseId = '' as string;
+    try {
     await this.db.transaction(async (tx) => {
       const inserted = await tx
         .insert(surveyResponses)
@@ -335,6 +336,15 @@ export class ResponsesService {
         );
       }
     });
+    } catch (err: unknown) {
+      // Concurrent submission race: unique constraint (23505) means another
+      // request already inserted this (surveyId, respondentId) pair.
+      // Return 409 instead of leaking a 500.
+      if ((err as { code?: string })?.code === '23505') {
+        throw new ConflictException('您已填寫過此問卷');
+      }
+      throw err;
+    }
 
     // ── 6.5 Quality Audit Pipeline（fire-and-forget，不卡住 submit 回應）────────
     // 把前端蒐集的行為訊號一起傳給 pipeline，給 Layer 2 更豐富的訊號
