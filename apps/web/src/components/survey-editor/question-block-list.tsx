@@ -114,7 +114,7 @@ export function QuestionBlockList({
       <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">📋</span>
-          <span className="font-medium text-foreground">歡迎頁</span>
+          <span className="font-medium text-foreground">歡迎頁面</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
           {questions.length > 0 ? questions[0].title || '簡介' : '新增題目以開始'}
@@ -201,10 +201,10 @@ export function QuestionBlockList({
       <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">🏁</span>
-          <span className="font-medium text-foreground">結尾</span>
+          <span className="font-medium text-foreground">結束設定</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground">
-          感謝頁與轉址
+          感謝頁面 & 重新導向
         </p>
       </div>
 
