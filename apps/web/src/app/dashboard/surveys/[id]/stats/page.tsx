@@ -324,7 +324,7 @@ export default function SurveyStatsPage() {
           <button
             onClick={() => handleExportXlsx(true)}
             className="rounded-md border border-[#126b8a] bg-[#126b8a] px-3 py-1.5 text-xs text-white font-semibold hover:bg-[#0f5d78]"
-            title="只匯出 quality score ≥ 70 的高品質樣本（Excel）"
+            title="只匯出品質分數 ≥ 70 的高品質樣本（Excel）"
           >
             ✨ 乾淨 Excel
           </button>
