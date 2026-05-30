@@ -24,12 +24,12 @@ import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-p
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const STATUS_LABELS: Record<string, string> = {
-  draft: 'Draft',
-  pending_review: 'Pending Review',
-  published: 'Published',
-  paused: 'Paused',
-  closed: 'Closed',
-  rejected: 'Rejected',
+  draft: '草稿',
+  pending_review: '審核中',
+  published: '已發布',
+  paused: '已暫停',
+  closed: '已關閉',
+  rejected: '已退回',
 };
 
 export default function SurveyDetailPage() {
@@ -82,7 +82,7 @@ export default function SurveyDetailPage() {
       await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria });
       setDirty(false);
     } catch (err) {
-      showAxiosError(err, 'Failed to save survey draft.');
+      showAxiosError(err, '儲存草稿失敗，請稍後再試。');
     }
   };
 
@@ -92,18 +92,18 @@ export default function SurveyDetailPage() {
       // Don't use alert() — it blocks Playwright and delays React re-render.
       // The UI updates via TanStack query invalidation (status badge changes).
     } catch (err) {
-      showAxiosError(err, 'Failed to publish survey.');
+      showAxiosError(err, '發布問卷失敗，請稍後再試。');
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('Delete this draft survey?')) return;
+    if (!confirm('確定要刪除這份草稿問卷嗎？')) return;
 
     try {
       await deleteSurvey.mutateAsync(id);
       router.push('/dashboard');
     } catch (err) {
-      showAxiosError(err, 'Failed to delete survey.');
+      showAxiosError(err, '刪除問卷失敗，請稍後再試。');
     }
   };
 
@@ -149,8 +149,8 @@ export default function SurveyDetailPage() {
     markDirty();
   };
 
-  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">Loading survey...</div>;
-  if (!survey) return <div className="p-10 text-sm text-destructive">Survey not found.</div>;
+  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入問卷中…</div>;
+  if (!survey) return <div className="p-10 text-sm text-destructive">找不到問卷。</div>;
 
   // ─── Sidebar: Questions tab content ────────────────────────────
   const questionsSidebar = (
@@ -170,7 +170,7 @@ export default function SurveyDetailPage() {
     <div className="space-y-4 p-3">
       <div>
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Target Audience
+          受眾鎖定
         </h3>
         <AudienceTargeting
           value={audience}
@@ -185,7 +185,7 @@ export default function SurveyDetailPage() {
 
       <div>
         <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          Minimum Reputation
+          最低信譽分
         </h3>
         <input
           type="range"
@@ -209,7 +209,7 @@ export default function SurveyDetailPage() {
           onClick={handleDelete}
           className="w-full rounded-md border border-destructive/30 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
         >
-          Delete Survey
+          刪除問卷
         </button>
       )}
     </div>
@@ -249,8 +249,8 @@ export default function SurveyDetailPage() {
         {/* Budget warning */}
         {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
           <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
-            Insufficient budget to publish. Required: NT${budgetCheck.requiredAmount.toLocaleString()}, wallet: NT$
-            {budgetCheck.walletBalance.toLocaleString()}. <Link href="/wallet" className="underline">Top up wallet</Link>.
+            預算不足，無法發布。需要 NT${budgetCheck.requiredAmount.toLocaleString()}，錢包餘額 NT$
+            {budgetCheck.walletBalance.toLocaleString()}。<Link href="/wallet" className="underline">前往儲值</Link>。
           </div>
         )}
 
@@ -283,7 +283,7 @@ export default function SurveyDetailPage() {
 
         {/* Basic Info section */}
         <section className="space-y-3 rounded-lg border border-border p-4">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Basic Info</h2>
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本資訊</h2>
           <input
             type="text"
             value={title}
@@ -309,7 +309,7 @@ export default function SurveyDetailPage() {
         {/* Questions section */}
         <section className="space-y-3">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Questions ({questions.length})
+            題目（{questions.length} 題）
           </h2>
 
           {questions.map((q, index) =>
@@ -343,7 +343,7 @@ export default function SurveyDetailPage() {
               onClick={() => addQuestion('single_choice')}
               className="w-full rounded-lg border-2 border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
             >
-              + Add Question
+              + 新增題目
             </button>
           )}
         </section>
