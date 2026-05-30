@@ -246,51 +246,56 @@ export class AuthService {
     // 安全原則：OAuth 登入「不」自動合併同 email 的既有帳號，
     // 以防止 Google/LINE 用戶意外取得其他帳號（含管理員）的資料與權限。
     // 若用戶希望合併帳號，應先用既有帳號登入，再從「設定 → 連結帳號」綁定。
-    let userId: string;
+    let userId = '' as string; // assigned inside db.transaction below
     let isNewUser = false;
 
-    const newUser = await this.db
-      .insert(users)
-      .values({
-        email,
-        displayName: profile.displayName,
-        avatarUrl: profile.avatarUrl,
-        role: 'respondent',       // default; 一帳號全功能, role 欄位僅用於 admin 區分
-        emailVerified: !email.endsWith('.placeholder'),
-      } as NewUser)
-      .returning({ id: users.id })
-      .catch(async (err: unknown) => {
-        // Only handle PostgreSQL unique violation (23505) — rethrow everything else
-        // to avoid masking DB connection errors, constraint name conflicts, etc.
-        if ((err as { code?: string })?.code !== '23505') throw err;
-
-        // email 唯一性衝突：此 email 已有帳號但沒有 OAuth 連結
-        // 建立一個帶 oauth 後綴的新帳號讓用戶使用，避免覆蓋既有帳號
-        const fallbackEmail = `${profile.providerAccountId}+${profile.provider}@oauth.quanwen.local`;
-        return this.db
+    // Create user + profiles + OAuth account atomically:
+    // if oauthAccounts insert fails after user creation, the user has no auth
+    // method and becomes a ghost account with no way to log back in.
+    await this.db.transaction(async (tx) => {
+      let effectiveEmail = email;
+      try {
+        const inserted = await tx
           .insert(users)
           .values({
-            email: fallbackEmail,
+            email,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            role: 'respondent',
+            emailVerified: !email.endsWith('.placeholder'),
+          } as NewUser)
+          .returning({ id: users.id });
+        userId = inserted[0].id;
+      } catch (err: unknown) {
+        if ((err as { code?: string })?.code !== '23505') throw err;
+        // email conflict → fallback email
+        effectiveEmail = `${profile.providerAccountId}+${profile.provider}@oauth.quanwen.local`;
+        const inserted = await tx
+          .insert(users)
+          .values({
+            email: effectiveEmail,
             displayName: profile.displayName,
             avatarUrl: profile.avatarUrl,
             role: 'respondent',
             emailVerified: true,
           } as NewUser)
           .returning({ id: users.id });
+        userId = inserted[0].id;
+      }
+
+      // Phase A: OAuth 新用戶也補建兩種 profile（idempotent via onConflictDoNothing）
+      await tx.insert(respondentProfiles).values({ userId, isOnboardingDone: false }).onConflictDoNothing();
+      await tx.insert(surveyorProfiles).values({ userId, isOnboardingDone: false }).onConflictDoNothing();
+
+      await tx.insert(oauthAccounts).values({
+        userId,
+        provider: profile.provider,
+        providerAccountId: profile.providerAccountId,
+        providerEmail: effectiveEmail,
+        providerAvatarUrl: profile.avatarUrl,
       });
-    userId = newUser[0].id;
-    isNewUser = true;
-
-    // Phase A: OAuth 新用戶也補建兩種 profile
-    await this.ensureBothProfiles(userId);
-
-    await this.db.insert(oauthAccounts).values({
-      userId,
-      provider: profile.provider,
-      providerAccountId: profile.providerAccountId,
-      providerEmail: email,
-      providerAvatarUrl: profile.avatarUrl,
     });
+    isNewUser = true;
 
     const userRows = await this.db
       .select({
