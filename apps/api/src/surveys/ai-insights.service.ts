@@ -39,6 +39,20 @@ export interface TextSentimentResult {
   generatedAt: string;
 }
 
+export interface ResponseSentiment {
+  responseId: string;
+  questionId: string;
+  text: string;
+  sentiment: 'positive' | 'neutral' | 'negative';
+}
+
+export interface ResponseSentimentsResult {
+  surveyId: string;
+  questionId: string;
+  sentiments: ResponseSentiment[];
+  generatedAt: string;
+}
+
 interface QuestionStatInput {
   questionId: string;
   title: string;
@@ -236,6 +250,102 @@ export class AiInsightsService {
         generatedAt: new Date().toISOString(),
       };
     }
+  }
+
+  // ─── 逐筆回應情緒分析（per-response sentiment badges）───────────────────────
+
+  /**
+   * 對指定題目的每一筆文字回答做逐筆情緒分析，回傳 ResponseSentimentsResult。
+   * 會將回答分批送 LLM（每批最多 30 筆），每筆標注 positive / neutral / negative。
+   * 若 LLM 失敗則 fallback 全標 neutral。
+   */
+  async analyzeResponseSentiments(
+    surveyId: string,
+    questionId: string,
+    answers: Array<{ responseId: string; text: string }>,
+  ): Promise<ResponseSentimentsResult> {
+    const empty: ResponseSentimentsResult = {
+      surveyId,
+      questionId,
+      sentiments: [],
+      generatedAt: new Date().toISOString(),
+    };
+    if (answers.length === 0) return empty;
+
+    // 過濾掉空白回答
+    const valid = answers.filter((a) => a.text.trim().length > 0);
+    if (valid.length === 0) return empty;
+
+    const sentiments: ResponseSentiment[] = [];
+
+    // 分批處理，每批最多 30 筆
+    const BATCH = 30;
+    for (let offset = 0; offset < valid.length; offset += BATCH) {
+      const batch = valid.slice(offset, offset + BATCH);
+      const enumerated = batch
+        .map((a, i) => `${offset + i + 1}. [id:${a.responseId}] "${a.text.slice(0, 200)}"`)
+        .join('\n');
+
+      const prompt = [
+        `以下共 ${batch.length} 筆文字回答，請為每一筆標注情緒：`,
+        enumerated,
+        '',
+        '請回傳 JSON array，每個元素：',
+        '{ "idx": <編號從1開始>, "responseId": "<id>", "sentiment": "positive|neutral|negative" }',
+        '',
+        '規則：',
+        '- 每筆都要標，不可遺漏',
+        '- positive: 正面/滿意/贊同/開心',
+        '- neutral: 中性/描述性/無明顯傾向',
+        '- negative: 負面/不滿/批評/抱怨',
+        '- 不可編造，只根據文字內容判斷',
+      ].join('\n');
+
+      try {
+        const r = await this.zai.jsonChat<
+          Array<{ idx: number; responseId: string; sentiment: 'positive' | 'neutral' | 'negative' }>
+        >(
+          '你是文字情緒分類專家。請回傳 JSON array，為每筆回答標注情緒。繁體中文判斷。',
+          prompt,
+          { temperature: 0.1 },
+        );
+
+        if (Array.isArray(r)) {
+          for (const item of r) {
+            const s = item?.sentiment;
+            const sentiment: 'positive' | 'neutral' | 'negative' =
+              s === 'positive' || s === 'negative' ? s : 'neutral';
+            const original = batch.find((a) => a.responseId === item?.responseId);
+            if (original) {
+              sentiments.push({
+                responseId: original.responseId,
+                questionId,
+                text: original.text,
+                sentiment,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.error('Per-response sentiment analysis batch failed, falling back to neutral', err);
+        // fallback: 全標 neutral
+        for (const a of batch) {
+          sentiments.push({
+            responseId: a.responseId,
+            questionId,
+            text: a.text,
+            sentiment: 'neutral',
+          });
+        }
+      }
+    }
+
+    return {
+      surveyId,
+      questionId,
+      sentiments,
+      generatedAt: new Date().toISOString(),
+    };
   }
 
   // ─── Prompt 組合 ──────────────────────────────────────────────────────────

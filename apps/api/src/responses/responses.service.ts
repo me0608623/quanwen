@@ -760,6 +760,47 @@ export class ResponsesService {
     };
   }
 
+  // ─── 問券方：取得指定題目的逐筆文字回答（供 per-response sentiment 使用）────────
+
+  /**
+   * 取得指定問卷 + 題目的所有已提交文字回答，含 responseId。
+   * 只回傳有非空白 textAnswer 的列。
+   */
+  async getTextAnswersForQuestion(
+    surveyId: string,
+    questionId: string,
+    surveyorId: string,
+  ): Promise<Array<{ responseId: string; text: string }>> {
+    // 確認是問券方本人
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取此問卷');
+
+    const rows = await this.db
+      .select({
+        responseId: responseAnswers.responseId,
+        textAnswer: responseAnswers.textAnswer,
+      })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .where(
+        and(
+          eq(responseAnswers.surveyId, surveyId),
+          eq(responseAnswers.questionId, questionId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+        ),
+      );
+
+    return rows
+      .filter((r) => r.textAnswer && r.textAnswer.trim().length > 0)
+      .map((r) => ({ responseId: r.responseId, text: r.textAnswer! }));
+  }
+
   // ─── 問券方：每日填答趨勢（近 30 天）────────────────────────────────────────
 
   async getSurveyTrend(surveyId: string, surveyorId: string): Promise<{ date: string; count: number }[]> {

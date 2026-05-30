@@ -214,6 +214,25 @@ export class ResponsesController {
     return this.aiInsights.analyzeTextSentiment(q.title, texts);
   }
 
+  /** GET /surveys/:id/analyze/sentiment?questionId=<qid> — 逐筆回應情緒 badges */
+  @Get(':id/analyze/sentiment')
+  async getResponseSentiments(
+    @Param('id') surveyId: string,
+    @Query('questionId') questionId: string | undefined,
+    @Req() req: Request,
+  ) {
+    if (!questionId) {
+      throw new BadRequestException('缺少 questionId 查詢參數');
+    }
+    const user = req.user as AuthenticatedUser;
+    const answers = await this.responsesService.getTextAnswersForQuestion(
+      surveyId,
+      questionId,
+      user.id,
+    );
+    return this.aiInsights.analyzeResponseSentiments(surveyId, questionId, answers);
+  }
+
   /** GET /surveys/:id/trend — 近 30 天每日填答趨勢 */
   @Get(':id/trend')
   getTrend(@Param('id') id: string, @Req() req: Request) {
