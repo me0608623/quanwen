@@ -199,7 +199,7 @@ export default function NewSurveyPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">分類（optional）</label>
+          <label className="mb-1 block text-sm font-medium">分類（選填）</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as SurveyCategory | '')}
@@ -289,7 +289,7 @@ export default function NewSurveyPage() {
               互惠問卷沒有金錢獎勵與配額限制 — 系統會自動幫你配對另一個有 mutual 問卷的人。
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">外部問卷連結（optional）</label>
+              <label className="mb-1 block text-sm font-medium">外部問卷連結（選填）</label>
               <input
                 type="url"
                 value={externalUrl}

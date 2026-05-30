@@ -95,8 +95,8 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
         return {
           ...base,
           type: 'boolean',
-          labelTrue: 'Yes',
-          labelFalse: 'No',
+          labelTrue: '是',
+          labelFalse: '否',
         };
       }
 

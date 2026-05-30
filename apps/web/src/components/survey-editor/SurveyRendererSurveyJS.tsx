@@ -5,7 +5,7 @@ import { Model, SurveyModel } from 'survey-core';
 import { Survey } from 'survey-react-ui';
 import 'survey-core/survey-core.min.css';
 // QUA-141: load Traditional Chinese locale so navigation/validation strings display in zh-TW
-import 'survey-core/i18n/chinese-traditional';
+import 'survey-core/i18n/traditional-chinese';
 import { quanswenToSurveyJs, extractAnswers } from '@/lib/surveyjs-adapter';
 import type { PublicSurvey, AnswerInput } from '@/hooks/use-responses';
 

@@ -40,8 +40,8 @@ describe('quanswenToSurveyJs', () => {
     const model = quanswenToSurveyJs({ questions: [q] });
     const el = model.pages[0].elements[0];
     expect(el.type).toBe('boolean');
-    expect(el.labelTrue).toBe('Yes');
-    expect(el.labelFalse).toBe('No');
+    expect(el.labelTrue).toBe('是');
+    expect(el.labelFalse).toBe('否');
   });
 
   it('converts dropdown variant', () => {

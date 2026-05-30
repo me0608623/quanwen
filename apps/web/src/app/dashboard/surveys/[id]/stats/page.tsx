@@ -225,6 +225,16 @@ function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; tota
 
 // ─── 主頁面 ──────────────────────────────────────────────────────────────────
 
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
+};
+
 export default function SurveyStatsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -339,7 +349,7 @@ export default function SurveyStatsPage() {
       {stats.questionStats.map((q, i) => (
         <section key={q.questionId} className="rounded-lg border border-border p-5 space-y-3">
           <div>
-            <p className="text-xs text-muted-foreground">Q{i + 1} · {q.type}</p>
+            <p className="text-xs text-muted-foreground">Q{i + 1} · {QUESTION_TYPE_LABELS[q.type] ?? q.type}</p>
             <p className="font-medium mt-0.5">{q.title}</p>
             <p className="text-xs text-muted-foreground">{q.totalAnswers} 人回答</p>
           </div>

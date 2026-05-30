@@ -32,6 +32,16 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: '已退回',
 };
 
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
+};
+
 export default function SurveyDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
@@ -237,7 +247,7 @@ export default function SurveyDetailPage() {
         />
       ) : (
         <div className="rounded-lg border border-border p-4 text-sm">
-          <span className="text-xs text-muted-foreground">Q{selectedQuestionIndex + 1} — {q.type}</span>
+          <span className="text-xs text-muted-foreground">Q{selectedQuestionIndex + 1} — {QUESTION_TYPE_LABELS[q.type] ?? q.type}</span>
           <p className="mt-1 font-medium">{q.title}</p>
         </div>
       );
@@ -331,7 +341,7 @@ export default function SurveyDetailPage() {
               />
             ) : (
               <div key={index} className="rounded-lg border border-border p-4 text-sm">
-                <span className="text-xs text-muted-foreground">Q{index + 1} — {q.type}</span>
+                <span className="text-xs text-muted-foreground">Q{index + 1} — {QUESTION_TYPE_LABELS[q.type] ?? q.type}</span>
                 <p className="mt-1 font-medium">{q.title}</p>
               </div>
             ),

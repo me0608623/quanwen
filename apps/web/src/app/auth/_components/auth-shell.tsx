@@ -165,7 +165,7 @@ export function AuthShell({
           <div className="relative z-10 max-w-[520px]">
             <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
               <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--aw-accent)]" />
-              {isSurveyor ? "Surveyor Mode" : "Respondent Mode"}
+              {isSurveyor ? "問卷方模式" : "受試者模式"}
             </div>
 
             {variant === "full" ? (
@@ -240,7 +240,7 @@ export function AuthShell({
             )}
           </div>
 
-          <div className="relative z-10 text-xs opacity-65">© 2026 QuanWen. Built for trustworthy survey data.</div>
+          <div className="relative z-10 text-xs opacity-65">© 2026 券問 QuanWen — 值得信賴的問卷平台</div>
         </aside>
 
         <main className="relative flex items-center justify-center overflow-hidden bg-[#f8fafc] p-6 dark:bg-[#020917] lg:p-14">

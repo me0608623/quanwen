@@ -26,17 +26,17 @@ export default function PublicSurveyPage() {
 
   const [done, setDone] = useState<{ flagged: boolean } | null>(null);
 
-  if (isLoading) return <main className="p-6 text-sm">Loading...</main>;
-  if (!survey) return <main className="p-6 text-sm">Survey not found or unpublished.</main>;
+  if (isLoading) return <main className="p-6 text-sm">載入中…</main>;
+  if (!survey) return <main className="p-6 text-sm">找不到問卷或問卷尚未發布。</main>;
 
   if (done || survey.alreadySubmitted) {
     return (
       <main className="mx-auto max-w-xl px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold">{done?.flagged ? 'Pending Review' : 'Completed'}</h1>
+        <h1 className="text-2xl font-bold">{done?.flagged ? 'AI 審核中' : '已完成'}</h1>
         <p className="mt-3 text-sm text-muted-foreground">
           {done?.flagged
-            ? 'Your open-text answer is under AI review. Reward is pending until review completes.'
-            : `Submission complete. Voucher reward: NT$${survey.rewardPoints}.`}
+            ? '您的開放式填答正在進行 AI 品質審核，審核完成後將發放獎勵。'
+            : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`}
         </p>
       </main>
     );

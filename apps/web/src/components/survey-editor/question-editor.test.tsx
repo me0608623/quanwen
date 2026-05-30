@@ -29,8 +29,8 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Question text'), { target: { value: 'Updated title' } });
-    fireEvent.change(screen.getByPlaceholderText('Question description'), { target: { value: 'Updated desc' } });
+    fireEvent.change(screen.getByPlaceholderText('題目文字'), { target: { value: 'Updated title' } });
+    fireEvent.change(screen.getByPlaceholderText('題目說明（選填）'), { target: { value: 'Updated desc' } });
 
     expect(onChange).toHaveBeenCalled();
     const lastCall = onChange.mock.calls[onChange.mock.calls.length - 1][0];
@@ -41,14 +41,14 @@ describe('QuestionEditor', () => {
   it('calls onRemove when delete button is clicked', () => {
     const onRemove = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={vi.fn()} onRemove={onRemove} />);
-    fireEvent.click(screen.getByText('Delete'));
+    fireEvent.click(screen.getByText('刪除'));
     expect(onRemove).toHaveBeenCalledOnce();
   });
 
   it('toggles required checkbox', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
-    fireEvent.click(screen.getByLabelText('Required'));
+    fireEvent.click(screen.getByLabelText('必填'));
     const next = onChange.mock.calls[0][0];
     expect(next.isRequired).toBe(false);
   });
@@ -58,19 +58,19 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'yes_no' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'yes_no' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('single_choice');
     expect(next.config.variant).toBe('yes_no');
-    expect(next.options.map((o: { label: string }) => o.label)).toEqual(['Yes', 'No']);
+    expect(next.options.map((o: { label: string }) => o.label)).toEqual(['是', '否']);
   });
 
   it('switches to dropdown display type preserving existing options', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'dropdown' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'dropdown' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('single_choice');
@@ -83,7 +83,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'multiple_choice' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'multiple_choice' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('multiple_choice');
@@ -94,7 +94,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'text' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'text' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('text');
@@ -105,7 +105,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'rating' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'rating' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('rating');
@@ -116,7 +116,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByLabelText('Question 1 type'), { target: { value: 'numeric' } });
+    fireEvent.change(screen.getByLabelText('第 1 題類型'), { target: { value: 'numeric' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.type).toBe('text');
@@ -129,7 +129,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.click(screen.getByText('+ Add option'));
+    fireEvent.click(screen.getByText('+ 新增選項'));
 
     const next = onChange.mock.calls[0][0];
     expect(next.options).toHaveLength(3);
@@ -152,7 +152,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.change(screen.getByPlaceholderText('Option 1'), { target: { value: 'Updated A' } });
+    fireEvent.change(screen.getByPlaceholderText('選項 1'), { target: { value: 'Updated A' } });
 
     const next = onChange.mock.calls[0][0];
     expect(next.options[0].label).toBe('Updated A');
@@ -163,7 +163,7 @@ describe('QuestionEditor', () => {
     const onChange = vi.fn();
     render(<QuestionEditor question={baseQuestion} index={0} onChange={onChange} onRemove={vi.fn()} />);
 
-    fireEvent.click(screen.getByLabelText('Enable AI quality check for this question'));
+    fireEvent.click(screen.getByLabelText('啟用 AI 品質審核（此題）'));
 
     const next = onChange.mock.calls[0][0];
     expect(next.config.aiQualityCheckEnabled).toBe(false);
@@ -173,7 +173,7 @@ describe('QuestionEditor', () => {
     const question = { ...baseQuestion, config: undefined };
     render(<QuestionEditor question={question} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
 
-    const checkbox = screen.getByLabelText('Enable AI quality check for this question') as HTMLInputElement;
+    const checkbox = screen.getByLabelText('啟用 AI 品質審核（此題）') as HTMLInputElement;
     expect(checkbox.checked).toBe(true); // aiQualityCheckEnabled !== false → default true
   });
 
@@ -190,8 +190,8 @@ describe('QuestionEditor', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
-    fireEvent.click(screen.getByRole('button', { name: '+ Add jump rule' }));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
+    fireEvent.click(screen.getByRole('button', { name: '+ 新增跳題規則' }));
 
     const firstCall = onChange.mock.calls[0][0];
     expect(firstCall.config.skipLogic).toHaveLength(1);
@@ -200,8 +200,8 @@ describe('QuestionEditor', () => {
 
   it('shows no jump rules message when logic tab has none', () => {
     render(<QuestionEditor question={baseQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
-    assertInDocument(screen.getByText('No jump rules configured.'));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
+    assertInDocument(screen.getByText('尚未設定跳題規則。'));
   });
 
   it('removes a jump rule', () => {
@@ -224,8 +224,8 @@ describe('QuestionEditor', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
-    fireEvent.click(screen.getByText('Remove'));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
+    fireEvent.click(screen.getByText('移除'));
 
     const next = onChange.mock.calls[0][0];
     expect(next.config.skipLogic).toBeUndefined();
@@ -251,9 +251,9 @@ describe('QuestionEditor', () => {
       />,
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
 
-    // Find the "Then jump to" select and change to "End survey"
+    // Find the "則跳至" select and change to "結束問卷"
     const selects = screen.getAllByRole('combobox');
     const jumpSelect = selects.find((s) => s.textContent?.includes('Next Q'));
     if (jumpSelect) {
@@ -275,8 +275,8 @@ describe('QuestionEditor', () => {
     };
     render(<QuestionEditor question={ratingQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
 
-    // Should show "Max rating" label
-    assertInDocument(screen.getByText('Max rating'));
+    // Should show "最大評分" label
+    assertInDocument(screen.getByText('最大評分'));
   });
 
   // ─── Numeric-specific controls ────────────────────────────────────
@@ -290,27 +290,27 @@ describe('QuestionEditor', () => {
     };
     render(<QuestionEditor question={numericQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
 
-    assertInDocument(screen.getByText('Min'));
-    assertInDocument(screen.getByText('Max'));
+    assertInDocument(screen.getByText('最小值'));
+    assertInDocument(screen.getByText('最大值'));
   });
 
   // ─── Content/Logic tab switching ──────────────────────────────────
   it('starts on content tab by default', () => {
     render(<QuestionEditor question={baseQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
-    assertInDocument(screen.getByPlaceholderText('Question text'));
+    assertInDocument(screen.getByPlaceholderText('題目文字'));
   });
 
   it('switches to logic tab and hides content inputs', () => {
     render(<QuestionEditor question={baseQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
-    assertNotInDocument(screen.queryByPlaceholderText('Question text'));
-    assertInDocument(screen.getByText('No jump rules configured.'));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
+    assertNotInDocument(screen.queryByPlaceholderText('題目文字'));
+    assertInDocument(screen.getByText('尚未設定跳題規則。'));
   });
 
   it('switches back to content tab from logic tab', () => {
     render(<QuestionEditor question={baseQuestion} index={0} onChange={vi.fn()} onRemove={vi.fn()} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Logic' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Content' }));
-    assertInDocument(screen.getByPlaceholderText('Question text'));
+    fireEvent.click(screen.getByRole('button', { name: '邏輯' }));
+    fireEvent.click(screen.getByRole('button', { name: '內容' }));
+    assertInDocument(screen.getByPlaceholderText('題目文字'));
   });
 });

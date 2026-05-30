@@ -15,6 +15,12 @@ interface Props {
   onApplyChecks: (next: SurveyQuestion[]) => void;
 }
 
+const SEVERITY_LABELS: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+};
+
 export function AntiCheatPanel({ surveyId, questions, onApplyChecks }: Props) {
   const [acEnabled, setAcEnabled] = useState(false);
   const [prEnabled, setPrEnabled] = useState(false);
@@ -279,7 +285,7 @@ function PreReviewBlock({ result }: { result: ReturnType<typeof usePreReview>['d
                     f.severity === 'medium' ? 'bg-amber-200 text-amber-800' :
                     'bg-slate-200 text-slate-700'
                   }`}>
-                    {f.severity.toUpperCase()}
+                    {SEVERITY_LABELS[f.severity] ?? f.severity.toUpperCase()}
                   </span>
                   {f.questionIndex != null && (
                     <span className="text-[10px] text-slate-500">Q{f.questionIndex}</span>

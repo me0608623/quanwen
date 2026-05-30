@@ -190,7 +190,7 @@ export function EarningsChart({ summary }: { summary: EarningsSummary }) {
             >
               貢獻最高的問卷
             </h3>
-            <p className="text-xs text-slate-500">Top {topSurveys.length}</p>
+            <p className="text-xs text-slate-500">前 {topSurveys.length} 名</p>
           </div>
 
           <p className="sr-only">貢獻最高的 {topSurveys.length} 份問卷：{surveysSummary}。</p>

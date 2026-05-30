@@ -29,6 +29,17 @@ const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string; icon: string 
   { value: 'rating', label: '評分', icon: '★' },
 ];
 
+// 題型中文名稱對照（用於側邊欄 block 顯示）
+const TYPE_DISPLAY: Record<string, string> = {
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
+};
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function QuestionBlockList({
@@ -179,8 +190,8 @@ export function QuestionBlockList({
             </div>
 
             {/* Type label */}
-            <div className="mt-0.5 pl-7 text-[10px] capitalize text-muted-foreground">
-              {q.type.replace('_', ' ')}
+            <div className="mt-0.5 pl-7 text-[10px] text-muted-foreground">
+              {TYPE_DISPLAY[q.type] ?? q.type.replace('_', ' ')}
             </div>
           </div>
         );

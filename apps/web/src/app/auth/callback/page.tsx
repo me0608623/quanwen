@@ -27,6 +27,7 @@ function CallbackHandler() {
     }
 
     setToken(token);
+    queryClient.clear(); // 清除前一個用戶的快取，避免跨帳號資料污染
 
     const controller = new AbortController();
 

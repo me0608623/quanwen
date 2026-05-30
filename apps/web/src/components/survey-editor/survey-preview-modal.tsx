@@ -23,7 +23,7 @@ export function SurveyPreviewModal({ title, description, questions, open, onClos
             onClick={onClose}
             className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
           >
-            Close
+            關閉
           </button>
         </div>
         <SurveyPreviewPlayer title={title} description={description} questions={questions} />
