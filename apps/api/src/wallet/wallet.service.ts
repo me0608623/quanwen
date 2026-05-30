@@ -165,10 +165,13 @@ export class WalletService {
       return '1|OK';
     }
 
-    // Payment succeeded — credit wallet (all inside a transaction for atomicity)
+    // Payment succeeded — credit wallet.
+    // Guard against concurrent ECPay retries: claim exclusive processing by
+    // doing an atomic conditional UPDATE (WHERE status='pending'). If 0 rows
+    // are updated, another thread already claimed this txn — skip safely.
     const now = new Date();
     await this.db.transaction(async (tx) => {
-      await tx
+      const claimed = await tx
         .update(transactions)
         .set({
           status: 'success',
@@ -176,7 +179,13 @@ export class WalletService {
           completedAt: now,
           metadata: { ecpayTradeNo: result.merchantTradeNo, ecpayServerTradeNo: result.tradeNo },
         })
-        .where(eq(transactions.id, txn.id));
+        .where(and(eq(transactions.id, txn.id), eq(transactions.status, 'pending')))
+        .returning({ id: transactions.id });
+
+      if (claimed.length === 0) {
+        // Concurrent callback already processed — skip to avoid double-credit
+        return;
+      }
 
       await tx.insert(journalEntries).values([
         { transactionId: txn.id, accountName: 'escrow_ecpay', debitAmount: txn.amount, creditAmount: 0 },
