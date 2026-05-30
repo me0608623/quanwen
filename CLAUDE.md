@@ -73,7 +73,9 @@ Key cross-cutting modules:
 | PGlite (in-memory) | `USE_PG_MEM=true` | Fastest; data lost on restart; auto-runs DDL on startup |
 | Real PostgreSQL | `USE_PG_MEM=false` + `DATABASE_URL` | Requires `pnpm db:push` after schema changes |
 
-`DatabaseModule` detects `USE_PG_MEM` and provides either a PGlite or `pg` Pool driver to Drizzle. All schema DDL is also inlined into the PGlite `useFactory` so `db:push` is not needed in memory mode.
+`DatabaseModule` detects `USE_PG_MEM` and provides either a PGlite or `pg` Pool driver to Drizzle. All schema DDL is also inlined into the PGlite `useFactory` (`apps/api/src/db/database.module.ts`) so `db:push` is not needed in memory mode.
+
+**Critical**: When adding new tables or columns to the Drizzle schema files, you **must** also add the corresponding SQL to the `useFactory` block in `database.module.ts`. Forgetting this causes `USE_PG_MEM=true` to start with a stale schema silently.
 
 ### Web Architecture
 
@@ -82,6 +84,26 @@ Key cross-cutting modules:
 - Server state via TanStack Query hooks in `src/hooks/use-*.ts`. Each domain has its own hook file (`use-auth`, `use-surveys`, `use-wallet`, etc.).
 - Zustand is used for lightweight client-only state (e.g. `behavior-tracker`).
 - Auth pages live at `/auth/<name>/page.tsx` — **not** a route group. Navbar hides itself on `/auth/*` via `usePathname()`.
+
+### One Account, Both Roles (Phase A)
+
+Every new user — whether email/password or OAuth — gets **both** a `respondent_profiles` row and a `surveyor_profiles` row created immediately via `ensureBothProfiles()` in `AuthService`. This is called on `register()` and inside `findOrCreateOAuthUser()`.
+
+This means the `users.role` column is **not** used to gate surveyor vs respondent features; it only distinguishes `admin` from regular users. Do not add `role === 'surveyor'` guards for feature access — check the profile's `isOnboardingDone` flag instead.
+
+### Auth Flow
+
+JWT-based. `passport-jwt` validates `Authorization: Bearer <token>` on all `@UseGuards(JwtAuthGuard)` routes. Token is stored in `localStorage` on the frontend and auto-attached by the axios instance.
+
+OAuth (Google, LINE, Apple) implemented without Passport strategies for LINE/Apple — raw `fetch` + `jose` for JWT verification. New OAuth users land on `/auth/select-role` before onboarding.
+
+**OAuth account linking security rule**: `findOrCreateOAuthUser()` does **not** auto-link an OAuth login to an existing email-matching account. A new user record is always created (with a fallback `@oauth.quanwen.local` email if there's a collision). Users who want to merge accounts must log in with the existing account first and bind the provider from Settings → Account. This prevents OAuth accounts from silently gaining access to existing accounts (including admin accounts).
+
+**OAuth binding flow**: `GET /auth/bind/:provider` (requires JWT) creates a short-lived in-memory bind session (10-minute TTL) keyed by a CSPRNG token, then redirects to the provider. The callback resolves the session and links the provider to the existing user.
+
+**Password policy** (enforced in `AuthController.validatePasswordPolicy`): ≥8 chars, ≤72 chars, at least one uppercase letter, at least one digit.
+
+**Token refresh**: `POST /auth/refresh` (requires valid JWT) re-signs a fresh 7-day token without re-authenticating. The frontend should call this before the token expires.
 
 ### Response Quality Audit Pipeline
 
@@ -105,10 +127,6 @@ Final `qualityScore` thresholds: **≥80 = passed** (auto-reward), **50-79 = sus
 6. Pairs expire after 72 hours (`expireOverduePairs()` cron, every minute).
 
 Standard `/tasks` marketplace filters out `type='mutual'` surveys.
-
-### Auth Flow
-
-JWT-based. `passport-jwt` validates `Authorization: Bearer <token>` on all `@UseGuards(JwtAuthGuard)` routes. OAuth (Google, LINE, Apple) implemented without Passport strategies for LINE/Apple — raw `fetch` + `jose` for JWT verification. New OAuth users land on `/auth/select-role` before onboarding.
 
 ### Wallet / Finance
 
@@ -143,6 +161,9 @@ Text-type answers (`text`, `matrix`) are passed through `redactPii()` before exp
 ❌ Self-collect payments        ✅ ECPay (綠界) payment gateway only
 ❌ Send PII to Z.ai             ✅ De-identify before any AI call
 ❌ Platform fee = 10%           ✅ PLATFORM_FEE_RATE = 0.15 (15%)
+❌ Auto-link OAuth by email     ✅ Always create new user; explicit binding via /settings/accounts
+❌ Add schema without DDL sync  ✅ Update both schema/*.ts AND database.module.ts PGlite block
+❌ role guard for feature access ✅ Check profile.isOnboardingDone; all users have both profiles
 ```
 
 ## Tailwind Setup Checklist
@@ -176,8 +197,11 @@ Minimum required for dev (see `.env.example` for full list):
 | `ZAI_API_KEY` | AI features | Format: `xxx.yyy` from Z.ai dashboard |
 | `WEB_URL` | CORS | Default: `http://localhost:3000` |
 | `API_URL` | frontend | Default: `http://localhost:3001/api/v1` |
+| `LINE_CHANNEL_ID` | LINE OAuth | Channel ID from LINE Developers console (not `LINE_CLIENT_ID`) |
+| `LINE_CHANNEL_SECRET` | LINE OAuth | Channel Secret (not `LINE_CLIENT_SECRET`) |
+| `LINE_CALLBACK_URL` | LINE OAuth | `http://localhost:3001/api/v1/auth/line/callback` |
 
-OAuth (`GOOGLE_*`, `LINE_*`, `APPLE_*`) and payment (`ECPAY_*`) vars are optional for local dev but required for production. See `README.md` for the complete variable table.
+Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `APPLE_CALLBACK_URL`), and ECPay (`ECPAY_*`) vars are optional for local dev but required for production. See `README.md` for the complete variable table.
 
 ## Further Reading
 
