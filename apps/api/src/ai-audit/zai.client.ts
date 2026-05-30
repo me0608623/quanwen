@@ -219,7 +219,7 @@ export class ZaiClient {
         this.logger.log(
           `zai.chat CACHE_HIT(L1) model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
         );
-        this.recordCacheHit(options);
+        this.recordCacheHit({ ...options, model: this.model });
         return l1Hit;
       }
       // L2：Redis（跨進程）。命中後回填 L1
@@ -228,7 +228,7 @@ export class ZaiClient {
         if (l2Hit !== undefined) {
           this.logger.log(`zai.chat CACHE_HIT(L2) model=${this.model} key=${cacheK.slice(0, 16)}`);
           this.cache.set(cacheK, l2Hit); // 回填 L1
-          this.recordCacheHit(options);
+          this.recordCacheHit({ ...options, model: this.model });
           return l2Hit;
         }
       }
@@ -313,6 +313,7 @@ export class ZaiClient {
             ts: Date.now(),
             promptKey: options.promptKey,
             promptVersion: options.promptVersion,
+            model: this.model,
             totalTokens: telemetry.totalTokens,
             promptTokens: telemetry.promptTokens,
             completionTokens: telemetry.completionTokens,
@@ -381,11 +382,12 @@ export class ZaiClient {
     }
   }
 
-  private recordCacheHit(options: { promptKey?: string; promptVersion?: string }): void {
+  private recordCacheHit(options: { promptKey?: string; promptVersion?: string; model?: string }): void {
     zaiTelemetry.record({
       ts: Date.now(),
       promptKey: options.promptKey,
       promptVersion: options.promptVersion,
+      model: options.model,
       totalTokens: 0,
       promptTokens: 0,
       completionTokens: 0,
@@ -410,6 +412,7 @@ export class ZaiClient {
       ts: Date.now(),
       promptKey: options.promptKey,
       promptVersion: options.promptVersion,
+      model: this.model,
       totalTokens: 0,
       promptTokens: 0,
       completionTokens: 0,

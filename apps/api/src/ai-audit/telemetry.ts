@@ -17,6 +17,7 @@ export interface TelemetryRecord {
   ts: number;             // epoch ms
   promptKey?: string;
   promptVersion?: string;
+  model?: string;         // Phase II.LF: Langfuse 需要 model 名稱做 grouping
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
