@@ -4,6 +4,8 @@ import { useCallback, useEffect, useRef } from 'react';
 import { Model, SurveyModel } from 'survey-core';
 import { Survey } from 'survey-react-ui';
 import 'survey-core/survey-core.min.css';
+// QUA-141: load Traditional Chinese locale so navigation/validation strings display in zh-TW
+import 'survey-core/i18n/chinese-traditional';
 import { quanswenToSurveyJs, extractAnswers } from '@/lib/surveyjs-adapter';
 import type { PublicSurvey, AnswerInput } from '@/hooks/use-responses';
 
@@ -38,6 +40,8 @@ export function SurveyRendererSurveyJS({
     const model = new Model(surveyJsJson);
     model.showQuestionNumbers = 'on';
     model.questionTitlePattern = 'numRequireTitle';
+    // QUA-141: use Traditional Chinese for all built-in SurveyJS strings
+    model.locale = 'zh-tw';
 
     // We'll handle completion via onComplete callback
     modelRef.current = model;
