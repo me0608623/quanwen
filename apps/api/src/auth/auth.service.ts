@@ -21,6 +21,14 @@ import { MailService } from '../mail/mail.service';
 
 const BCRYPT_ROUNDS = 12;
 
+/** Shared password strength validation — same rules as RegisterSchema */
+function validatePasswordStrength(password: string): void {
+  if (!password || password.length < 8) throw new Error('密碼至少 8 個字元');
+  if (password.length > 72) throw new Error('密碼最多 72 個字元');
+  if (!/[A-Z]/.test(password)) throw new Error('密碼需包含至少一個大寫字母');
+  if (!/[0-9]/.test(password)) throw new Error('密碼需包含至少一個數字');
+}
+
 // Short-lived in-memory store for OAuth binding sessions (MVP, non-clustered)
 const bindSessions = new Map<string, { userId: string; provider: string; expiresAt: number }>();
 
@@ -390,6 +398,9 @@ export class AuthService {
   // ─── Security: Set / Change Password ──────────────────────────────────────
 
   async setPassword(userId: string, newPassword: string) {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ passwordHash: users.passwordHash })
       .from(users)
@@ -406,6 +417,9 @@ export class AuthService {
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ passwordHash: users.passwordHash })
       .from(users)
@@ -718,6 +732,9 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ id: users.id, passwordResetToken: users.passwordResetToken, passwordResetExpiresAt: users.passwordResetExpiresAt })
       .from(users)
