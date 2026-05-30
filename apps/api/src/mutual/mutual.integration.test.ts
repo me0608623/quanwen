@@ -137,11 +137,13 @@ describe('MutualService (integration)', () => {
       );
 
       CREATE TYPE response_status AS ENUM ('in_progress','submitted','rewarded','rejected');
+      CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
       CREATE TABLE survey_responses (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         survey_id     UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         respondent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         status        response_status NOT NULL DEFAULT 'in_progress',
+        sentiment           response_sentiment,
         started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         submitted_at  TIMESTAMPTZ,
         fill_duration_seconds INTEGER,
