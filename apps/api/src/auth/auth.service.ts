@@ -248,7 +248,11 @@ export class AuthService {
         emailVerified: !email.endsWith('.placeholder'),
       } as NewUser)
       .returning({ id: users.id })
-      .catch(async () => {
+      .catch(async (err: unknown) => {
+        // Only handle PostgreSQL unique violation (23505) — rethrow everything else
+        // to avoid masking DB connection errors, constraint name conflicts, etc.
+        if ((err as { code?: string })?.code !== '23505') throw err;
+
         // email 唯一性衝突：此 email 已有帳號但沒有 OAuth 連結
         // 建立一個帶 oauth 後綴的新帳號讓用戶使用，避免覆蓋既有帳號
         const fallbackEmail = `${profile.providerAccountId}+${profile.provider}@oauth.quanwen.local`;
