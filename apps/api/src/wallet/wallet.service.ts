@@ -255,90 +255,97 @@ export class WalletService {
 
     const now = new Date();
 
-    // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ──────────────────────────────
-    // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
-    const deducted = await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance - ${totalDeduct}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${totalDeduct}`))
-      .returning({ id: wallets.id });
-
-    const txStatus = deducted.length > 0 ? 'success' : 'pending';
-
-    // ── 建立三筆 transaction（狀態由實際扣款結果決定）────────────────────────
-    const [rewardOutTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'reward_out',
-        amount: totalDeduct,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `問券方支付獎勵 NT$${rewardAmount} + 手續費 NT$${platformFee}`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    const [rewardInTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: respondentId,
-        type: 'reward_in',
-        amount: rewardAmount,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `完成問卷獲得獎勵 NT$${rewardAmount}`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    const [feeTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'platform_fee',
-        amount: platformFee,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `平台手續費 15%`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    // ── 複式記帳分錄 ────────────────────────────────────────────────────────
-    await this.db.insert(journalEntries).values([
-      { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: totalDeduct, creditAmount: 0 },
-      { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
-      { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
-      { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
-      { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
-      { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
-    ]);
-
-    if (txStatus === 'success') {
-      // 受試者入帳
-      await this.db
+    // ── 整個 issueReward 包在一個 db.transaction 裡 ──────────────────────────
+    // 原因：若 deduction 成功但後續 INSERT/UPDATE 失敗，錢會從問券方扣掉
+    // 但受試者沒收到、journal 也沒有記錄 → 帳務資料不一致。
+    // 將全部操作包在同一個 transaction，保證「扣問券方 + 入受試者 + 帳分錄」要嘛全成功要嘛全滾回。
+    const txResult = { status: 'pending' as 'success' | 'pending' }; // hoisted so logger/notification can read outside tx
+    await this.db.transaction(async (tx) => {
+      // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ─────────────────────────
+      // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
+      const deducted = await tx
         .update(wallets)
         .set({
-          cashBalance: sql`cash_balance + ${rewardAmount}`,
+          cashBalance: sql`cash_balance - ${totalDeduct}`,
           version: sql`version + 1`,
           updatedAt: now,
         })
-        .where(eq(wallets.userId, respondentId));
-    }
+        .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${totalDeduct}`))
+        .returning({ id: wallets.id });
+
+      txResult.status = deducted.length > 0 ? 'success' : 'pending';
+
+      // ── 建立三筆 transaction（狀態由實際扣款結果決定）──────────────────────
+      const [rewardOutTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'reward_out',
+          amount: totalDeduct,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `問券方支付獎勵 NT$${rewardAmount} + 手續費 NT$${platformFee}`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      const [rewardInTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: respondentId,
+          type: 'reward_in',
+          amount: rewardAmount,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `完成問卷獲得獎勵 NT$${rewardAmount}`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      const [feeTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'platform_fee',
+          amount: platformFee,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `平台手續費 15%`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      // ── 複式記帳分錄 ──────────────────────────────────────────────────────
+      await tx.insert(journalEntries).values([
+        { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: totalDeduct, creditAmount: 0 },
+        { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
+        { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
+        { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
+        { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
+        { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
+      ]);
+
+      if (txResult.status === 'success') {
+        // 受試者入帳
+        await tx
+          .update(wallets)
+          .set({
+            cashBalance: sql`cash_balance + ${rewardAmount}`,
+            version: sql`version + 1`,
+            updatedAt: now,
+          })
+          .where(eq(wallets.userId, respondentId));
+      }
+    });
 
     this.logger.log(
-      `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txStatus}`,
+      `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txResult.status}`,
     );
 
-    if (txStatus === 'success') {
+    if (txResult.status === 'success') {
       this.notifications
         .create({
           userId: respondentId,
