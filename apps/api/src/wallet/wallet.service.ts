@@ -725,33 +725,47 @@ export class WalletService {
 
     if (lockAmount <= 0) return;
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'reward_out',
-        amount: lockAmount,
-        status: 'pending',
-        relatedSurveyId: surveyId,
-        note: `問卷預算鎖定 NT$${lockAmount}（總需 NT$${totalBudget}）`,
-        metadata: { event: 'survey_budget_lock', totalRequired: totalBudget },
-      })
-      .returning();
+    // Wrap in a DB transaction: do the atomic wallet update FIRST inside the
+    // transaction boundary, then insert the journal entries only if it succeeds.
+    // Previously the journal entries were inserted before the wallet update, meaning
+    // a concurrent depletion could cause the wallet update to silently no-op while
+    // leaving orphaned transaction + journal records in the DB.
+    await this.db.transaction(async (tx) => {
+      const updateResult = await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance - ${lockAmount}`,
+          lockedCash: sql`locked_cash + ${lockAmount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${lockAmount}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: lockAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: 0, creditAmount: lockAmount },
-    ]);
+      if (updateResult.length === 0) {
+        // Insufficient balance after concurrent depletion — skip lock silently
+        // (the survey was published with aiReviewEnabled=false or insufficient budget warning was shown)
+        return;
+      }
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance - ${lockAmount}`,
-        lockedCash: sql`locked_cash + ${lockAmount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${lockAmount}`));
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'reward_out',
+          amount: lockAmount,
+          status: 'pending',
+          relatedSurveyId: surveyId,
+          note: `問卷預算鎖定 NT$${lockAmount}（總需 NT$${totalBudget}）`,
+          metadata: { event: 'survey_budget_lock', totalRequired: totalBudget },
+        })
+        .returning();
+
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: lockAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: 0, creditAmount: lockAmount },
+      ]);
+    });
 
     this.logger.log(`Budget locked: survey=${surveyId} amount=${lockAmount}`);
   }
