@@ -126,7 +126,10 @@ export class AiInsightsService {
       const base: SurveyInsights = {
         reportType,
         summary: String(parsed.summary ?? '').slice(0, detailed ? 600 : 300),
-        keyFindings: this.toArray(parsed.keyFindings).slice(0, detailed ? 10 : 6),
+        keyFindings: this.withEvidenceQuotes(
+          this.toArray(parsed.keyFindings),
+          stats,
+        ).slice(0, detailed ? 10 : 6),
         concerns: this.toArray(parsed.concerns).slice(0, detailed ? 6 : 4),
         recommendations: this.toArray(parsed.recommendations).slice(0, detailed ? 8 : 5),
         sampleSize,
@@ -279,7 +282,7 @@ export class AiInsightsService {
       lines.push('請產生一份「詳細分析報告」，回傳 JSON，格式為：');
       lines.push('{');
       lines.push('  "summary": "3-5 句的整體洞察與脈絡",');
-      lines.push('  "keyFindings": ["主要發現（可較多、含具體數字）", "..."],');
+      lines.push('  "keyFindings": ["主要發現（可較多、含具體數字與短引述）", "..."],');
       lines.push('  "questionBreakdown": [{ "question": "題目（精簡）", "insight": "該題 1 句深入洞察" }],');
       lines.push('  "crossFindings": ["跨題/關聯觀察，例如 A 題高分者在 B 題傾向…"],');
       lines.push('  "concerns": ["資料品質/偏差/代表性注意事項"],');
@@ -296,7 +299,7 @@ export class AiInsightsService {
       lines.push('請回傳 JSON，格式為：');
       lines.push('{');
       lines.push('  "summary": "1-2 句話的整體洞察",');
-      lines.push('  "keyFindings": ["主要發現 1", "主要發現 2", "..."],');
+      lines.push('  "keyFindings": ["主要發現 1（含短引述）", "主要發現 2（含短引述）", "..."],');
       lines.push('  "concerns": ["資料品質/偏差注意事項"],');
       lines.push('  "recommendations": ["後續可行動的建議"]');
       lines.push('}');
@@ -335,6 +338,35 @@ export class AiInsightsService {
     if (Array.isArray(v)) return v.map((x) => String(x)).filter(Boolean);
     if (typeof v === 'string' && v.trim()) return [v.trim()];
     return [];
+  }
+
+  private withEvidenceQuotes(
+    findings: string[],
+    stats: SurveyStatsInput,
+  ): string[] {
+    if (findings.length === 0) return findings;
+    const quotePool = stats.questionStats
+      .flatMap((q) => q.sampleTexts ?? [])
+      .map((text) => text?.trim())
+      .filter((text): text is string => Boolean(text))
+      .map((text) => this.normalizeQuote(text));
+    if (quotePool.length === 0) return findings;
+
+    let quoteIndex = 0;
+    return findings.map((finding) => {
+      if (this.hasQuotedSnippet(finding)) return finding;
+      const quote = quotePool[quoteIndex % quotePool.length];
+      quoteIndex += 1;
+      return `${finding} (quote: "${quote.slice(0, 60)}")`;
+    });
+  }
+
+  private hasQuotedSnippet(text: string): boolean {
+    return text.includes('"');
+  }
+
+  private normalizeQuote(text: string): string {
+    return text.replace(/\s+/g, ' ').replace(/"/g, '').trim();
   }
 
   private fallback(

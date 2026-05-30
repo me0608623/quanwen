@@ -105,4 +105,5 @@ describe('AiInsightsService — 簡單/詳細報告分級', () => {
     expect(r.summary).toContain('AI 服務暫時不可用');
     expect(Array.isArray(r.questionBreakdown)).toBe(true);
   });
+
 });
