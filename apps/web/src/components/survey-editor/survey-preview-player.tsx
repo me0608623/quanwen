@@ -93,7 +93,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
           onChange={(e) => setAns({ selectedOptionIds: e.target.value ? [e.target.value] : [] })}
           className="w-full rounded border border-input bg-background px-3 py-2 text-sm"
         >
-          <option value="">Select an option</option>
+          <option value="">請選擇一個選項</option>
           {(q.options ?? []).map((opt, i) => {
             const optId = opt.id ?? `__preview_${i}`;
             return (

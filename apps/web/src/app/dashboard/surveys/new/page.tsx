@@ -374,7 +374,7 @@ export default function NewSurveyPage() {
       </section>
 
       <section className="space-y-3 rounded-lg border border-border p-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">Live Preview</h2>
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">即時預覽</h2>
         <SurveyPreviewPlayer
           title={livePreviewDraft.title}
           description={livePreviewDraft.description}
@@ -389,7 +389,7 @@ export default function NewSurveyPage() {
         )}
         <button
           type="button"
-          aria-label="Save draft"
+          aria-label="儲存草稿"
           onClick={handleSaveDraft}
           disabled={createSurvey.isPending}
           className="rounded-md bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
