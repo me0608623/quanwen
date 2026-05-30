@@ -66,31 +66,34 @@ export class SurveysService {
     // If caller explicitly set expiresAt use it; otherwise derive from tier
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : tierExpiresAt(tier);
 
-    const inserted = await this.db
-      .insert(surveys)
-      .values({
-        surveyorId,
-        title: dto.title,
-        description: dto.description,
-        type: dto.type ?? 'standard',
-        category: dto.category,
-        aiReviewEnabled: dto.aiReviewEnabled ?? true,
-        externalUrl: dto.externalUrl,
-        rewardPoints: effectivePoints,
-        baseRewardPoints: basePoints,
-        deadlineTier: tier,
-        targetCount: dto.targetCount ?? 100,
-        expiresAt,
-        isAnonymous: dto.isAnonymous ?? true,
-        audienceCriteria: dto.audienceCriteria,
-      })
-      .returning();
+    let survey = {} as typeof surveys.$inferSelect;
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveys)
+        .values({
+          surveyorId,
+          title: dto.title,
+          description: dto.description,
+          type: dto.type ?? 'standard',
+          category: dto.category,
+          aiReviewEnabled: dto.aiReviewEnabled ?? true,
+          externalUrl: dto.externalUrl,
+          rewardPoints: effectivePoints,
+          baseRewardPoints: basePoints,
+          deadlineTier: tier,
+          targetCount: dto.targetCount ?? 100,
+          expiresAt,
+          isAnonymous: dto.isAnonymous ?? true,
+          audienceCriteria: dto.audienceCriteria,
+        })
+        .returning();
 
-    const survey = inserted[0];
+      survey = inserted[0];
 
-    if (dto.questions?.length) {
-      await this.replaceQuestions(survey.id, dto.questions);
-    }
+      if (dto.questions?.length) {
+        await this.replaceQuestionsInTx(tx, survey.id, dto.questions);
+      }
+    });
 
     return this.findOneDetailed(survey.id, surveyorId);
   }
@@ -161,11 +164,15 @@ export class SurveysService {
     if (surveyFields.isAnonymous !== undefined) updateData.isAnonymous = surveyFields.isAnonymous;
     if (surveyFields.audienceCriteria !== undefined) updateData.audienceCriteria = surveyFields.audienceCriteria;
 
-    await this.db.update(surveys).set(updateData).where(eq(surveys.id, surveyId));
-
-    if (questions !== undefined) {
-      await this.replaceQuestions(surveyId, questions);
-    }
+    // Wrap survey update + question replacement in a single transaction:
+    // if replaceQuestions fails mid-loop (partial inserts), the survey
+    // update rolls back too — prevents inconsistent state.
+    await this.db.transaction(async (tx) => {
+      await tx.update(surveys).set(updateData).where(eq(surveys.id, surveyId));
+      if (questions !== undefined) {
+        await this.replaceQuestionsInTx(tx, surveyId, questions);
+      }
+    });
 
     return this.findOneDetailed(surveyId, surveyorId);
   }
@@ -645,12 +652,22 @@ export class SurveysService {
   }
 
   private async replaceQuestions(surveyId: string, questionDtos: SurveyQuestionDto[]) {
-    await this.db
+    await this.db.transaction(async (tx) => {
+      await this.replaceQuestionsInTx(tx, surveyId, questionDtos);
+    });
+  }
+
+  private async replaceQuestionsInTx(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    surveyId: string,
+    questionDtos: SurveyQuestionDto[],
+  ) {
+    await tx
       .delete(surveyQuestions)
       .where(eq(surveyQuestions.surveyId, surveyId));
 
     for (const qDto of questionDtos) {
-      const inserted = await this.db
+      const inserted = await tx
         .insert(surveyQuestions)
         .values({
           surveyId,
@@ -666,7 +683,7 @@ export class SurveysService {
       const questionId = inserted[0].id;
 
       if (qDto.options?.length) {
-        await this.db.insert(questionOptions).values(
+        await tx.insert(questionOptions).values(
           qDto.options.map((o, i) => ({
             questionId,
             label: o.label,
