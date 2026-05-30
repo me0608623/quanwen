@@ -31,6 +31,17 @@ function cleanExpiredBindSessions() {
   }
 }
 
+// Short-lived CSRF state tokens for non-bind LINE/OAuth login flows
+// Prevents an attacker from forging a callback with a crafted ?code= parameter
+const loginStateSessions = new Map<string, { expiresAt: number }>();
+
+function cleanExpiredLoginStates() {
+  const now = Date.now();
+  for (const [key, val] of loginStateSessions) {
+    if (val.expiresAt < now) loginStateSessions.delete(key);
+  }
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -475,6 +486,21 @@ export class AuthService {
     }
     bindSessions.delete(stateToken);
     return { userId: session.userId, provider: session.provider };
+  }
+
+  /** Create a one-time CSRF state token for non-bind OAuth login flows (5 min TTL) */
+  createLoginStateToken(): string {
+    cleanExpiredLoginStates();
+    const token = randomBytes(24).toString('hex');
+    loginStateSessions.set(token, { expiresAt: Date.now() + 5 * 60 * 1000 });
+    return token;
+  }
+
+  /** Validate and consume a CSRF state token. Returns false if invalid or expired. */
+  validateAndConsumeLoginState(token: string): boolean {
+    const session = loginStateSessions.get(token);
+    loginStateSessions.delete(token); // consume regardless (prevent replay)
+    return !!session && session.expiresAt > Date.now();
   }
 
   // ─── LINE OAuth helpers ────────────────────────────────────────────────────
