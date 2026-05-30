@@ -209,7 +209,7 @@ export function useUpdateSurvey(id: string) {
 
   return useMutation({
     mutationFn: async (dto: Partial<Survey> & { questions?: SurveyQuestion[] }) => {
-      const { data } = await api.put<Survey>(`/surveys/${id}`, dto);
+      const { data } = await api.patch<Survey>(`/surveys/${id}`, dto);
       return data;
     },
     onSuccess: (data) => {

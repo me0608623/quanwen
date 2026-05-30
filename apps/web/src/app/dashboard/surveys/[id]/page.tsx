@@ -89,7 +89,8 @@ export default function SurveyDetailPage() {
   const handlePublish = async () => {
     try {
       await publishSurvey.mutateAsync(id);
-      alert('問卷已成功發佈！');
+      // Don't use alert() — it blocks Playwright and delays React re-render.
+      // The UI updates via TanStack query invalidation (status badge changes).
     } catch (err) {
       showAxiosError(err, 'Failed to publish survey.');
     }
