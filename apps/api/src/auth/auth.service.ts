@@ -232,31 +232,39 @@ export class AuthService {
     }
 
     // ── New OAuth user: create account ──
+    // 安全原則：OAuth 登入「不」自動合併同 email 的既有帳號，
+    // 以防止 Google/LINE 用戶意外取得其他帳號（含管理員）的資料與權限。
+    // 若用戶希望合併帳號，應先用既有帳號登入，再從「設定 → 連結帳號」綁定。
     let userId: string;
     let isNewUser = false;
 
-    const existingByEmail = await this.db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
-
-    if (existingByEmail.length > 0) {
-      userId = existingByEmail[0].id;
-    } else {
-      const newUser = await this.db
-        .insert(users)
-        .values({
-          email,
-          displayName: profile.displayName,
-          avatarUrl: profile.avatarUrl,
-          role: 'respondent',       // default; 一帳號全功能, role 欄位僅用於 admin 區分
-          emailVerified: !email.endsWith('.placeholder'),
-        } as NewUser)
-        .returning({ id: users.id });
-      userId = newUser[0].id;
-      isNewUser = true;
-    }
+    const newUser = await this.db
+      .insert(users)
+      .values({
+        email,
+        displayName: profile.displayName,
+        avatarUrl: profile.avatarUrl,
+        role: 'respondent',       // default; 一帳號全功能, role 欄位僅用於 admin 區分
+        emailVerified: !email.endsWith('.placeholder'),
+      } as NewUser)
+      .returning({ id: users.id })
+      .catch(async () => {
+        // email 唯一性衝突：此 email 已有帳號但沒有 OAuth 連結
+        // 建立一個帶 oauth 後綴的新帳號讓用戶使用，避免覆蓋既有帳號
+        const fallbackEmail = `${profile.providerAccountId}+${profile.provider}@oauth.quanwen.local`;
+        return this.db
+          .insert(users)
+          .values({
+            email: fallbackEmail,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            role: 'respondent',
+            emailVerified: true,
+          } as NewUser)
+          .returning({ id: users.id });
+      });
+    userId = newUser[0].id;
+    isNewUser = true;
 
     // Phase A: OAuth 新用戶也補建兩種 profile
     await this.ensureBothProfiles(userId);
