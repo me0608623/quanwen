@@ -51,7 +51,8 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
       await expect(page.getByLabel(`Question ${i + 1} type`)).toHaveValue(QUESTION_TYPES[i]);
     }
 
-    await page.getByRole("button", { name: /save|Save/i }).click();
+    // Use aria-label "Save draft" — the button text is Chinese (儲存草稿).
+    await page.getByRole("button", { name: /save draft/i }).click();
     await expect(page).toHaveURL(/\/dashboard\/surveys\/[^/]+$/, { timeout: 15000 });
   });
 
@@ -114,25 +115,35 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
 
     // Disable AI review so publish goes directly to "published" (not "pending_review"),
     // making the survey immediately accessible at /s/:id.
-    const aiReviewCheckbox = page.getByLabel(/AI 品質審核|AI.+審核/i).first();
+    // Use the visible label text — the checkbox's accessible name includes Chinese text.
+    const aiReviewCheckbox = page.locator('label:has(input[type="checkbox"])').filter({
+      hasText: /AI 品質審核|AI.*審核/,
+    }).locator('input[type="checkbox"]');
     if (await aiReviewCheckbox.isChecked().catch(() => false)) {
       await aiReviewCheckbox.uncheck();
+      // Verify uncheck succeeded
+      await expect(aiReviewCheckbox).not.toBeChecked({ timeout: 3000 });
     }
 
-    await page.getByRole("button", { name: /save|Save/i }).click();
+    // Save draft — use aria-label for stability across locales
+    await page.getByRole("button", { name: /save draft/i }).click();
     await expect(page).toHaveURL(/\/dashboard\/surveys\/[^/]+$/, { timeout: 15000 });
 
     const surveyUrl = page.url();
     const surveyId = surveyUrl.split("/").pop();
     expect(surveyId).toBeTruthy();
 
+    // Wait for the survey detail page to fully load (not stuck on "Loading survey...")
+    await expect(page.getByText("Loading survey")).not.toBeVisible({ timeout: 10000 });
+
     const publishBtn = page.getByRole("button", { name: "Publish" });
     await expect(publishBtn).toBeVisible({ timeout: 10000 });
     await publishBtn.click();
 
-    // With aiReviewEnabled=false, status goes directly to "Published"
-    await expect(page.getByText(/Pending Review|Published/i)).toBeVisible({ timeout: 10000 });
+    // Assert ONLY "Published" — not "Pending Review" (which would mean AI review wasn't disabled).
+    await expect(page.getByText("Published")).toBeVisible({ timeout: 10000 });
 
+    // Open public link in an anonymous (no auth) browser context
     const anon = await context.browser()!.newContext();
     const anonPage = await anon.newPage();
     await anonPage.goto(`http://localhost:3000/s/${surveyId}`);
