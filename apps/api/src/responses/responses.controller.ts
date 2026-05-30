@@ -233,6 +233,20 @@ export class ResponsesController {
     return this.aiInsights.analyzeResponseSentiments(surveyId, questionId, answers);
   }
 
+  /** GET /surveys/:id/analyze/cross-tab?field=gender|ageRange — 情緒 × 人口統計交叉分析 */
+  @Get(':id/analyze/cross-tab')
+  analyzeCrossTab(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('field') field?: string,
+  ) {
+    if (field !== 'gender' && field !== 'ageRange') {
+      throw new BadRequestException('field must be one of: gender, ageRange');
+    }
+    const user = req.user as AuthenticatedUser;
+    return this.responsesService.analyzeSentimentCrossTab(id, user.id, field);
+  }
+
   /** GET /surveys/:id/trend — 近 30 天每日填答趨勢 */
   @Get(':id/trend')
   getTrend(@Param('id') id: string, @Req() req: Request) {

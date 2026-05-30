@@ -1092,6 +1092,49 @@ export class ResponsesService {
 
     return [headers.join(','), ...rows].join('\n');
   }
+
+  async analyzeSentimentCrossTab(surveyId: string, surveyorId: string, field: 'gender' | 'ageRange') {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys).where(eq(surveys.id, surveyId)).limit(1);
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+    const rows = await this.db
+      .select({
+        sentiment: surveyResponses.sentiment,
+        gender: respondentProfiles.gender,
+        ageRange: respondentProfiles.ageRange,
+      })
+      .from(surveyResponses)
+      .innerJoin(respondentProfiles, eq(respondentProfiles.userId, surveyResponses.respondentId))
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+          inArray(surveyResponses.sentiment, ['positive', 'neutral', 'negative']),
+        ),
+      );
+
+    const grouped = new Map<string, { positive: number; neutral: number; negative: number; total: number }>();
+    for (const r of rows) {
+      const group = field === 'gender' ? (r.gender ?? 'unknown') : (r.ageRange ?? 'unknown');
+      const cur = grouped.get(group) ?? { positive: 0, neutral: 0, negative: 0, total: 0 };
+      const sentiment = r.sentiment as 'positive' | 'neutral' | 'negative';
+      cur[sentiment] += 1;
+      cur.total += 1;
+      grouped.set(group, cur);
+    }
+
+    const groups = [...grouped.entries()].map(([label, counts]) => ({
+      groupLabel: label,
+      positive: counts.positive,
+      neutral: counts.neutral,
+      negative: counts.negative,
+      total: counts.total,
+    }));
+
+    return { surveyId, field, groups, generatedAt: new Date().toISOString() };
+  }
 }
 
 // ─── 受眾媒合 helper ──────────────────────────────────────────────────────────

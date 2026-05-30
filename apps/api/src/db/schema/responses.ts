@@ -23,6 +23,12 @@ export const responseStatusEnum = pgEnum('response_status', [
   'rejected',    // 品質審查不通過（反作弊）
 ]);
 
+export const responseSentimentEnum = pgEnum('response_sentiment', [
+  'positive',
+  'neutral',
+  'negative',
+]);
+
 // ─── Survey Responses ─────────────────────────────────────────────────────────
 
 export const surveyResponses = pgTable(
@@ -47,6 +53,8 @@ export const surveyResponses = pgTable(
     qualityScore: integer('quality_score'),                  // 0-100，最終加權分（越高越好）
     qualityBreakdown: jsonb('quality_breakdown'),            // QualityBreakdown 完整結構
     behaviorLog: jsonb('behavior_log'),                      // Phase 2 前端行為訊號
+    // Phase 2 AI sentiment analysis result
+    sentiment: responseSentimentEnum('sentiment'),
     // 防重複：每人每份問卷只能提交一次
   },
   (t) => ({
