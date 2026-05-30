@@ -23,10 +23,10 @@ interface QuestionBlockListProps {
 // ─── Question type selector options ─────────────────────────────────────────
 
 const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string; icon: string }[] = [
-  { value: 'single_choice', label: 'Single Choice', icon: '◉' },
-  { value: 'multiple_choice', label: 'Multiple Choice', icon: '☑' },
-  { value: 'text', label: 'Text', icon: '☰' },
-  { value: 'rating', label: 'Rating', icon: '★' },
+  { value: 'single_choice', label: '單選', icon: '◉' },
+  { value: 'multiple_choice', label: '多選', icon: '☑' },
+  { value: 'text', label: '問答', icon: '☰' },
+  { value: 'rating', label: '評分', icon: '★' },
 ];
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -96,17 +96,17 @@ export function QuestionBlockList({
     <div className="space-y-1 p-3">
       {/* Section label */}
       <div className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-        Survey Structure
+        問卷結構
       </div>
 
       {/* Welcome Card block (static) */}
       <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">📋</span>
-          <span className="font-medium text-foreground">Welcome Card</span>
+          <span className="font-medium text-foreground">歡迎頁</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
-          {questions.length > 0 ? questions[0].title || 'Introduction' : 'Add questions to get started'}
+          {questions.length > 0 ? questions[0].title || '簡介' : '新增題目以開始'}
         </p>
       </div>
 
@@ -150,7 +150,7 @@ export function QuestionBlockList({
 
               {/* Question title */}
               <span className="flex-1 truncate font-medium text-foreground">
-                {q.title || 'Untitled question'}
+                {q.title || '未命名題目'}
               </span>
 
               {/* Required badge */}
@@ -167,7 +167,7 @@ export function QuestionBlockList({
                     onDelete(index);
                   }}
                   className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
-                  aria-label={`Delete question ${index + 1}`}
+                  aria-label={`刪除第 ${index + 1} 題`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18" />
@@ -190,10 +190,10 @@ export function QuestionBlockList({
       <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">🏁</span>
-          <span className="font-medium text-foreground">Endings</span>
+          <span className="font-medium text-foreground">結尾</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground">
-          Thank you screen &amp; redirect
+          感謝頁與轉址
         </p>
       </div>
 
@@ -205,7 +205,7 @@ export function QuestionBlockList({
             onClick={() => setShowTypeSelector((prev) => !prev)}
             className="w-full rounded-md border-2 border-dashed border-border py-2.5 text-xs text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
           >
-            + Add Question
+            + 新增題目
           </button>
 
           {/* Type selector dropdown */}

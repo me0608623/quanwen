@@ -21,8 +21,8 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
   if (completed || currentIdx >= questions.length) {
     return (
       <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">Preview Complete</h3>
-        <p className="mt-1 text-xs text-slate-600">You reached the end of this preview flow.</p>
+        <h3 className="text-sm font-semibold text-slate-900">預覽完成</h3>
+        <p className="mt-1 text-xs text-slate-600">您已到達預覽流程的尾端。</p>
         <button
           type="button"
           onClick={() => {
@@ -32,14 +32,14 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
           }}
           className="mt-3 rounded border border-slate-300 px-2.5 py-1 text-xs text-slate-700 hover:bg-white"
         >
-          Restart Preview
+          重新預覽
         </button>
       </div>
     );
   }
 
   if (questions.length === 0) {
-    return <p className="text-xs text-slate-500">Add a question to see respondent preview.</p>;
+    return <p className="text-xs text-slate-500">請新增題目以查看受試者預覽。</p>;
   }
 
   const q = questions[currentIdx];
@@ -59,8 +59,8 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
   return (
     <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
       <div>
-        <p className="text-[10px] uppercase tracking-wide text-slate-500">Respondent Preview</p>
-        <h3 className="text-sm font-semibold text-slate-900">{title || 'Untitled Survey'}</h3>
+        <p className="text-[10px] uppercase tracking-wide text-slate-500">受試者預覽</p>
+        <h3 className="text-sm font-semibold text-slate-900">{title || '未命名問卷'}</h3>
         {description && <p className="mt-1 text-xs text-slate-600">{description}</p>}
       </div>
 
@@ -69,7 +69,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
       </div>
       <p className="text-[10px] text-slate-400">Q{currentIdx + 1} / {questions.length}</p>
 
-      <p className="text-sm font-medium text-slate-900">{q.title || 'Untitled question'}</p>
+      <p className="text-sm font-medium text-slate-900">{q.title || '未命名題目'}</p>
 
       {q.type === 'text' && (
         <textarea
@@ -98,7 +98,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
             const optId = opt.id ?? `__preview_${i}`;
             return (
               <option key={optId} value={optId}>
-                {opt.label || 'Untitled option'}
+                {opt.label || '未命名選項'}
               </option>
             );
           })}
@@ -123,7 +123,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
                     }
                   }}
                 />
-                <span>{opt.label || 'Untitled option'}</span>
+                <span>{opt.label || '未命名選項'}</span>
               </label>
             );
           })}
@@ -137,7 +137,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
           disabled={currentIdx === 0}
           className="rounded border border-slate-300 px-2.5 py-1 text-xs text-slate-700 disabled:opacity-40"
         >
-          Back
+          上一步
         </button>
         <button
           type="button"
@@ -149,7 +149,7 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
           }}
           className="rounded bg-[#126b8a] px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
         >
-          {currentIdx === questions.length - 1 ? 'Finish' : 'Next'}
+          {currentIdx === questions.length - 1 ? '完成' : '下一步'}
         </button>
       </div>
     </div>

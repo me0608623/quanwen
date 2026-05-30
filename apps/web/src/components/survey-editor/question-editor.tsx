@@ -13,13 +13,13 @@ type DisplayQuestionType =
   | 'dropdown';
 
 const TYPE_LABELS: Record<DisplayQuestionType, string> = {
-  single_choice: 'Single choice',
-  multiple_choice: 'Multiple choice',
-  text: 'Text',
-  rating: 'Rating',
-  numeric: 'Numeric',
-  yes_no: 'Yes / No',
-  dropdown: 'Dropdown',
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
 };
 
 interface SkipLogicRule {
@@ -120,7 +120,7 @@ export function QuestionEditor({
 
   const optionItems = (question.options ?? []).map((option, optionIndex) => ({
     value: option.id ?? `option-${optionIndex}`,
-    label: option.label || `Option ${optionIndex + 1}`,
+    label: option.label || `選項 ${optionIndex + 1}`,
   }));
 
   const applyDisplayType = (nextType: DisplayQuestionType) => {
@@ -143,8 +143,8 @@ export function QuestionEditor({
         ...question,
         type: 'single_choice',
         options: [
-          { id: 'yes', label: 'Yes', sortOrder: 0 },
-          { id: 'no', label: 'No', sortOrder: 1 },
+          { id: 'yes', label: '是', sortOrder: 0 },
+          { id: 'no', label: '否', sortOrder: 1 },
         ],
         config: { ...baseConfig, variant: 'yes_no' },
       });
@@ -181,7 +181,7 @@ export function QuestionEditor({
       <div className="flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-muted-foreground">Q{index + 1}</span>
         <select
-          aria-label={`Question ${index + 1} type`}
+          aria-label={`第 ${index + 1} 題類型`}
           value={displayType}
           onChange={(e) => applyDisplayType(e.target.value as DisplayQuestionType)}
           className="rounded border border-input bg-background px-2 py-1 text-xs"
@@ -199,10 +199,10 @@ export function QuestionEditor({
             onChange={(e) => updateField('isRequired', e.target.checked)}
             className="h-3 w-3"
           />
-          Required
+          必填
         </label>
         <button type="button" onClick={onRemove} className="text-xs text-destructive hover:underline">
-          Delete
+          刪除
         </button>
       </div>
 
@@ -212,14 +212,14 @@ export function QuestionEditor({
           onClick={() => setActiveTab('content')}
           className={`text-xs px-2 py-1 rounded ${activeTab === 'content' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
-          Content
+          內容
         </button>
         <button
           type="button"
           onClick={() => setActiveTab('logic')}
           className={`text-xs px-2 py-1 rounded ${activeTab === 'logic' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground'}`}
         >
-          Logic
+          邏輯
         </button>
       </div>
 
@@ -229,13 +229,13 @@ export function QuestionEditor({
             type="text"
             value={question.title}
             onChange={(e) => updateField('title', e.target.value)}
-            placeholder="Question text"
+            placeholder="題目文字"
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
           <textarea
             value={question.description ?? ''}
             onChange={(e) => updateField('description', e.target.value || undefined)}
-            placeholder="Question description"
+            placeholder="題目說明（選填）"
             rows={2}
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
@@ -249,7 +249,7 @@ export function QuestionEditor({
                     type="text"
                     value={opt.label}
                     onChange={(e) => updateOption(i, e.target.value)}
-                    placeholder={`Option ${i + 1}`}
+                    placeholder={`選項 ${i + 1}`}
                     className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
                   />
                   <button type="button" onClick={() => removeOption(i)} className="text-xs text-muted-foreground hover:text-destructive">
@@ -258,7 +258,7 @@ export function QuestionEditor({
                 </div>
               ))}
               <button type="button" onClick={addOption} className="text-xs text-primary hover:underline">
-                + Add option
+                + 新增選項
               </button>
             </div>
           )}
@@ -266,7 +266,7 @@ export function QuestionEditor({
           {isRatingLike && (
             <div className="space-y-2 pl-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Max rating</span>
+                <span className="text-xs text-muted-foreground">最大評分</span>
                 <input
                   type="number"
                   min={2}
@@ -278,7 +278,7 @@ export function QuestionEditor({
               </div>
               {ratingSiblings.length > 0 && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Reverse of</span>
+                  <span className="text-xs text-muted-foreground">反向題</span>
                   <select
                     value={(question.config?.reverseOfIndex as number | undefined) ?? ''}
                     onChange={(e) => {
@@ -290,7 +290,7 @@ export function QuestionEditor({
                     }}
                     className="rounded border border-input bg-background px-2 py-1 text-xs"
                   >
-                    <option value="">None</option>
+                    <option value="">無</option>
                     {ratingSiblings.map((s) => (
                       <option key={s.index} value={s.index}>
                         Q{s.index + 1} {s.title}
@@ -305,14 +305,14 @@ export function QuestionEditor({
           {isNumeric && (
             <div className="space-y-2 pl-2">
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Min</span>
+                <span className="text-xs text-muted-foreground">最小值</span>
                 <input
                   type="number"
                   value={(question.config?.minValue as number) ?? 0}
                   onChange={(e) => patchConfig({ ...(question.config ?? {}), minValue: Number(e.target.value) })}
                   className="w-20 rounded border border-input bg-background px-2 py-1 text-sm"
                 />
-                <span className="text-xs text-muted-foreground">Max</span>
+                <span className="text-xs text-muted-foreground">最大值</span>
                 <input
                   type="number"
                   value={(question.config?.maxValue as number) ?? 100}
@@ -331,7 +331,7 @@ export function QuestionEditor({
                 onChange={(e) => patchConfig({ ...(question.config ?? {}), aiQualityCheckEnabled: e.target.checked })}
                 className="mt-0.5 h-3.5 w-3.5"
               />
-              <span>Enable AI quality check for this question</span>
+              <span>啟用 AI 品質審核（此題）</span>
             </label>
           </div>
         </div>
@@ -341,21 +341,21 @@ export function QuestionEditor({
         <div className="space-y-3">
           {(isChoiceType || isRatingLike) && (
             <button type="button" onClick={addRule} className="text-xs text-primary hover:underline">
-              + Add jump rule
+              + 新增跳題規則
             </button>
           )}
 
           {rules.length === 0 && (
-            <p className="text-xs text-muted-foreground">No jump rules configured.</p>
+            <p className="text-xs text-muted-foreground">尚未設定跳題規則。</p>
           )}
 
           {rules.map((rule, ruleIndex) => (
             <div key={ruleIndex} className="rounded border border-border p-2 space-y-2">
-              <div className="text-xs font-medium">Rule {ruleIndex + 1}</div>
+              <div className="text-xs font-medium">規則 {ruleIndex + 1}</div>
 
               {isChoiceType && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">If option</span>
+                  <span className="text-xs text-muted-foreground">若選項為</span>
                   <select
                     value={rule.selectedOptionId ?? ''}
                     onChange={(e) => updateRule(ruleIndex, { selectedOptionId: e.target.value, selectedRating: undefined })}
@@ -372,7 +372,7 @@ export function QuestionEditor({
 
               {isRatingLike && (
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">If rating equals</span>
+                  <span className="text-xs text-muted-foreground">若評分等於</span>
                   <input
                     type="number"
                     min={0}
@@ -385,7 +385,7 @@ export function QuestionEditor({
               )}
 
               <div className="flex items-center gap-2">
-                <span className="text-xs text-muted-foreground">Then jump to</span>
+                <span className="text-xs text-muted-foreground">則跳至</span>
                 <select
                   value={rule.skipToEnd ? '__end__' : String(rule.skipToQuestionIndex ?? '')}
                   onChange={(e) => {
@@ -402,10 +402,10 @@ export function QuestionEditor({
                       Q{target.index + 1} {target.title}
                     </option>
                   ))}
-                  <option value="__end__">End survey</option>
+                  <option value="__end__">結束問卷</option>
                 </select>
                 <button type="button" onClick={() => removeRule(ruleIndex)} className="text-xs text-destructive hover:underline">
-                  Remove
+                  移除
                 </button>
               </div>
             </div>

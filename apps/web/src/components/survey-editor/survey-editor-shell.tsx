@@ -76,13 +76,13 @@ export function SurveyEditorShell({
       case 'styling':
         return stylingSidebar ?? (
           <div className="p-4 text-sm text-muted-foreground">
-            Styling options coming soon.
+            樣式選項即將推出。
           </div>
         );
       case 'settings':
         return settingsSidebar ?? (
           <div className="p-4 text-sm text-muted-foreground">
-            Settings coming soon.
+            設定即將推出。
           </div>
         );
     }
@@ -97,7 +97,7 @@ export function SurveyEditorShell({
           type="button"
           onClick={onBack}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
-          aria-label="Back to dashboard"
+          aria-label="返回儀表板"
         >
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M19 12H5" />
@@ -113,22 +113,22 @@ export function SurveyEditorShell({
               value={surveyTitle}
               onChange={(e) => onTitleChange(e.target.value)}
               className="w-full max-w-sm truncate rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-foreground hover:border-input focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
-              placeholder="Untitled Survey"
+              placeholder="未命名問卷"
             />
           ) : (
             <span className="truncate text-sm font-semibold text-foreground">
-              {surveyTitle || 'Untitled Survey'}
+              {surveyTitle || '未命名問卷'}
             </span>
           )}
           <span
             className={cn(
               'shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide',
-              statusLabel === 'Published' && 'bg-green-100 text-green-800',
-              statusLabel === 'Draft' && 'bg-slate-100 text-slate-600',
-              statusLabel === 'Pending Review' && 'bg-yellow-100 text-yellow-800',
-              statusLabel === 'Rejected' && 'bg-red-100 text-red-700',
-              statusLabel === 'Paused' && 'bg-orange-100 text-orange-700',
-              statusLabel === 'Closed' && 'bg-gray-100 text-gray-600',
+              statusLabel === '已發布' && 'bg-green-100 text-green-800',
+              statusLabel === '草稿' && 'bg-slate-100 text-slate-600',
+              statusLabel === '審核中' && 'bg-yellow-100 text-yellow-800',
+              statusLabel === '已退回' && 'bg-red-100 text-red-700',
+              statusLabel === '已暫停' && 'bg-orange-100 text-orange-700',
+              statusLabel === '已關閉' && 'bg-gray-100 text-gray-600',
             )}
           >
             {statusLabel}
@@ -148,7 +148,7 @@ export function SurveyEditorShell({
                 : 'border-input bg-background text-muted-foreground hover:bg-muted hover:text-foreground',
             )}
           >
-            {previewOpen ? 'Hide Preview' : 'Preview'}
+            {previewOpen ? '隱藏預覽' : '預覽'}
           </button>
 
           {canEdit && dirty && (
@@ -158,7 +158,7 @@ export function SurveyEditorShell({
               disabled={savePending}
               className="rounded-md border border-primary px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
             >
-              {savePending ? 'Saving...' : 'Save Draft'}
+              {savePending ? '儲存中…' : '儲存草稿'}
             </button>
           )}
 
@@ -169,7 +169,7 @@ export function SurveyEditorShell({
               disabled={publishPending}
               className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
             >
-              {publishPending ? 'Publishing...' : 'Publish'}
+              {publishPending ? '發布中…' : '發布'}
             </button>
           )}
         </div>
@@ -182,9 +182,9 @@ export function SurveyEditorShell({
           {/* Sidebar tabs */}
           <nav className="flex border-b border-border">
             {([
-              { id: 'questions' as SidebarTab, label: 'Questions' },
-              { id: 'styling' as SidebarTab, label: 'Styling' },
-              { id: 'settings' as SidebarTab, label: 'Settings' },
+              { id: 'questions' as SidebarTab, label: '題目' },
+              { id: 'styling' as SidebarTab, label: '樣式' },
+              { id: 'settings' as SidebarTab, label: '設定' },
             ]).map((tab) => (
               <button
                 key={tab.id}
@@ -216,7 +216,7 @@ export function SurveyEditorShell({
           <aside className="w-80 shrink-0 border-l border-border bg-white overflow-y-auto">
             <div className="p-3">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                Live Preview
+                即時預覽
               </h3>
               {previewPane}
             </div>
