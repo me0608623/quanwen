@@ -303,37 +303,38 @@ export class ResponsesService {
         ? 'pending_review'
         : 'submitted';
 
-    // ── 5. 建立 response 記錄 ────────────────────────────────────────────────
-    const inserted = await this.db
-      .insert(surveyResponses)
-      .values({
-        surveyId,
-        respondentId,
-        status: finalStatus,
-        submittedAt: now,
-        fillDurationSeconds,
-        antiCheatScore: antiCheatResult.score,
-        suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
-        // Phase 2: 把前端送來的行為訊號存起來
-        behaviorLog: dto.behaviorLog ?? null,
-      })
-      .returning({ id: surveyResponses.id });
+    // ── 5+6. 建立 response 記錄 + 寫入答案（atomic: 避免 orphaned response）──────
+    let responseId = '' as string;
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveyResponses)
+        .values({
+          surveyId,
+          respondentId,
+          status: finalStatus,
+          submittedAt: now,
+          fillDurationSeconds,
+          antiCheatScore: antiCheatResult.score,
+          suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
+          behaviorLog: dto.behaviorLog ?? null,
+        })
+        .returning({ id: surveyResponses.id });
 
-    const responseId = inserted[0].id;
+      responseId = inserted[0].id;
 
-    // ── 6. 寫入答案 ──────────────────────────────────────────────────────────
-    if (dto.answers.length > 0) {
-      await this.db.insert(responseAnswers).values(
-        dto.answers.map((a) => ({
-          responseId,
-          surveyId, // 反正規化（§3-B1）：寫入時同步塞，避免 per-survey 聚合需 JOIN
-          questionId: a.questionId,
-          textAnswer: a.textAnswer,
-          selectedOptionIds: a.selectedOptionIds ?? null,
-          ratingValue: a.ratingValue,
-        })),
-      );
-    }
+      if (dto.answers.length > 0) {
+        await tx.insert(responseAnswers).values(
+          dto.answers.map((a) => ({
+            responseId: responseId!,
+            surveyId, // 反正規化（§3-B1）
+            questionId: a.questionId,
+            textAnswer: a.textAnswer,
+            selectedOptionIds: a.selectedOptionIds ?? null,
+            ratingValue: a.ratingValue,
+          })),
+        );
+      }
+    });
 
     // ── 6.5 Quality Audit Pipeline（fire-and-forget，不卡住 submit 回應）────────
     // 把前端蒐集的行為訊號一起傳給 pipeline，給 Layer 2 更豐富的訊號
