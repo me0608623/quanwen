@@ -800,33 +800,43 @@ export class WalletService {
 
     if (toUnlock <= 0) return;
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'refund',
-        amount: toUnlock,
-        status: 'success',
-        relatedSurveyId: surveyId,
-        note: `問卷關閉，退回未用預算 NT$${toUnlock}`,
-        completedAt: new Date(),
-      })
-      .returning();
+    // Same atomicity pattern as lockSurveyBudget: update wallet first inside
+    // a transaction, insert journal entries only if the update succeeds.
+    await this.db.transaction(async (tx) => {
+      const updateResult = await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${toUnlock}`,
+          lockedCash: sql`locked_cash - ${toUnlock}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, surveyorId), sql`locked_cash >= ${toUnlock}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: toUnlock, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: 0, creditAmount: toUnlock },
-    ]);
+      if (updateResult.length === 0) {
+        // locked_cash was already depleted by a concurrent call — skip silently
+        return;
+      }
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${toUnlock}`,
-        lockedCash: sql`locked_cash - ${toUnlock}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, surveyorId));
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'refund',
+          amount: toUnlock,
+          status: 'success',
+          relatedSurveyId: surveyId,
+          note: `問卷關閉，退回未用預算 NT$${toUnlock}`,
+          completedAt: new Date(),
+        })
+        .returning();
+
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: toUnlock, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: 0, creditAmount: toUnlock },
+      ]);
+    });
 
     this.logger.log(`Budget unlocked: survey=${surveyId} refund=${toUnlock}`);
   }
