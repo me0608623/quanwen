@@ -79,28 +79,35 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     try {
-      const inserted = await this.db
-        .insert(users)
-        .values({ email: dto.email, passwordHash, displayName: dto.displayName, role: dto.role, roleSelectedAt: new Date() } as NewUser)
-        .returning({
-          id: users.id,
-          email: users.email,
-          displayName: users.displayName,
-          role: users.role,
-          status: users.status,
-          emailVerified: users.emailVerified,
-        });
+      // user + both profiles must be atomic: if profile inserts fail after
+      // user creation, the account is broken (no profile = no dashboard data)
+      let user: { id: string; email: string; displayName: string; role: string; status: string; emailVerified: boolean };
+      await this.db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(users)
+          .values({ email: dto.email, passwordHash, displayName: dto.displayName, role: dto.role, roleSelectedAt: new Date() } as NewUser)
+          .returning({
+            id: users.id,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            status: users.status,
+            emailVerified: users.emailVerified,
+          });
 
-      const user = inserted[0];
-      const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
+        user = inserted[0];
 
-      // Phase A: 一帳號全功能 — 註冊時同時建立兩種 profile，避免「沒 profile 看不到媒合 / 收益不被計入」
-      await this.ensureBothProfiles(user.id);
+        // Phase A: both profiles created atomically with user record
+        await tx.insert(respondentProfiles).values({ userId: user.id, isOnboardingDone: false }).onConflictDoNothing();
+        await tx.insert(surveyorProfiles).values({ userId: user.id, isOnboardingDone: false }).onConflictDoNothing();
+      });
+
+      const token = this.signToken({ sub: user!.id, email: user!.email, role: user!.role });
 
       // Send verification email non-blocking — registration succeeds even if mail fails
-      void this.sendVerificationEmail(user.id);
+      void this.sendVerificationEmail(user!.id);
 
-      return { user: { ...user, avatarUrl: null as string | null }, token };
+      return { user: { ...user!, avatarUrl: null as string | null }, token };
     } catch (err) {
       // PostgreSQL unique violation code 23505 — email already taken
       if ((err as { code?: string })?.code === '23505') {
