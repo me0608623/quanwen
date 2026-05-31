@@ -108,6 +108,8 @@ export class CryptoService {
       // 3. 國際 / 國內手機號（要在 BANK 前，因 09xxxxxxxx 是 10 位數字）
       .replace(/\+886[- ]?9\d{2}[- ]?\d{3}[- ]?\d{3}/g, '[PHONE]')
       .replace(/\b09\d{2}[- ]?\d{3}[- ]?\d{3}\b/g, '[PHONE]')
+      // 3a. 市話（02-XXXX / 037-XXXX 等格式）
+      .replace(/\b0\d{1,2}[-\s]\d{6,8}\b/g, '[PHONE]')
       // 4. 連續長數字 → 銀行帳號（10-16 位；09 開頭已被上面 PHONE 規則吃掉）
       .replace(/\b\d{10,16}\b/g, '[BANK]')
       // 5. email
