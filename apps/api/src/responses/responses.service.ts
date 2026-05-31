@@ -280,15 +280,26 @@ export class ResponsesService {
       fillDurationSeconds = Math.round((now.getTime() - started.getTime()) / 1000);
     }
 
-    // ── 4. 反作弊評估 ────────────────────────────────────────────────────────
-    const totalQCount = await this.db
+    // ── 4. 反作弊評估 + 驗證答案歸屬 ────────────────────────────────────────
+    const surveyQRows = await this.db
       .select({ id: surveyQuestions.id })
       .from(surveyQuestions)
       .where(eq(surveyQuestions.surveyId, surveyId));
 
+    // Validate that every submitted questionId belongs to this survey.
+    // Without this check, a user could submit questionIds from other surveys,
+    // corrupting analytics without a DB-level error.
+    const validQuestionIds = new Set(surveyQRows.map((q) => q.id));
+    const invalidIds = dto.answers
+      .filter((a) => a.questionId && !validQuestionIds.has(a.questionId))
+      .map((a) => a.questionId);
+    if (invalidIds.length > 0) {
+      throw new BadRequestException('填答包含不屬於此問卷的題目');
+    }
+
     const antiCheatResult = this.antiCheat.evaluate(
       dto.answers,
-      totalQCount.length,
+      surveyQRows.length,
       fillDurationSeconds,
     );
 
