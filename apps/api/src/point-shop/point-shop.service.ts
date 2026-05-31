@@ -136,12 +136,16 @@ export class PointShopService {
         })
         .returning({ id: pointRedemptions.id });
 
-      // 5. 庫存 -1（若非無限）
+      // 5. 庫存 -1（若非無限）— AND stock_qty > 0 防併發超賣
       if (item.stockQty > 0) {
-        await tx
+        const stocked = await tx
           .update(pointShopItems)
           .set({ stockQty: sql`stock_qty - 1`, updatedAt: new Date() })
-          .where(eq(pointShopItems.id, item.id));
+          .where(and(eq(pointShopItems.id, item.id), sql`stock_qty > 0`))
+          .returning({ id: pointShopItems.id });
+        if (stocked.length === 0) {
+          throw new ConflictException('商品已售罄（請重試）');
+        }
       }
 
       return redemption.id;
