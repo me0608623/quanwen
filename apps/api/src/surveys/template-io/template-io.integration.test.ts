@@ -322,4 +322,49 @@ describe('Template IO (integration)', () => {
 
     await expect(excelImp.importFromXlsx(USER1, buf)).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  // ─── 8. URL 協議防護：javascript: 必須被 Zod refine 擋掉 ──────────────────
+
+  it('8a. parseV1: externalUrl=javascript:alert(1) → ok:false', () => {
+    const base = {
+      $schema: V1_SCHEMA_TAG,
+      exportedAt: new Date().toISOString(),
+      platform: { name: 'quanwen', version: 'test' },
+      survey: {
+        title: 'xss test',
+        type: 'standard',
+        isAnonymous: true,
+        rewardPoints: 0,
+        targetCount: 10,
+        aiReviewEnabled: true,
+        questions: [],
+      },
+    };
+
+    const badProto = parseV1({ ...base, survey: { ...base.survey, externalUrl: 'javascript:alert(document.cookie)' } });
+    expect(badProto.ok).toBe(false);
+
+    const alsoData = parseV1({ ...base, survey: { ...base.survey, externalUrl: 'data:text/html,<script>alert(1)</script>' } });
+    expect(alsoData.ok).toBe(false);
+  });
+
+  it('8b. parseV1: externalUrl with https:// passes Zod', () => {
+    const base = {
+      $schema: V1_SCHEMA_TAG,
+      exportedAt: new Date().toISOString(),
+      platform: { name: 'quanwen', version: 'test' },
+      survey: {
+        title: 'valid url test',
+        type: 'standard',
+        isAnonymous: true,
+        rewardPoints: 0,
+        targetCount: 10,
+        aiReviewEnabled: true,
+        questions: [],
+        externalUrl: 'https://docs.google.com/forms/d/e/test/viewform',
+      },
+    };
+    const r = parseV1(base);
+    expect(r.ok).toBe(true);
+  });
 });
