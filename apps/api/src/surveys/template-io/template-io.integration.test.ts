@@ -16,7 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { BadRequestException } from '@nestjs/common';
-import { LOGIC_RULES_DDL } from '../../test-helpers/pglite-ddl';
+import { FULL_SCHEMA_DDL } from '../../test-helpers/pglite-ddl';
 
 import * as schema from '../../db/schema';
 import type { AppDb } from '../../db';
@@ -41,97 +41,7 @@ describe('Template IO (integration)', () => {
 
   beforeAll(async () => {
     client = new PGlite();
-    // 最小 schema 子集(只開測試要的表)
-    await client.exec(`
-      CREATE TYPE user_role   AS ENUM ('surveyor','respondent','admin');
-      CREATE TYPE user_status AS ENUM ('active','suspended','pending_verify');
-      CREATE TABLE users (
-        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        email         VARCHAR(255) NOT NULL UNIQUE,
-        password_hash VARCHAR(255),
-        role          user_role NOT NULL,
-        status        user_status NOT NULL DEFAULT 'active',
-        display_name  VARCHAR(100) NOT NULL,
-        avatar_url    TEXT,
-        email_verified BOOLEAN NOT NULL DEFAULT false,
-        password_reset_token VARCHAR(128),
-        password_reset_expires_at TIMESTAMPTZ,
-        email_verification_token VARCHAR(128),
-        email_verification_expires_at TIMESTAMPTZ,
-        role_selected_at TIMESTAMPTZ,
-        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        deleted_at    TIMESTAMPTZ
-      );
-
-      CREATE TYPE survey_status AS ENUM ('draft','pending_review','published','paused','closed','rejected');
-      CREATE TYPE question_type AS ENUM ('single_choice','multiple_choice','text','rating','matrix');
-      CREATE TYPE survey_type AS ENUM ('standard','mutual');
-      CREATE TYPE survey_category AS ENUM ('consumer','academic','wellness','workplace','lifestyle','tech','social','education','finance','other');
-      CREATE TYPE reward_type AS ENUM ('cash','points');
-      CREATE TABLE surveys (
-        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        surveyor_id   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title         VARCHAR(200) NOT NULL,
-        description   TEXT,
-        status        survey_status NOT NULL DEFAULT 'draft',
-        type          survey_type NOT NULL DEFAULT 'standard',
-        category      survey_category,
-        ai_review_enabled BOOLEAN NOT NULL DEFAULT true,
-        external_url  TEXT,
-        reward_type   reward_type NOT NULL DEFAULT 'cash',
-        reward_points INTEGER NOT NULL DEFAULT 0,
-        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
-        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
-        audience_criteria JSONB,
-        target_count  INTEGER NOT NULL DEFAULT 100,
-        completed_count INTEGER NOT NULL DEFAULT 0,
-        expires_at    TIMESTAMPTZ,
-        ai_score      INTEGER,
-        ai_reject_reason TEXT,
-        question_shuffle_mode VARCHAR(16) NOT NULL DEFAULT 'none',
-        is_anonymous  BOOLEAN NOT NULL DEFAULT true,
-        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        published_at  TIMESTAMPTZ
-      );
-      CREATE TABLE survey_questions (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        survey_id   UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-        type                  question_type NOT NULL,
-        title                 TEXT NOT NULL,
-        description           TEXT,
-        sort_order            INTEGER NOT NULL DEFAULT 0,
-        is_required           BOOLEAN NOT NULL DEFAULT true,
-        config                JSONB,
-        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-      CREATE TABLE question_options (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        question_id UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
-        label       VARCHAR(300) NOT NULL,
-        sort_order  INTEGER NOT NULL DEFAULT 0
-      );
-
-      CREATE TYPE tag_category AS ENUM ('tech','lifestyle','finance','health','entertainment','food','travel','education','society','other');
-      CREATE TABLE interest_tags (
-        id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name        VARCHAR(50) NOT NULL UNIQUE,
-        category    tag_category NOT NULL,
-        sort_order  INTEGER NOT NULL DEFAULT 0
-      );
-
-      CREATE TABLE mutual_pairs (
-        id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        status    VARCHAR(20) NOT NULL,
-        a_user_id UUID NOT NULL,
-        a_survey_id UUID NOT NULL,
-        b_user_id UUID,
-        b_survey_id UUID,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-    await client.exec(LOGIC_RULES_DDL);
+    await client.exec(FULL_SCHEMA_DDL);
 
     db = drizzle(client, { schema }) as unknown as AppDb;
 

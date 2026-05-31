@@ -16,7 +16,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { PassThrough } from 'stream';
 import * as schema from '../db/schema';
-import { LOGIC_RULES_DDL } from '../test-helpers/pglite-ddl';
+import { FULL_SCHEMA_DDL } from '../test-helpers/pglite-ddl';
 import { ExportService } from './export.service';
 
 const SURVEYOR_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -37,108 +37,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
 
   beforeAll(async () => {
     client = new PGlite();
-
-    await client.exec(`
-      CREATE TYPE user_role AS ENUM ('surveyor','respondent','admin');
-      CREATE TYPE user_status AS ENUM ('active','suspended','pending_verify');
-      CREATE TABLE users (
-        id UUID PRIMARY KEY,
-        email VARCHAR(255) NOT NULL UNIQUE,
-        password_hash VARCHAR(255),
-        role user_role NOT NULL,
-        status user_status NOT NULL DEFAULT 'active',
-        display_name VARCHAR(100) NOT NULL,
-        email_verified BOOLEAN NOT NULL DEFAULT false,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TYPE survey_status AS ENUM ('draft','pending_review','published','paused','closed','rejected');
-      CREATE TYPE survey_type AS ENUM ('standard','mutual');
-      CREATE TYPE survey_category AS ENUM ('consumer','academic','wellness','workplace','lifestyle','tech','social','education','finance','other');
-      CREATE TYPE reward_type AS ENUM ('cash','points');
-      CREATE TYPE question_type AS ENUM ('single_choice','multiple_choice','text','rating','matrix');
-      CREATE TYPE response_status AS ENUM ('in_progress','submitted','pending_review','rewarded','rejected');
-
-      CREATE TABLE surveys (
-        id UUID PRIMARY KEY,
-        surveyor_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        title VARCHAR(200) NOT NULL,
-        description TEXT,
-        status survey_status NOT NULL DEFAULT 'draft',
-        type survey_type NOT NULL DEFAULT 'standard',
-        category survey_category,
-        ai_review_enabled BOOLEAN NOT NULL DEFAULT true,
-        external_url TEXT,
-        reward_type reward_type NOT NULL DEFAULT 'cash',
-        reward_points INTEGER NOT NULL DEFAULT 0,
-        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
-        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
-        target_count INTEGER NOT NULL DEFAULT 100,
-        completed_count INTEGER NOT NULL DEFAULT 0,
-        is_anonymous BOOLEAN NOT NULL DEFAULT true,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        published_at TIMESTAMPTZ,
-        expires_at TIMESTAMPTZ,
-        audience_criteria JSONB,
-        ai_score INTEGER,
-        ai_reject_reason TEXT,
-        question_shuffle_mode VARCHAR(16) NOT NULL DEFAULT 'none'
-      );
-
-      CREATE TABLE survey_questions (
-        id UUID PRIMARY KEY,
-        survey_id UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-        type question_type NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        is_required BOOLEAN NOT NULL DEFAULT true,
-        config JSONB,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TABLE question_options (
-        id UUID PRIMARY KEY,
-        question_id UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
-        label VARCHAR(500) NOT NULL,
-        sort_order INTEGER NOT NULL DEFAULT 0,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-
-      CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
-      CREATE TABLE survey_responses (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        survey_id UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-        respondent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-        status response_status NOT NULL DEFAULT 'in_progress',
-        sentiment           response_sentiment,
-        started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        submitted_at TIMESTAMPTZ,
-        fill_duration_seconds INTEGER,
-        anti_cheat_score INTEGER,
-        suspicious_flags JSONB,
-        quality_score INTEGER,
-        quality_breakdown JSONB,
-        behavior_log JSONB,
-        randomization_seed TEXT,
-        fingerprint_id TEXT,
-        UNIQUE (survey_id, respondent_id)
-      );
-
-      CREATE TABLE response_answers (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        response_id UUID NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
-        question_id UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
-        survey_id UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-        text_answer TEXT,
-        selected_option_ids JSONB,
-        rating_value INTEGER,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      );
-    `);
-    await client.exec(LOGIC_RULES_DDL);
+    await client.exec(FULL_SCHEMA_DDL);
 
     await client.exec(`
       INSERT INTO users (id, email, role, display_name) VALUES
