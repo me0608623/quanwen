@@ -227,7 +227,7 @@ export class ResponsesService {
       alreadySubmitted,
       randomizationSeed: previewSeed,
       questions: questions.map((q) => {
-        const shuffleMode = (q.config?.shuffleOption as ShuffleOption) ?? 'none';
+        const shuffleMode = ((q.config as Record<string, unknown> | null)?.shuffleOption as ShuffleOption) ?? 'none';
         const rawOptions = options.filter((o) => o.questionId === q.id);
         const shuffledOpts = shuffleOptions(rawOptions, shuffleMode, previewSeed);
         return {
@@ -255,6 +255,7 @@ export class ResponsesService {
       .select({
         id: surveys.id,
         status: surveys.status,
+        title: surveys.title,
         targetCount: surveys.targetCount,
         completedCount: surveys.completedCount,
         surveyorId: surveys.surveyorId,
@@ -516,6 +517,29 @@ export class ResponsesService {
         .catch((err: unknown) =>
           this.logger.error(`new_response 通知失敗 surveyId=${surveyId}`, err),
         );
+
+      // ── 10.5 QUA-203: 閾值里程碑通知（fire-and-forget）──────────────────
+      // 當 completedCount 跨越 50/100/500/1000 時，寄發慶祝通知
+      const newCount = survey.completedCount + 1;
+      const MILESTONES = [50, 100, 500, 1000] as const;
+      const hitMilestone = MILESTONES.find((m) => newCount === m);
+      if (hitMilestone) {
+        this.notifications
+          .create({
+            userId: survey.surveyorId,
+            type: 'response_milestone',
+            title: `里程碑達成！您的問卷已收到 ${hitMilestone} 份填答 🎉`,
+            body: `恭喜！您的問卷「${survey.title}」已累計收到 ${hitMilestone} 份填答。${
+              hitMilestone >= 500
+                ? '您正在收集大量有價值的數據，繼續加油！'
+                : '持續收集更多回覆，讓數據更有代表性。'
+            }`,
+            metadata: { surveyId, milestone: hitMilestone, completedCount: newCount, targetCount: survey.targetCount },
+          })
+          .catch((err: unknown) =>
+            this.logger.error(`milestone 通知失敗 surveyId=${surveyId} milestone=${hitMilestone}`, err),
+          );
+      }
     }
 
     if (finalStatus === 'pending_review') {
