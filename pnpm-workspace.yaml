@@ -1,3 +1,58 @@
 packages:
   - 'apps/*'
   - 'packages/*'
+onlyBuiltDependencies:
+  - '@nestjs/core'
+  - '@parcel/watcher'
+  - '@scarf/scarf'
+  - '@swc/core'
+  - esbuild
+  - sharp
+minimumReleaseAgeExclude:
+  - esbuild@0.25.0
+  - tmp@0.2.4
+  - glob@10.5.0
+  - lodash@4.17.23
+  - js-yaml@4.1.1
+  - webpack@5.104.1
+  - webpack@5.104.0
+  - minimatch@9.0.6
+  - minimatch@9.0.7
+  - ajv@8.18.0
+  - file-type@21.3.1
+  - file-type@21.3.2
+  - picomatch@4.0.4
+  - lodash@4.17.24
+  - vite@6.4.2
+  - postcss@8.5.10
+  - '@nestjs/core@11.1.18'
+  - uuid@11.1.1
+  - tmp@0.2.6
+  - tmp@0.2.7
+overrides:
+  '@nestjs/core@<=11.1.17': ^11.1.18
+  ajv@>=7.0.0-alpha.0 <8.18.0: ^8.18.0
+  esbuild@<=0.24.2: ^0.25.0
+  file-type@>=13.0.0 <21.3.1: ^21.3.1
+  file-type@>=20.0.0 <=21.3.1: ^21.3.2
+  glob@>=10.2.0 <10.5.0: ^10.5.0
+  js-yaml@>=4.0.0 <4.1.1: ^4.1.1
+  lodash@<=4.17.23: ^4.17.24
+  lodash@>=4.0.0 <=4.17.22: ^4.17.23
+  lodash@>=4.0.0 <=4.17.23: ^4.17.24
+  minimatch@>=9.0.0 <9.0.6: ^9.0.6
+  minimatch@>=9.0.0 <9.0.7: ^9.0.7
+  picomatch@>=4.0.0 <4.0.4: ^4.0.4
+  postcss@<8.5.10: ^8.5.10
+  tmp: ^0.2.7
+  uuid@<11.1.1: ^11.1.1
+  vite@<=6.4.1: ^6.4.2
+  webpack@>=5.49.0 <5.104.0: ^5.104.0
+  webpack@>=5.49.0 <=5.104.0: ^5.104.1
+allowBuilds:
+  '@nestjs/core': true
+  '@parcel/watcher': true
+  '@scarf/scarf': true
+  '@swc/core': true
+  esbuild: true
+  sharp: true

@@ -84,7 +84,6 @@ jobs:
 
       - name: Security audit (high+ severity)
         run: pnpm audit --audit-level high
-        continue-on-error: true  # 暫不阻擋；prod 上線前要改 hard fail
 
   test:
     name: Unit + Integration tests

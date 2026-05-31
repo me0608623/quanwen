@@ -1,5 +1,6 @@
 import { Logger } from '@nestjs/common';
 import { ThrottlerStorage, ThrottlerStorageService } from '@nestjs/throttler';
+import type { ThrottlerStorageRecord } from '@nestjs/throttler/dist/throttler-storage-record.interface';
 import type { RedisLike } from '../redis/redis.service';
 
 /**
@@ -84,7 +85,13 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
     })();
   }
 
-  async increment(key: string, ttl: number): Promise<{ totalHits: number; timeToExpire: number }> {
+  async increment(
+    key: string,
+    ttl: number,
+    limit: number,
+    blockDuration: number,
+    throttlerName: string,
+  ): Promise<ThrottlerStorageRecord> {
     if (this.client) {
       try {
         const res = (await this.client.eval(INCR_SCRIPT, 1, KEY_PREFIX + key, ttl)) as [
@@ -93,9 +100,9 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
         ];
         const totalHits = Number(res[0]);
         const pttl = Number(res[1]);
-        // pttl 為毫秒；timeToExpire 介面要求秒（與內建 storage 一致）
         const timeToExpire = pttl > 0 ? Math.ceil(pttl / 1000) : Math.ceil(ttl / 1000);
-        return { totalHits, timeToExpire };
+        const isBlocked = totalHits > limit;
+        return { totalHits, timeToExpire, isBlocked, timeToBlockExpire: isBlocked ? blockDuration : 0 };
       } catch (err) {
         if (!this.degradeLogged) {
           this.logger.error(
@@ -103,9 +110,8 @@ export class RedisThrottlerStorage implements ThrottlerStorage {
           );
           this.degradeLogged = true;
         }
-        // 落到 fallback
       }
     }
-    return this.fallback.increment(key, ttl);
+    return this.fallback.increment(key, ttl, limit, blockDuration, throttlerName);
   }
 }
