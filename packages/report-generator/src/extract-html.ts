@@ -15,7 +15,7 @@ export function extractHtml(streamed: string): string {
   // 1. Strip leading ```html fence (and trailing ```)
   const fence = streamed.match(/```(?:html|HTML)?\s*([\s\S]*?)```/);
   if (fence) {
-    const inner = fence[1].trim();
+    const inner = (fence[1] ?? "").trim();
     if (inner.startsWith("<")) return inner;
   }
 
