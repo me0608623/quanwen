@@ -83,7 +83,11 @@ Key cross-cutting modules:
 
 `DatabaseModule` detects `USE_PG_MEM` and provides either a PGlite or `pg` Pool driver to Drizzle. All schema DDL is also inlined into the PGlite `useFactory` (`apps/api/src/db/database.module.ts`) so `db:push` is not needed in memory mode.
 
-**Critical**: When adding new tables or columns to the Drizzle schema files, you **must** also add the corresponding SQL to the `useFactory` block in `database.module.ts`. Forgetting this causes `USE_PG_MEM=true` to start with a stale schema silently.
+**Critical**: When adding new tables or columns to the Drizzle schema files, you **must** update **two** additional files or tests will fail:
+1. `apps/api/src/db/database.module.ts` — the PGlite `useFactory` DDL block (for `USE_PG_MEM=true` dev/CI bootstrap).
+2. `apps/api/src/test-helpers/pglite-ddl.ts` — the canonical `FULL_SCHEMA_DDL` used by all integration tests.
+
+Forgetting either causes silent schema drift: `USE_PG_MEM=true` starts with a stale schema, and integration tests fail with "column X does not exist".
 
 ### Web Architecture
 
