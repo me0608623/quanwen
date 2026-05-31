@@ -321,9 +321,11 @@ export class ResponsesController {
   ) {
     const user = req.user as AuthenticatedUser;
     const isClean = clean === '1' || clean === 'true';
+    // Sanitize id before embedding in header value to prevent response-splitting
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     const suffix = isClean ? '_clean' : '';
-    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}_stream.csv"`);
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_responses${suffix}_stream.csv"`);
     await this.exportSvc.streamResponsesCsv(id, user.id, res, {
       cleanOnly: isClean,
       minQualityScore: minScore ? Number(minScore) : undefined,
@@ -338,8 +340,9 @@ export class ResponsesController {
     @Res() res: ExpressResponse,
   ) {
     const user = req.user as AuthenticatedUser;
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
     res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_report.md"`);
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_report.md"`);
     await this.exportSvc.streamResponsesMarkdown(id, user.id, res);
   }
 
@@ -354,12 +357,13 @@ export class ResponsesController {
   ) {
     const user = req.user as AuthenticatedUser;
     const isClean = clean === '1' || clean === 'true';
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
     res.setHeader(
       'Content-Type',
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     );
     const suffix = isClean ? '_clean' : '';
-    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}_stream.xlsx"`);
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_responses${suffix}_stream.xlsx"`);
     await this.exportSvc.streamResponsesXlsx(id, user.id, res, {
       cleanOnly: isClean,
       minQualityScore: minScore ? Number(minScore) : undefined,

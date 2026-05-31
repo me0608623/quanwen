@@ -73,12 +73,15 @@ export class EcpayService {
 
     params.CheckMacValue = this.computeCheckMac(params);
 
+    const escAttr = (s: string) =>
+      s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
     const fields = Object.entries(params)
-      .map(([k, v]) => `<input type="hidden" name="${k}" value="${v}">`)
+      .map(([k, v]) => `<input type="hidden" name="${escAttr(k)}" value="${escAttr(v)}">`)
       .join('\n');
 
     return `<!DOCTYPE html><html><body>
-<form id="ecpay" action="${this.paymentUrl}" method="POST">${fields}</form>
+<form id="ecpay" action="${escAttr(this.paymentUrl)}" method="POST">${fields}</form>
 <script>document.getElementById('ecpay').submit();</script>
 </body></html>`;
   }

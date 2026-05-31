@@ -36,7 +36,7 @@ export const QuanWenSurveyV1BodySchema = z.object({
   rewardPoints: z.number().int().min(0).max(1000).default(0),
   targetCount: z.number().int().min(1).max(10000).default(100),
   aiReviewEnabled: z.boolean().default(true),
-  externalUrl: z.string().url().max(1000).nullable().optional(),
+  externalUrl: z.string().url().max(1000).refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 http 或 https 協議' }).nullable().optional(),
   expiresAt: z.string().datetime().nullable().optional(),
   audienceCriteria: AudienceCriteriaSchema.nullable().optional(),
   questions: z.array(SurveyQuestionSchema).max(50).default([]),

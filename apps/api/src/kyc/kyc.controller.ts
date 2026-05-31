@@ -14,9 +14,9 @@ const SubmitKycSchema = z.object({
   idNumber: z.string().regex(/^[A-Z][12]\d{8}$/, '身分證號格式錯誤'),
   realName: z.string().min(2).max(50),
   phone: z.string().regex(/^09\d{2}\d{6}$/, '手機格式錯誤（09xxxxxxxx）'),
-  idFrontUrl: z.string().url().optional(),
-  idBackUrl: z.string().url().optional(),
-  selfieUrl: z.string().url().optional(),
+  idFrontUrl: z.string().url().refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 https' }).optional(),
+  idBackUrl: z.string().url().refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 https' }).optional(),
+  selfieUrl: z.string().url().refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 https' }).optional(),
 });
 type SubmitKycDto = z.infer<typeof SubmitKycSchema>;
 

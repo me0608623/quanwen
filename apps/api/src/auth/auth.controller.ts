@@ -374,13 +374,15 @@ export class AuthController {
 
   @Get('apple')
   appleAuth(@Res() res: Response) {
+    // Use server-tracked state token (same CSRF pattern as LINE login)
+    const state = `login:${this.authService.createLoginStateToken()}`;
     const params = new URLSearchParams({
       response_type: 'code id_token',
       response_mode: 'form_post',
       client_id: process.env.APPLE_CLIENT_ID ?? '',
       redirect_uri: process.env.APPLE_CALLBACK_URL ?? '',
       scope: 'name email',
-      state: secureRandomToken(),
+      state,
     });
     return res.redirect(`https://appleid.apple.com/auth/authorize?${params}`);
   }
@@ -414,12 +416,25 @@ export class AuthController {
 
     try {
       const isBindAttempt = body.state?.startsWith('bind:');
+      const isLoginAttempt = body.state?.startsWith('login:');
+
       const bindSession = isBindAttempt
         ? this.authService.resolveBindSession(body.state!.slice(5))
         : null;
 
       if (isBindAttempt && !bindSession) {
         return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+      }
+
+      // Validate CSRF state for normal login flow (same pattern as LINE)
+      if (isLoginAttempt) {
+        const valid = this.authService.validateAndConsumeLoginState(body.state!.slice(6));
+        if (!valid) {
+          return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+        }
+      } else if (!isBindAttempt) {
+        this.logger.warn('Apple callback: unrecognized state prefix, rejecting for security');
+        return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
       }
 
       // Exchange code for id_token (validates server-side)

@@ -122,7 +122,7 @@ export class SpinService {
 
   /** 執行轉盤（消耗 1 次抽獎機會）*/
   async spin(userId: string): Promise<{ prizeKey: string; label: string; pointsWon: number }> {
-    // 原子扣 1 次：available > 0 才會更新到，回傳 0 列代表沒次數（同時防併發重複轉）
+    // 先原子扣 1 次：available > 0 才更新，0 列代表沒次數（防併發重複轉）
     const consumed = await this.db
       .update(spinChances)
       .set({
@@ -139,6 +139,8 @@ export class SpinService {
 
     const seg = this.pickSegment();
 
+    // Record the spin result. grantPoints() is called separately — if it fails,
+    // the spin record exists for reconciliation (chance already consumed above).
     await this.db.insert(spinRecords).values({
       userId,
       prizeKey: seg.key,

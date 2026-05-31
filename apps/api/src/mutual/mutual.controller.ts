@@ -88,7 +88,7 @@ export class MutualController {
   submitProof(
     @Param('id') id: string,
     @Req() req: Request,
-    @Body(new ZodValidationPipe(z.object({ proofUrl: z.string().url().max(2000) }))) dto: { proofUrl: string },
+    @Body(new ZodValidationPipe(z.object({ proofUrl: z.string().url().max(2000).refine(u => /^https?:\/\//i.test(u), { message: 'proofUrl 必須使用 http 或 https 協議' }) }))) dto: { proofUrl: string },
   ) {
     const user = req.user as AuthenticatedUser;
     return this.mutual.submitProof(id, user.id, dto.proofUrl);

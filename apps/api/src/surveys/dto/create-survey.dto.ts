@@ -44,7 +44,7 @@ export const CreateSurveySchema = z.object({
   // Phase C-2: 是否導入 AI 品質審核 (預設 true)
   aiReviewEnabled: z.boolean().default(true),
   // Phase C-3: mutual 用外部平台 (Google Forms 等) 時的連結
-  externalUrl: z.string().url().max(1000).optional(),
+  externalUrl: z.string().url().max(1000).refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 http 或 https 協議' }).optional(),
   rewardPoints: z.number().int().min(0).max(1000).default(0),
   targetCount: z.number().int().min(1).max(10000).default(100),
   expiresAt: z.string().datetime().optional(),
