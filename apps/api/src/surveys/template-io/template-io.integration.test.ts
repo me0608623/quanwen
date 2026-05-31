@@ -16,6 +16,7 @@ import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { BadRequestException } from '@nestjs/common';
+import { LOGIC_RULES_DDL } from '../../test-helpers/pglite-ddl';
 
 import * as schema from '../../db/schema';
 import type { AppDb } from '../../db';
@@ -129,6 +130,7 @@ describe('Template IO (integration)', () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await client.exec(LOGIC_RULES_DDL);
 
     db = drizzle(client, { schema }) as unknown as AppDb;
 

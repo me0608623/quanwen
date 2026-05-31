@@ -3,6 +3,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import type { AppDb } from '../db';
 import * as schema from '../db/schema';
+import { LOGIC_RULES_DDL } from '../test-helpers/pglite-ddl';
 import { ResponsesService } from './responses.service';
 import type { AntiCheatService } from './anti-cheat.service';
 import type { WalletService } from '../wallet/wallet.service';
@@ -121,6 +122,7 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
         quality_score INTEGER,
         quality_breakdown JSONB,
         behavior_log JSONB,
+        randomization_seed TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 
@@ -135,6 +137,7 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await client.exec(LOGIC_RULES_DDL);
 
     await client.exec(`
       INSERT INTO users (id, email, role, display_name)

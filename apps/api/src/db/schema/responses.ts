@@ -55,6 +55,8 @@ export const surveyResponses = pgTable(
     behaviorLog: jsonb('behavior_log'),                      // Phase 2 前端行為訊號
     // Phase 2 AI sentiment analysis result
     sentiment: responseSentimentEnum('sentiment'),
+    // QUA-204: Randomization seed for reproducible shuffle (question/option order)
+    randomizationSeed: text('randomization_seed'),
     // 防重複：每人每份問卷只能提交一次
   },
   (t) => ({

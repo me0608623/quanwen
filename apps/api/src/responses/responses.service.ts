@@ -20,6 +20,7 @@ import {
   respondentProfiles,
   respondentTags,
   users,
+  surveyLogicRules,
 } from '../db/schema';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { AntiCheatService } from './anti-cheat.service';
@@ -29,6 +30,7 @@ import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SpinService } from '../spin/spin.service';
 import { redactPii } from '../surveys/analysis/anonymizer';
+import { shuffleOptions, generateSeed, type ShuffleOption } from '../surveys/shuffle';
 
 @Injectable()
 export class ResponsesService {
@@ -213,6 +215,9 @@ export class ResponsesService {
             .orderBy(questionOptions.sortOrder)
         : [];
 
+    // QUA-204: Generate a preview seed so the frontend can shuffle consistently
+    const previewSeed = generateSeed();
+
     return {
       id: survey.id,
       title: survey.title,
@@ -220,16 +225,22 @@ export class ResponsesService {
       rewardPoints: survey.rewardPoints,
       isAnonymous: survey.isAnonymous,
       alreadySubmitted,
-      questions: questions.map((q) => ({
-        id: q.id,
-        type: q.type,
-        title: q.title,
-        description: q.description,
-        sortOrder: q.sortOrder,
-        isRequired: q.isRequired,
-        config: q.config,
-        options: options.filter((o) => o.questionId === q.id),
-      })),
+      randomizationSeed: previewSeed,
+      questions: questions.map((q) => {
+        const shuffleMode = (q.config?.shuffleOption as ShuffleOption) ?? 'none';
+        const rawOptions = options.filter((o) => o.questionId === q.id);
+        const shuffledOpts = shuffleOptions(rawOptions, shuffleMode, previewSeed);
+        return {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          description: q.description,
+          sortOrder: q.sortOrder,
+          isRequired: q.isRequired,
+          config: q.config,
+          options: shuffledOpts,
+        };
+      }),
     };
   }
 
@@ -297,6 +308,90 @@ export class ResponsesService {
       throw new BadRequestException('填答包含不屬於此問卷的題目');
     }
 
+    // ── 4.5 QUA-204: Accept randomizationSeed from client for reproducibility ─
+    const randomizationSeed = dto.randomizationSeed ?? generateSeed();
+
+    // ── 4.5 QUA-196: Evaluate skip logic / conditional branching ──────────────
+    // If the survey has logic rules, validate that the respondent only answered
+    // visible questions and didn't skip required visible ones.
+    const logicRuleRows = await this.db
+      .select()
+      .from(surveyLogicRules)
+      .where(eq(surveyLogicRules.surveyId, surveyId))
+      .orderBy(surveyLogicRules.sortOrder);
+
+    if (logicRuleRows.length > 0) {
+      // Build answers map for condition evaluation
+      const answersMap: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }> = {};
+      for (const a of dto.answers) {
+        if (a.questionId) {
+          answersMap[a.questionId] = {
+            textAnswer: a.textAnswer,
+            selectedOptionIds: a.selectedOptionIds,
+            ratingValue: a.ratingValue,
+          };
+        }
+      }
+
+      // Get questions sorted by order (with isRequired info)
+      const allSurveyQuestions = await this.db
+        .select({ id: surveyQuestions.id, isRequired: surveyQuestions.isRequired, sortOrder: surveyQuestions.sortOrder })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, surveyId))
+        .orderBy(surveyQuestions.sortOrder);
+
+      // Determine which questions should be visible
+      const visibleIds = new Set(allSurveyQuestions.map((q) => q.id));
+
+      // Apply 'show' rules: target hidden unless trigger condition met
+      for (const rule of logicRuleRows.filter((r) => r.action === 'show')) {
+        if (!this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          visibleIds.delete(rule.targetQuestionId);
+        }
+      }
+
+      // Apply 'hide' rules: target visible unless trigger condition met
+      for (const rule of logicRuleRows.filter((r) => r.action === 'hide')) {
+        if (this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          visibleIds.delete(rule.targetQuestionId);
+        }
+      }
+
+      // Apply 'skip' rules: skip questions between trigger and target
+      const allQIds = allSurveyQuestions.map((q) => q.id);
+      for (const rule of logicRuleRows.filter((r) => r.action === 'skip')) {
+        if (this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          const triggerIdx = allQIds.indexOf(rule.triggerQuestionId);
+          const targetIdx = allQIds.indexOf(rule.targetQuestionId);
+          if (triggerIdx !== -1 && targetIdx !== -1) {
+            const [from, to] = triggerIdx < targetIdx
+              ? [triggerIdx + 1, targetIdx - 1]
+              : [targetIdx + 1, triggerIdx - 1];
+            for (let i = from; i <= to; i++) {
+              visibleIds.delete(allQIds[i]);
+            }
+          }
+        }
+      }
+
+      // Validate: answered questions must be visible
+      const answeredIds = new Set(dto.answers.filter((a) => a.questionId).map((a) => a.questionId));
+      const hiddenButAnswered = [...answeredIds].filter((id) => !visibleIds.has(id));
+      if (hiddenButAnswered.length > 0) {
+        throw new BadRequestException('填答包含了依據跳題邏輯應被隱藏的題目');
+      }
+
+      // Validate: required visible questions must be answered
+      const requiredVisible = allSurveyQuestions.filter((q) => q.isRequired && visibleIds.has(q.id));
+      const missingRequired = requiredVisible.filter((q) => !answeredIds.has(q.id));
+      if (missingRequired.length > 0) {
+        throw new BadRequestException('尚有必填題目未作答');
+      }
+
+      // Filter out answers for hidden questions before saving
+      dto.answers = dto.answers.filter((a) => !a.questionId || visibleIds.has(a.questionId));
+    }
+
     const antiCheatResult = this.antiCheat.evaluate(
       dto.answers,
       surveyQRows.length,
@@ -327,6 +422,7 @@ export class ResponsesService {
           submittedAt: now,
           fillDurationSeconds,
           antiCheatScore: antiCheatResult.score,
+          randomizationSeed,
           suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
           behaviorLog: dto.behaviorLog ?? null,
         })
@@ -408,12 +504,13 @@ export class ResponsesService {
       }
 
       // ── 10. 通知問券方（fire-and-forget） ─────────────────────────────────
+      // QUA-203: 含問卷標題與累計數，email 有 15min cooldown 防疲勞
       this.notifications
         .create({
           userId: survey.surveyorId,
           type: 'new_response',
           title: '有新的問卷填答',
-          body: `您的問卷收到一份新填答（共 ${survey.completedCount + 1} 份）`,
+          body: `您的問卷「${survey.title}」收到一份新填答（累計 ${survey.completedCount + 1} / ${survey.targetCount} 份）`,
           metadata: { surveyId, responseId },
         })
         .catch((err: unknown) =>
@@ -1156,6 +1253,70 @@ export class ResponsesService {
     }));
 
     return { surveyId, field, groups, generatedAt: new Date().toISOString() };
+  }
+
+  // ─── QUA-196: Logic Condition Evaluator ──────────────────────────────────────
+
+  /**
+   * Evaluate a single logic condition against the current answer map.
+   * Returns true if the condition is satisfied.
+   */
+  private evaluateLogicCondition(
+    triggerQuestionId: string,
+    condition: string,
+    value: string | null,
+    answersMap: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): boolean {
+    const answer = answersMap[triggerQuestionId];
+
+    if (condition === 'is_empty') {
+      if (!answer) return true;
+      const hasText = typeof answer.textAnswer === 'string' && answer.textAnswer.trim().length > 0;
+      const hasOption = Array.isArray(answer.selectedOptionIds) && answer.selectedOptionIds.length > 0;
+      const hasRating = typeof answer.ratingValue === 'number';
+      return !hasText && !hasOption && !hasRating;
+    }
+
+    if (condition === 'is_not_empty') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'is_empty', value, answersMap);
+    }
+
+    if (!answer) return false;
+
+    // Numeric comparisons (rating)
+    if (['gt', 'gte', 'lt', 'lte'].includes(condition)) {
+      const numVal = value !== null ? parseFloat(value) : NaN;
+      const rating = answer.ratingValue;
+      if (typeof rating !== 'number' || isNaN(numVal)) return false;
+      if (condition === 'gt') return rating > numVal;
+      if (condition === 'gte') return rating >= numVal;
+      if (condition === 'lt') return rating < numVal;
+      if (condition === 'lte') return rating <= numVal;
+    }
+
+    // Text / option comparisons
+    if (condition === 'eq') {
+      if (typeof answer.textAnswer === 'string') return answer.textAnswer === value;
+      if (Array.isArray(answer.selectedOptionIds)) return answer.selectedOptionIds.includes(value ?? '');
+      if (typeof answer.ratingValue === 'number') return answer.ratingValue === parseFloat(value ?? '');
+      return false;
+    }
+
+    if (condition === 'neq') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'eq', value, answersMap);
+    }
+
+    if (condition === 'contains') {
+      if (typeof answer.textAnswer === 'string') return answer.textAnswer.includes(value ?? '');
+      if (Array.isArray(answer.selectedOptionIds)) return answer.selectedOptionIds.includes(value ?? '');
+      return false;
+    }
+
+    if (condition === 'not_contains') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'contains', value, answersMap);
+    }
+
+    return false;
   }
 }
 

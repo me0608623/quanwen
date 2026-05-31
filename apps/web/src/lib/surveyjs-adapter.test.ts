@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quanswenToSurveyJs, extractAnswers } from './surveyjs-adapter';
+import { quanswenToSurveyJs, extractAnswers, buildVisibleIfExpression } from './surveyjs-adapter';
 import type { PublicQuestion } from '@/hooks/use-responses';
 
 const baseQuestion: PublicQuestion = {
@@ -163,6 +163,72 @@ describe('quanswenToSurveyJs', () => {
     const model = quanswenToSurveyJs({ questions: [baseQuestion] });
     expect(model.showProgressBar).toBe('top');
     expect(model.progressBarType).toBe('questions');
+  });
+
+  it('maps single-choice skip logic into visibleIf for skipped questions', () => {
+    const questions: PublicQuestion[] = [
+      {
+        ...baseQuestion,
+        id: 'q1',
+        config: {
+          skipLogic: [{ selectedOptionId: 'opt-a', skipToQuestionIndex: 2 }],
+        },
+      },
+      { ...baseQuestion, id: 'q2', title: 'Q2' },
+      { ...baseQuestion, id: 'q3', title: 'Q3' },
+    ];
+    const model = quanswenToSurveyJs({ questions });
+    expect(model.pages[0].elements[1].visibleIf).toBe("!({q1} = 'opt-a')");
+    expect(model.pages[0].elements[2].visibleIf).toBeUndefined();
+  });
+
+  it('maps rating skip logic into visibleIf using >= threshold', () => {
+    const questions: PublicQuestion[] = [
+      {
+        id: 'r1',
+        type: 'rating',
+        title: 'Rate',
+        sortOrder: 0,
+        isRequired: false,
+        options: [],
+        config: {
+          skipLogic: [{ selectedRating: 4, skipToQuestionIndex: 2 }],
+        },
+      },
+      { ...baseQuestion, id: 'q2', title: 'Q2' },
+      { ...baseQuestion, id: 'q3', title: 'Q3' },
+    ];
+    const model = quanswenToSurveyJs({ questions });
+    expect(model.pages[0].elements[1].visibleIf).toBe('!({r1} >= 4)');
+  });
+
+  it('adds SurveyJS complete trigger for skip-to-end rules', () => {
+    const questions: PublicQuestion[] = [
+      {
+        ...baseQuestion,
+        id: 'q1',
+        config: {
+          skipLogic: [{ selectedOptionId: 'opt-b', skipToEnd: true }],
+        },
+      },
+      { ...baseQuestion, id: 'q2', title: 'Q2' },
+    ];
+    const model = quanswenToSurveyJs({ questions });
+    expect(model.triggers).toEqual([{ type: 'complete', expression: "{q1} = 'opt-b'" }]);
+  });
+});
+
+describe('buildVisibleIfExpression', () => {
+  it('returns SurveyJS expression for selectedOptionId', () => {
+    expect(buildVisibleIfExpression('q1', { selectedOptionId: 'opt-a' })).toBe("{q1} = 'opt-a'");
+  });
+
+  it('returns SurveyJS expression for selectedRating threshold', () => {
+    expect(buildVisibleIfExpression('q1', { selectedRating: 3 })).toBe('{q1} >= 3');
+  });
+
+  it('returns null when no condition fields are present', () => {
+    expect(buildVisibleIfExpression('q1', { skipToEnd: true })).toBeNull();
   });
 });
 

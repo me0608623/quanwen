@@ -54,6 +54,15 @@ export const CreateSurveySchema = z.object({
   isAnonymous: z.boolean().default(true),
   audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
+  // QUA-196: Skip Logic / Conditional Branching rules
+  logicRules: z.array(z.object({
+    triggerQuestionId: z.string().uuid(),
+    condition: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'is_empty', 'is_not_empty']),
+    value: z.string().max(2000).optional(),
+    action: z.enum(['show', 'hide', 'skip']).default('show'),
+    targetQuestionId: z.string().uuid(),
+    sortOrder: z.number().int().min(0).default(0),
+  })).max(200).optional(),
 });
 
 export type CreateSurveyDto = z.infer<typeof CreateSurveySchema>;

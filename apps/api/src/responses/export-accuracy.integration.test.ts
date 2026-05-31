@@ -16,6 +16,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { PassThrough } from 'stream';
 import * as schema from '../db/schema';
+import { LOGIC_RULES_DDL } from '../test-helpers/pglite-ddl';
 import { ExportService } from './export.service';
 
 const SURVEYOR_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -120,6 +121,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         quality_score INTEGER,
         quality_breakdown JSONB,
         behavior_log JSONB,
+        randomization_seed TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 
@@ -134,6 +136,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await client.exec(LOGIC_RULES_DDL);
 
     await client.exec(`
       INSERT INTO users (id, email, role, display_name) VALUES

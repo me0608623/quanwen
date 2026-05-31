@@ -31,6 +31,8 @@ export const SubmitResponseSchema = z.object({
   startedAt: z.string().datetime().optional(),
   // Phase 2 behavior log
   behaviorLog: BehaviorLogSchema.optional(),
+  // QUA-204: Client-side randomization seed for reproducible shuffle
+  randomizationSeed: z.string().max(32).optional(),
 });
 
 export type AnswerDto = z.infer<typeof AnswerSchema>;

@@ -260,6 +260,20 @@ export function QuestionEditor({
               <button type="button" onClick={addOption} className="text-xs text-primary hover:underline">
                 + 新增選項
               </button>
+
+              {/* QUA-204: Randomization / shuffle setting for answer options */}
+              <div className="flex items-center gap-2 mt-2 pt-2 border-t border-border">
+                <span className="text-xs text-muted-foreground whitespace-nowrap">選項排序</span>
+                <select
+                  value={(question.config?.shuffleOption as string) ?? 'none'}
+                  onChange={(e) => patchConfig({ ...(question.config ?? {}), shuffleOption: e.target.value })}
+                  className="rounded border border-input bg-background px-2 py-1 text-xs"
+                >
+                  <option value="none">固定順序</option>
+                  <option value="all">隨機排序（全部）</option>
+                  <option value="exceptLast">隨機排序（保留最後一項）</option>
+                </select>
+              </div>
             </div>
           )}
 

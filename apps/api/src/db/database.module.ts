@@ -459,6 +459,29 @@ export { DB_TOKEN as DB };
             CREATE INDEX zai_call_log_error_idx ON zai_call_log(error_kind);
           `);
 
+          // QUA-196: Skip Logic / Conditional Branching
+          await client.exec(`
+            CREATE TYPE logic_condition AS ENUM (
+              'eq','neq','gt','gte','lt','lte',
+              'contains','not_contains','is_empty','is_not_empty'
+            );
+            CREATE TYPE logic_action AS ENUM ('show','hide','skip');
+            CREATE TABLE survey_logic_rules (
+              id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+              survey_id           UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              trigger_question_id UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              condition           logic_condition NOT NULL,
+              value               TEXT,
+              action              logic_action    NOT NULL DEFAULT 'show',
+              target_question_id  UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              sort_order          INTEGER         NOT NULL DEFAULT 0,
+              created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX survey_logic_rules_survey_idx  ON survey_logic_rules(survey_id);
+            CREATE INDEX survey_logic_rules_trigger_idx ON survey_logic_rules(trigger_question_id);
+            CREATE INDEX survey_logic_rules_target_idx  ON survey_logic_rules(target_question_id);
+          `);
+
           // ── Seed dev users (auto-created on every startup) ──
           // Fixed UUIDs so we can reference these users in other seeds (surveys, etc.)
           const AA_ID = '11111111-1111-1111-1111-111111111111';

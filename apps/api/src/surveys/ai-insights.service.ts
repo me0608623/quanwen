@@ -5,6 +5,7 @@ import {
   getCachedInsight,
   setCachedInsight,
 } from './analysis/insights-cache';
+import { redactPii } from './analysis/anonymizer';
 
 export type ReportType = 'simple' | 'detailed';
 
@@ -283,7 +284,7 @@ export class AiInsightsService {
     for (let offset = 0; offset < valid.length; offset += BATCH) {
       const batch = valid.slice(offset, offset + BATCH);
       const enumerated = batch
-        .map((a, i) => `${offset + i + 1}. [id:${a.responseId}] "${a.text.slice(0, 200)}"`)
+        .map((a, i) => `${offset + i + 1}. [id:${a.responseId}] "${redactPii(a.text).slice(0, 200)}"`)
         .join('\n');
 
       const prompt = [

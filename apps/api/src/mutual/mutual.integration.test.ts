@@ -18,6 +18,7 @@ import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { eq } from 'drizzle-orm';
 import { BadRequestException } from '@nestjs/common';
+import { LOGIC_RULES_DDL } from '../test-helpers/pglite-ddl';
 
 import * as schema from '../db/schema';
 import { MutualService } from './mutual.service';
@@ -152,6 +153,7 @@ describe('MutualService (integration)', () => {
         quality_score INTEGER,
         quality_breakdown JSONB,
         behavior_log JSONB,
+        randomization_seed TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 
@@ -192,7 +194,10 @@ describe('MutualService (integration)', () => {
       CREATE UNIQUE INDEX mutual_pairs_a_survey_active_unique
         ON mutual_pairs (a_survey_id)
         WHERE status IN ('waiting','matched','a_done','b_done');
+
     `);
+    await client.exec(LOGIC_RULES_DDL);
+
     await client.exec(`
       INSERT INTO users (id, email, role, display_name) VALUES
         ('${U1}', 'u1@test.local', 'respondent', 'User 1'),

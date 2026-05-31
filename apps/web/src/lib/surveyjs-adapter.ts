@@ -8,6 +8,7 @@
  */
 
 import type { PublicQuestion } from '@/hooks/use-responses';
+import type { SkipLogicRule } from '@/hooks/use-surveys';
 
 // ─── SurveyJS JSON types (minimal, for type safety) ────────────────────────
 
@@ -36,6 +37,7 @@ interface SurveyJsQuestion {
   labelTrue?: string;
   labelFalse?: string;
   rowsVisibleIf?: string;
+  visibleIf?: string;
 }
 
 interface SurveyJsPage {
@@ -50,6 +52,7 @@ export interface SurveyJsModel {
   showProgressBar?: 'top' | 'bottom' | 'both';
   progressBarType?: 'pages' | 'questions' | 'requiredQuestions';
   questionTitlePattern?: string;
+  triggers?: Array<{ type: 'complete'; expression: string }>;
 }
 
 // ─── Adapter ───────────────────────────────────────────────────────────────
@@ -64,6 +67,21 @@ export function quanswenToSurveyJs(params: {
   questions: PublicQuestion[];
 }): SurveyJsModel {
   const elements = params.questions.map((q) => convertQuestion(q));
+  const skipEffects = collectSkipEffects(params.questions);
+  const triggers = skipEffects.skipToEndExpressions.map((expression) => ({ type: 'complete' as const, expression }));
+
+  for (const [targetIndex, hiddenExpressions] of skipEffects.hiddenByTargetIndex.entries()) {
+    const target = elements[targetIndex];
+    if (!target || hiddenExpressions.length === 0) {
+      continue;
+    }
+    const bypassExpression = hiddenExpressions.length === 1
+      ? `!(${hiddenExpressions[0]})`
+      : `!(${hiddenExpressions.join(' or ')})`;
+    target.visibleIf = target.visibleIf
+      ? `(${target.visibleIf}) and (${bypassExpression})`
+      : bypassExpression;
+  }
 
   return {
     title: params.title,
@@ -72,7 +90,57 @@ export function quanswenToSurveyJs(params: {
     showProgressBar: 'top',
     progressBarType: 'questions',
     questionTitlePattern: 'numRequireTitle',
+    triggers: triggers.length > 0 ? triggers : undefined,
   };
+}
+
+export function buildVisibleIfExpression(sourceQuestionId: string, rule: SkipLogicRule): string | null {
+  if (rule.selectedOptionId) {
+    return `{${sourceQuestionId}} = '${rule.selectedOptionId}'`;
+  }
+  if (typeof rule.selectedRating === 'number') {
+    return `{${sourceQuestionId}} >= ${rule.selectedRating}`;
+  }
+  return null;
+}
+
+function collectSkipEffects(questions: PublicQuestion[]): {
+  hiddenByTargetIndex: Map<number, string[]>;
+  skipToEndExpressions: string[];
+} {
+  const hiddenByTargetIndex = new Map<number, string[]>();
+  const skipToEndExpressions: string[] = [];
+
+  for (let sourceIndex = 0; sourceIndex < questions.length; sourceIndex += 1) {
+    const source = questions[sourceIndex];
+    const rules = source.config?.skipLogic as SkipLogicRule[] | undefined;
+    if (!Array.isArray(rules) || rules.length === 0) {
+      continue;
+    }
+
+    for (const rule of rules) {
+      const expression = buildVisibleIfExpression(source.id, rule);
+      if (!expression) {
+        continue;
+      }
+
+      if (rule.skipToEnd) {
+        skipToEndExpressions.push(expression);
+      }
+
+      if (typeof rule.skipToQuestionIndex !== 'number' || rule.skipToQuestionIndex <= sourceIndex + 1) {
+        continue;
+      }
+
+      for (let targetIndex = sourceIndex + 1; targetIndex < Math.min(rule.skipToQuestionIndex, questions.length); targetIndex += 1) {
+        const hidden = hiddenByTargetIndex.get(targetIndex) ?? [];
+        hidden.push(expression);
+        hiddenByTargetIndex.set(targetIndex, hidden);
+      }
+    }
+  }
+
+  return { hiddenByTargetIndex, skipToEndExpressions };
 }
 
 function convertQuestion(q: PublicQuestion): SurveyJsQuestion {

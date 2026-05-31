@@ -101,6 +101,7 @@ export const RESPONSES_DDL = `
     quality_score          INTEGER,
     quality_breakdown      JSONB,
     behavior_log           JSONB,
+    randomization_seed     TEXT,
     UNIQUE (survey_id, respondent_id)
   );
 
@@ -116,5 +117,28 @@ export const RESPONSES_DDL = `
   );
 `;
 
+/** QUA-196: Skip Logic / Conditional Branching */
+export const LOGIC_RULES_DDL = `
+  CREATE TYPE logic_condition AS ENUM (
+    'eq','neq','gt','gte','lt','lte',
+    'contains','not_contains','is_empty','is_not_empty'
+  );
+  CREATE TYPE logic_action AS ENUM ('show','hide','skip');
+  CREATE TABLE survey_logic_rules (
+    id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+    survey_id           UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+    trigger_question_id UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+    condition           logic_condition NOT NULL,
+    value               TEXT,
+    action              logic_action    NOT NULL DEFAULT 'show',
+    target_question_id  UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+    sort_order          INTEGER         NOT NULL DEFAULT 0,
+    created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX survey_logic_rules_survey_idx  ON survey_logic_rules(survey_id);
+  CREATE INDEX survey_logic_rules_trigger_idx ON survey_logic_rules(trigger_question_id);
+  CREATE INDEX survey_logic_rules_target_idx  ON survey_logic_rules(target_question_id);
+`;
+
 /** Convenience: all core tables in creation order */
-export const FULL_SCHEMA_DDL = USERS_DDL + SURVEYS_DDL + RESPONSES_DDL;
+export const FULL_SCHEMA_DDL = USERS_DDL + SURVEYS_DDL + RESPONSES_DDL + LOGIC_RULES_DDL;

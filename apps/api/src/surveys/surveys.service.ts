@@ -9,9 +9,10 @@ import {
 import { eq, desc, inArray } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyQuestions, questionOptions, mutualPairs } from '../db/schema';
+import { surveys, surveyQuestions, questionOptions, surveyLogicRules, mutualPairs } from '../db/schema';
 import type { CreateSurveyDto, SurveyQuestionDto } from './dto/create-survey.dto';
 import type { UpdateSurveyDto } from './dto/update-survey.dto';
+import type { LogicRuleDto } from './dto/logic-rule.dto';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -95,6 +96,39 @@ export class SurveysService {
       }
     });
 
+    // QUA-196: Insert logic rules after questions are created (need their IDs)
+    if (dto.logicRules?.length) {
+      await this.db.transaction(async (tx) => {
+        // Validate trigger/target question IDs belong to this survey
+        const surveyQs = await tx
+          .select({ id: surveyQuestions.id })
+          .from(surveyQuestions)
+          .where(eq(surveyQuestions.surveyId, survey.id));
+        const validIds = new Set(surveyQs.map((q) => q.id));
+
+        for (const rule of dto.logicRules!) {
+          if (!validIds.has(rule.triggerQuestionId)) {
+            throw new BadRequestException(`logicRules: triggerQuestionId ${rule.triggerQuestionId} 不屬於此問卷`);
+          }
+          if (!validIds.has(rule.targetQuestionId)) {
+            throw new BadRequestException(`logicRules: targetQuestionId ${rule.targetQuestionId} 不屬於此問卷`);
+          }
+        }
+
+        await tx.insert(surveyLogicRules).values(
+          dto.logicRules!.map((r) => ({
+            surveyId: survey.id,
+            triggerQuestionId: r.triggerQuestionId,
+            condition: r.condition,
+            value: r.value ?? null,
+            action: r.action ?? 'show',
+            targetQuestionId: r.targetQuestionId,
+            sortOrder: r.sortOrder ?? 0,
+          })),
+        );
+      });
+    }
+
     return this.findOneDetailed(survey.id, surveyorId);
   }
 
@@ -145,13 +179,19 @@ export class SurveysService {
         ...q,
         options: options.filter((o) => o.questionId === q.id),
       })),
+      // QUA-196: include logic rules for conditional branching
+      logicRules: await this.db
+        .select()
+        .from(surveyLogicRules)
+        .where(eq(surveyLogicRules.surveyId, surveyId))
+        .orderBy(surveyLogicRules.sortOrder),
     };
   }
 
   async update(surveyId: string, surveyorId: string, dto: UpdateSurveyDto) {
     await this.assertOwnerAndDraft(surveyId, surveyorId);
 
-    const { questions, ...surveyFields } = dto;
+    const { questions, logicRules, ...surveyFields } = dto;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
     if (surveyFields.title !== undefined) updateData.title = surveyFields.title;
@@ -173,6 +213,11 @@ export class SurveysService {
         await this.replaceQuestionsInTx(tx, surveyId, questions);
       }
     });
+
+    // QUA-196: Replace logic rules (after questions are settled so IDs are valid)
+    if (logicRules !== undefined) {
+      await this.replaceLogicRules(surveyId, logicRules);
+    }
 
     return this.findOneDetailed(surveyId, surveyorId);
   }
@@ -649,6 +694,266 @@ export class SurveysService {
       throw new BadRequestException('只能編輯草稿或被退回的問卷');
     }
     return survey;
+  }
+
+  // ─── QUA-196: Logic Rules Helpers ──────────────────────────────────────────
+
+  /**
+   * Replace all logic rules for a survey (delete + re-insert in a tx).
+   * Validates that trigger/target question IDs belong to this survey,
+   * and checks for infinite loops in skip chains.
+   */
+  private async replaceLogicRules(
+    surveyId: string,
+    rules: LogicRuleDto[],
+  ) {
+    // Fetch current question IDs for this survey
+    const surveyQs = await this.db
+      .select({ id: surveyQuestions.id })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId));
+    const validIds = new Set(surveyQs.map((q) => q.id));
+
+    // Validate all trigger/target IDs
+    for (const rule of rules) {
+      if (!validIds.has(rule.triggerQuestionId)) {
+        throw new BadRequestException(`logicRules: triggerQuestionId ${rule.triggerQuestionId} 不屬於此問卷`);
+      }
+      if (!validIds.has(rule.targetQuestionId)) {
+        throw new BadRequestException(`logicRules: targetQuestionId ${rule.targetQuestionId} 不屬於此問卷`);
+      }
+    }
+
+    // Check for infinite loops in skip chains
+    this.validateNoSkipCycles(rules);
+
+    await this.db.transaction(async (tx) => {
+      // Delete existing rules
+      await tx
+        .delete(surveyLogicRules)
+        .where(eq(surveyLogicRules.surveyId, surveyId));
+
+      // Insert new rules
+      if (rules.length > 0) {
+        await tx.insert(surveyLogicRules).values(
+          rules.map((r) => ({
+            surveyId,
+            triggerQuestionId: r.triggerQuestionId,
+            condition: r.condition,
+            value: r.value ?? null,
+            action: r.action ?? 'show',
+            targetQuestionId: r.targetQuestionId,
+            sortOrder: r.sortOrder ?? 0,
+          })),
+        );
+      }
+    });
+  }
+
+  /**
+   * Validate that skip rules don't create cycles (infinite loops).
+   * A cycle exists if following skip chains from any question leads back to itself.
+   */
+  private validateNoSkipCycles(
+    rules: Array<{ triggerQuestionId: string; action?: string; targetQuestionId: string }>,
+  ) {
+    // Build adjacency list for skip rules only
+    const skipEdges = new Map<string, string>();
+    for (const rule of rules) {
+      if (rule.action === 'skip') {
+        skipEdges.set(rule.triggerQuestionId, rule.targetQuestionId);
+      }
+    }
+
+    // DFS cycle detection
+    const visited = new Set<string>();
+    const inStack = new Set<string>();
+
+    for (const start of skipEdges.keys()) {
+      if (visited.has(start)) continue;
+
+      let current: string | undefined = start;
+      const path: string[] = [];
+
+      while (current && skipEdges.has(current)) {
+        if (inStack.has(current)) {
+          // Found a cycle — build readable path
+          const cycleStart = path.indexOf(current);
+          const cyclePath = [...path.slice(cycleStart), current].join(' → ');
+          throw new BadRequestException(`logicRules: 偵測到無限跳轉迴圈 (${cyclePath})，請檢查 skip 規則`);
+        }
+        if (visited.has(current)) break;
+
+        inStack.add(current);
+        path.push(current);
+        current = skipEdges.get(current);
+      }
+
+      // Mark all nodes in path as visited
+      for (const node of path) {
+        visited.add(node);
+        inStack.delete(node);
+      }
+    }
+  }
+
+  /**
+   * Evaluate logic rules for a survey response.
+   * Returns the set of question IDs that should be VISIBLE to the respondent,
+   * based on the answers they've provided so far.
+   *
+   * Logic:
+   *  - By default, all questions are visible.
+   *  - 'show' rules: target is HIDDEN unless trigger condition is met.
+   *  - 'hide' rules: target is VISIBLE unless trigger condition is met.
+   *  - 'skip' rules: if trigger condition is met, jump to target (hide everything between).
+   */
+  async evaluateLogicRules(
+    surveyId: string,
+    answers: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): Promise<{ visibleQuestionIds: Set<string>; skippedQuestionIds: Set<string> }> {
+    const rules = await this.db
+      .select()
+      .from(surveyLogicRules)
+      .where(eq(surveyLogicRules.surveyId, surveyId))
+      .orderBy(surveyLogicRules.sortOrder);
+
+    if (rules.length === 0) {
+      // No rules → all questions visible
+      const allQs = await this.db
+        .select({ id: surveyQuestions.id })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, surveyId));
+      return {
+        visibleQuestionIds: new Set(allQs.map((q) => q.id)),
+        skippedQuestionIds: new Set(),
+      };
+    }
+
+    // Get all question IDs for this survey, sorted by sortOrder
+    const allQs = await this.db
+      .select({ id: surveyQuestions.id, sortOrder: surveyQuestions.sortOrder })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const allQuestionIds = allQs.map((q) => q.id);
+    const visible = new Set(allQuestionIds);
+    const skipped = new Set<string>();
+
+    // Group rules by action type
+    const showRules = rules.filter((r) => r.action === 'show');
+    const hideRules = rules.filter((r) => r.action === 'hide');
+    const skipRules = rules.filter((r) => r.action === 'skip');
+
+    // For 'show' rules: target starts HIDDEN, becomes visible when condition is met
+    for (const rule of showRules) {
+      if (!this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        visible.delete(rule.targetQuestionId);
+      }
+    }
+
+    // For 'hide' rules: target starts VISIBLE, becomes hidden when condition is met
+    for (const rule of hideRules) {
+      if (this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        visible.delete(rule.targetQuestionId);
+      }
+    }
+
+    // For 'skip' rules: if condition met, mark questions between trigger and target as skipped
+    for (const rule of skipRules) {
+      if (this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        const triggerIdx = allQuestionIds.indexOf(rule.triggerQuestionId);
+        const targetIdx = allQuestionIds.indexOf(rule.targetQuestionId);
+        if (triggerIdx !== -1 && targetIdx !== -1) {
+          const [from, to] = triggerIdx < targetIdx
+            ? [triggerIdx + 1, targetIdx - 1]
+            : [targetIdx + 1, triggerIdx - 1];
+          for (let i = from; i <= to; i++) {
+            const qId = allQuestionIds[i];
+            visible.delete(qId);
+            skipped.add(qId);
+          }
+        }
+      }
+    }
+
+    return { visibleQuestionIds: visible, skippedQuestionIds: skipped };
+  }
+
+  /**
+   * Evaluate a single condition against the given answers.
+   */
+  private evaluateCondition(
+    triggerQuestionId: string,
+    condition: string,
+    value: string | null,
+    answers: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): boolean {
+    const answer = answers[triggerQuestionId];
+
+    switch (condition) {
+      case 'is_empty':
+        return !answer || (
+          (answer.textAnswer === undefined || answer.textAnswer === '') &&
+          (!answer.selectedOptionIds || answer.selectedOptionIds.length === 0) &&
+          (answer.ratingValue === undefined || answer.ratingValue === null)
+        );
+
+      case 'is_not_empty':
+        return !!answer && (
+          (answer.textAnswer !== undefined && answer.textAnswer !== '') ||
+          (answer.selectedOptionIds && answer.selectedOptionIds.length > 0) ||
+          (answer.ratingValue !== undefined && answer.ratingValue !== null)
+        );
+
+      default:
+        break;
+    }
+
+    // All other conditions require an answer
+    if (!answer) return false;
+
+    const valueStr = value ?? '';
+
+    // Text-based comparison
+    const textVal = answer.textAnswer ?? '';
+
+    // Option-based comparison
+    const options = answer.selectedOptionIds ?? [];
+
+    // Numeric comparison (for rating)
+    const numVal = answer.ratingValue;
+    const numTarget = parseFloat(valueStr);
+
+    switch (condition) {
+      case 'eq':
+        return textVal === valueStr || options.includes(valueStr) || (numVal !== undefined && numVal === numTarget);
+
+      case 'neq':
+        return textVal !== valueStr && !options.includes(valueStr) && (numVal === undefined || numVal !== numTarget);
+
+      case 'gt':
+        return numVal !== undefined && !isNaN(numTarget) && numVal > numTarget;
+
+      case 'gte':
+        return numVal !== undefined && !isNaN(numTarget) && numVal >= numTarget;
+
+      case 'lt':
+        return numVal !== undefined && !isNaN(numTarget) && numVal < numTarget;
+
+      case 'lte':
+        return numVal !== undefined && !isNaN(numTarget) && numVal <= numTarget;
+
+      case 'contains':
+        return textVal.includes(valueStr) || options.some((o) => o.includes(valueStr));
+
+      case 'not_contains':
+        return !textVal.includes(valueStr) && !options.some((o) => o.includes(valueStr));
+
+      default:
+        return false;
+    }
   }
 
   private async replaceQuestions(surveyId: string, questionDtos: SurveyQuestionDto[]) {

@@ -15,6 +15,7 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import { eq } from 'drizzle-orm';
+import { LOGIC_RULES_DDL } from '../test-helpers/pglite-ddl';
 
 delete process.env.ZAI_API_KEY; // 確保不會走 LLM
 process.env.PII_ENCRYPTION_KEY = 'phase-ii8-test-pii-key';
@@ -120,6 +121,7 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         quality_score         INTEGER,
         quality_breakdown     JSONB,
         behavior_log          JSONB,
+        randomization_seed    TEXT,
         UNIQUE (survey_id, respondent_id)
       );
       CREATE TABLE response_answers (
@@ -158,6 +160,7 @@ describe('QualityAuditService DB short-circuit (Phase II.8)', () => {
         updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
     `);
+    await client.exec(LOGIC_RULES_DDL);
 
     // 一個已 audit 過的 response（quality_score=85, status=passed）
     await client.exec(`
