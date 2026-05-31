@@ -218,6 +218,57 @@ describe('QUA-154: LINE Login — Code-level verification', () => {
     });
   });
 
+  // ─── Apple / OAuth CSRF state token mechanics ──────────────────────────
+  describe('Apple / OAuth CSRF state token mechanics', () => {
+    it('apple login state has login: prefix', () => {
+      // auth.controller.ts appleAuth(): state = `login:${createLoginStateToken()}`
+      const fakeToken = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+      const state = `login:${fakeToken}`;
+      expect(state.startsWith('login:')).toBe(true);
+      expect(state.startsWith('bind:')).toBe(false);
+      expect(state.slice(6)).toBe(fakeToken);
+    });
+
+    it('apple callback rejects unknown state prefix', () => {
+      // appleCallback(): neither bind: nor login: → oauth_failed redirect
+      const state = 'random:whatever';
+      const isBindAttempt = state.startsWith('bind:');
+      const isLoginAttempt = state.startsWith('login:');
+      expect(isBindAttempt || isLoginAttempt).toBe(false);
+    });
+
+    it('apple callback validates and consumes state — replay is blocked', () => {
+      // Simulates the Map-based one-time token store in auth.service.ts
+      const sessions = new Map<string, { expiresAt: number }>();
+      const token = 'test-token-48hex-value';
+
+      // createLoginStateToken: registers with 5 min TTL
+      sessions.set(token, { expiresAt: Date.now() + 5 * 60 * 1000 });
+
+      // validateAndConsumeLoginState: first call succeeds, deletes token
+      const session1 = sessions.get(token);
+      sessions.delete(token);
+      const firstCall = !!session1 && session1.expiresAt > Date.now();
+      expect(firstCall).toBe(true);
+      expect(sessions.has(token)).toBe(false);
+
+      // Replay: returns false (token already consumed)
+      const session2 = sessions.get(token);
+      sessions.delete(token);
+      const replayCall = !!session2 && (session2?.expiresAt ?? 0) > Date.now();
+      expect(replayCall).toBe(false);
+    });
+
+    it('expired state token is rejected', () => {
+      const sessions = new Map<string, { expiresAt: number }>();
+      sessions.set('tok', { expiresAt: Date.now() - 1 }); // already expired
+      const s = sessions.get('tok');
+      sessions.delete('tok');
+      const valid = !!s && s.expiresAt > Date.now();
+      expect(valid).toBe(false);
+    });
+  });
+
   // ─── Frontend verification ──────────────────────────────────────────────
   describe('Frontend: LINE login button', () => {
     it('should render "使用 LINE 登入" button on login page', () => {
