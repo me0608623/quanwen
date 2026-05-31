@@ -24,8 +24,13 @@ pnpm --filter api test:coverage
 pnpm --filter web test:e2e   # Playwright E2E (full browser)
 pnpm --filter web test:e2e --headed  # Playwright with visible browser
 
-# Run a single test file
+# Run a single test file (unit)
 pnpm --filter api test src/wallet/wallet.service.test.ts
+
+# Run a single E2E spec (match by filename fragment)
+pnpm --filter web test:e2e -- --grep "happy-path"
+# Or pass the spec file directly:
+cd apps/web && npx playwright test e2e/happy-path-qua11.spec.ts
 
 # Static analysis
 pnpm lint                    # ESLint across all apps
@@ -51,8 +56,8 @@ pnpm --filter api db:reset     # Wipe + re-seed
 **Monorepo** (`pnpm` workspaces):
 - `apps/api` — NestJS 10, port 3001. All business logic.
 - `apps/web` — Next.js 14 App Router, port 3000. Frontend.
-- `packages/shared-types` — TypeScript types shared by both apps.
-- `packages/report-generator` — Vendored HTML report engine.
+- `packages/shared-types` — TypeScript types shared by both apps. When a type must be consumed by both `api` and `web`, define it here and import as `@quanwen/shared-types`. Do not duplicate type definitions across apps.
+- `packages/report-generator` — Internal HTML report engine (adapted from nexu-io/html-anything). Used by `ExportService`. Modifiable — it's our code.
 
 ### API Module Map
 
@@ -65,6 +70,9 @@ Key cross-cutting modules:
 - `ai-audit/` — `ZaiClient` wraps Z.ai GLM-5.1. Used by `SurveysService` (AI draft + async quality audit) and `MutualService` (response quality gate).
 - `common/pipes/zod-validation.pipe.ts` — Applied globally. DTOs use Zod schemas, not class-validator.
 - `common/filters/http-exception.filter.ts` — Global exception filter; standardises error shape.
+- `appeals/` — Respondent appeal flow for rejected responses; creates `appeals` rows and notifies admin.
+- `export/` — Survey result export in PDF, Excel (buffered + streaming), CSV (streaming, 500-row keyset batches), and Markdown. Text answers pass through `redactPii()` before export.
+- `reconciliation/` — `ReconciliationService` cross-checks ECPay payment callbacks against internal `transactions` records to detect discrepancies.
 
 ### Database Modes
 
@@ -194,9 +202,12 @@ Minimum required for dev (see `.env.example` for full list):
 | `USE_PG_MEM` | dev | `true` = PGlite in-memory (no Docker needed) |
 | `DATABASE_URL` | prod | PostgreSQL connection string |
 | `JWT_SECRET` | always | ≥ 64 chars |
+| `PII_ENCRYPTION_KEY` | prod | AES key for encrypting PII at rest; generate with `openssl rand -hex 32` |
+| `PII_KDF_SALT` | prod | KDF salt; generate with `openssl rand -hex 16` |
 | `ZAI_API_KEY` | AI features | Format: `xxx.yyy` from Z.ai dashboard |
 | `WEB_URL` | CORS | Default: `http://localhost:3000` |
 | `API_URL` | frontend | Default: `http://localhost:3001/api/v1` |
+| `ENABLE_SWAGGER` | dev/staging | Set to `true` to expose `/docs` (Swagger UI) |
 | `LINE_CHANNEL_ID` | LINE OAuth | Channel ID from LINE Developers console (not `LINE_CLIENT_ID`) |
 | `LINE_CHANNEL_SECRET` | LINE OAuth | Channel Secret (not `LINE_CLIENT_SECRET`) |
 | `LINE_CALLBACK_URL` | LINE OAuth | `http://localhost:3001/api/v1/auth/line/callback` |
@@ -207,4 +218,4 @@ Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`), Appl
 
 - `README.md` — full DB schema, all API endpoints, sprint history, ADR decisions.
 - `DEPLOYMENT.md` — production environment variables, ECPay sandbox setup.
-- `http://localhost:3001/docs` — Swagger UI (when API is running).
+- `http://localhost:3001/docs` — Swagger UI (requires `ENABLE_SWAGGER=true` and running API).
