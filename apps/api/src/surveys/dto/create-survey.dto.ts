@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LogicRuleSchema } from './logic-rule.dto';
 
 export const QuestionOptionSchema = z.object({
   label: z.string().min(1).max(300),
@@ -52,17 +53,12 @@ export const CreateSurveySchema = z.object({
   // Optional; defaults to 'standard' (1.0x, 14 days) in SurveysService.create
   deadlineTier: z.enum(['standard', 'express', 'urgent', 'critical']).optional(),
   isAnonymous: z.boolean().default(true),
+  // QUA-204: 問券層級題目順序隨機化 (none=不隨機, all=全部隨機, exceptLast=保留最後一題)
+  questionShuffleMode: z.enum(['none', 'all', 'exceptLast']).optional(),
   audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
-  // QUA-196: Skip Logic / Conditional Branching rules
-  logicRules: z.array(z.object({
-    triggerQuestionId: z.string().uuid(),
-    condition: z.enum(['eq', 'neq', 'gt', 'gte', 'lt', 'lte', 'contains', 'not_contains', 'is_empty', 'is_not_empty']),
-    value: z.string().max(2000).optional(),
-    action: z.enum(['show', 'hide', 'skip']).default('show'),
-    targetQuestionId: z.string().uuid(),
-    sortOrder: z.number().int().min(0).default(0),
-  })).max(200).optional(),
+  // QUA-196: Skip Logic / Conditional Branching rules (uses LogicRuleSchema for full validation)
+  logicRules: z.array(LogicRuleSchema).max(200).optional(),
 });
 
 export type CreateSurveyDto = z.infer<typeof CreateSurveySchema>;
