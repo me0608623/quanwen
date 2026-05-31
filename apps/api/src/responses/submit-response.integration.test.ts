@@ -1,4 +1,5 @@
-﻿import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
+import { eq } from 'drizzle-orm';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
 import type { AppDb } from '../db';
@@ -91,7 +92,8 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
         expires_at TIMESTAMPTZ,
         audience_criteria JSONB,
         ai_score INTEGER,
-        ai_reject_reason TEXT
+        ai_reject_reason TEXT,
+        question_shuffle_mode VARCHAR(16) NOT NULL DEFAULT 'none'
       );
 
       CREATE TABLE survey_questions (
@@ -123,6 +125,7 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
         quality_breakdown JSONB,
         behavior_log JSONB,
         randomization_seed TEXT,
+        fingerprint_id TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 
@@ -213,4 +216,35 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].status).toBe('pending_review');
   });
+
+  it('stores optional fingerprintId without applying any blocking logic', async () => {
+    const secondRespondentId = '11111111-1111-1111-1111-111111111112';
+    const secondSurveyId = '33333333-3333-3333-3333-333333333334';
+    const secondQuestionId = '44444444-4444-4444-4444-444444444445';
+
+    await client.exec(`
+      INSERT INTO users (id, email, role, display_name)
+      VALUES ('${secondRespondentId}', 'respondent2@test.local', 'respondent', 'Respondent 2');
+      INSERT INTO respondent_profiles (user_id) VALUES ('${secondRespondentId}');
+      INSERT INTO surveys (id, surveyor_id, title, status, reward_points, target_count, completed_count, published_at)
+      VALUES ('${secondSurveyId}', '${SURVEYOR_ID}', 'Fingerprint Survey', 'published', 100, 10, 0, NOW());
+      INSERT INTO survey_questions (id, survey_id, type, title, sort_order, is_required)
+      VALUES ('${secondQuestionId}', '${secondSurveyId}', 'text', 'Fingerprint question', 0, true);
+    `);
+
+    await service.submitResponse(secondSurveyId, secondRespondentId, {
+      answers: [{ questionId: secondQuestionId, textAnswer: 'short' }],
+      fingerprintId: 'visitor_abc123',
+    });
+
+    const inserted = await db
+      .select({ fingerprintId: schema.surveyResponses.fingerprintId, status: schema.surveyResponses.status })
+      .from(schema.surveyResponses)
+      .where(eq(schema.surveyResponses.surveyId, secondSurveyId));
+
+    expect(inserted).toHaveLength(1);
+    expect(inserted[0].fingerprintId).toBe('visitor_abc123');
+  });
 });
+
+

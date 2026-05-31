@@ -83,7 +83,8 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         expires_at TIMESTAMPTZ,
         audience_criteria JSONB,
         ai_score INTEGER,
-        ai_reject_reason TEXT
+        ai_reject_reason TEXT,
+        question_shuffle_mode VARCHAR(16) NOT NULL DEFAULT 'none'
       );
 
       CREATE TABLE survey_questions (
@@ -122,6 +123,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         quality_breakdown JSONB,
         behavior_log JSONB,
         randomization_seed TEXT,
+        fingerprint_id TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 

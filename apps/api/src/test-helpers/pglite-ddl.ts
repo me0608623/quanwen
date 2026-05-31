@@ -55,12 +55,13 @@ export const SURVEYS_DDL = `
     target_count      INTEGER      NOT NULL DEFAULT 100,
     completed_count   INTEGER      NOT NULL DEFAULT 0,
     expires_at        TIMESTAMPTZ,
-    ai_score          INTEGER,
-    ai_reject_reason  TEXT,
-    is_anonymous      BOOLEAN      NOT NULL DEFAULT true,
-    created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    published_at      TIMESTAMPTZ
+    ai_score              INTEGER,
+    ai_reject_reason      TEXT,
+    question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
+    is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
+    created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    published_at          TIMESTAMPTZ
   );
 
   CREATE TABLE survey_questions (
@@ -102,6 +103,7 @@ export const RESPONSES_DDL = `
     quality_breakdown      JSONB,
     behavior_log           JSONB,
     randomization_seed     TEXT,
+    fingerprint_id         TEXT,
     UNIQUE (survey_id, respondent_id)
   );
 

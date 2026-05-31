@@ -87,6 +87,7 @@ describe('MutualService (integration)', () => {
         expires_at    TIMESTAMPTZ,
         ai_score      INTEGER,
         ai_reject_reason TEXT,
+        question_shuffle_mode VARCHAR(16) NOT NULL DEFAULT 'none',
         is_anonymous  BOOLEAN NOT NULL DEFAULT true,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -94,15 +95,15 @@ describe('MutualService (integration)', () => {
       );
 
       CREATE TABLE survey_questions (
-        id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        survey_id     UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-        type          question_type NOT NULL,
-        title         TEXT NOT NULL,
-        description   TEXT,
-        sort_order    INTEGER NOT NULL DEFAULT 0,
-        is_required   BOOLEAN NOT NULL DEFAULT true,
-        config        JSONB,
-        created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        survey_id             UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+        type                  question_type NOT NULL,
+        title                 TEXT NOT NULL,
+        description           TEXT,
+        sort_order            INTEGER NOT NULL DEFAULT 0,
+        is_required           BOOLEAN NOT NULL DEFAULT true,
+        config                JSONB,
+        created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
 
       CREATE TABLE question_options (
@@ -154,6 +155,7 @@ describe('MutualService (integration)', () => {
         quality_breakdown JSONB,
         behavior_log JSONB,
         randomization_seed TEXT,
+        fingerprint_id TEXT,
         UNIQUE (survey_id, respondent_id)
       );
 
