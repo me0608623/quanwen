@@ -481,6 +481,19 @@ export class MutualService {
       throw new BadRequestException('你已提交過此配對的填答');
     }
 
+    // Validate that every submitted questionId belongs to targetSurvey
+    if (answers.length > 0) {
+      const targetQRows = await this.db
+        .select({ id: surveyQuestions.id })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, targetSurveyId));
+      const validQIds = new Set(targetQRows.map((q) => q.id));
+      const invalidIds = answers.filter((a) => a.questionId && !validQIds.has(a.questionId));
+      if (invalidIds.length > 0) {
+        throw new BadRequestException('填答包含不屬於此問卷的題目');
+      }
+    }
+
     const now = new Date();
     // response + answers must be atomic: if answer insert fails, response is orphaned
     let responseId = '' as string; // assigned inside db.transaction below
