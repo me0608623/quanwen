@@ -763,42 +763,61 @@ export class SurveysService {
   private validateNoSkipCycles(
     rules: Array<{ triggerQuestionId: string; action?: string; targetQuestionId: string }>,
   ) {
-    // Build adjacency list for skip rules only
-    const skipEdges = new Map<string, string>();
+    // Build multi-edge adjacency list (a question may have multiple skip rules with different conditions)
+    const adj = new Map<string, Set<string>>();
     for (const rule of rules) {
-      if (rule.action === 'skip') {
-        skipEdges.set(rule.triggerQuestionId, rule.targetQuestionId);
-      }
+      if (rule.action !== 'skip') continue;
+      const targets = adj.get(rule.triggerQuestionId) ?? new Set<string>();
+      targets.add(rule.targetQuestionId);
+      adj.set(rule.triggerQuestionId, targets);
     }
 
-    // DFS cycle detection
-    const visited = new Set<string>();
-    const inStack = new Set<string>();
+    // DFS cycle detection with explicit recursion stack (iterative to avoid stack overflow on large graphs)
+    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const color = new Map<string, number>();
 
-    for (const start of skipEdges.keys()) {
-      if (visited.has(start)) continue;
-
-      let current: string | undefined = start;
+    const dfs = (start: string): string[] | null => {
+      const stack: Array<{ node: string; iter: Iterator<string> }> = [];
       const path: string[] = [];
 
-      while (current && skipEdges.has(current)) {
-        if (inStack.has(current)) {
-          // Found a cycle — build readable path
-          const cycleStart = path.indexOf(current);
-          const cyclePath = [...path.slice(cycleStart), current].join(' → ');
-          throw new BadRequestException(`logicRules: 偵測到無限跳轉迴圈 (${cyclePath})，請檢查 skip 規則`);
+      color.set(start, GRAY);
+      path.push(start);
+      stack.push({ node: start, iter: (adj.get(start) ?? new Set()).values() });
+
+      while (stack.length > 0) {
+        const frame = stack[stack.length - 1]!;
+        const next = frame.iter.next();
+
+        if (next.done) {
+          color.set(frame.node, BLACK);
+          stack.pop();
+          path.pop();
+        } else {
+          const neighbor = next.value;
+          const c = color.get(neighbor) ?? WHITE;
+          if (c === GRAY) {
+            // Found cycle — reconstruct path from where we re-entered
+            const cycleStart = path.indexOf(neighbor);
+            return [...path.slice(cycleStart), neighbor];
+          }
+          if (c === WHITE) {
+            color.set(neighbor, GRAY);
+            path.push(neighbor);
+            stack.push({ node: neighbor, iter: (adj.get(neighbor) ?? new Set()).values() });
+          }
         }
-        if (visited.has(current)) break;
-
-        inStack.add(current);
-        path.push(current);
-        current = skipEdges.get(current);
       }
+      return null;
+    };
 
-      // Mark all nodes in path as visited
-      for (const node of path) {
-        visited.add(node);
-        inStack.delete(node);
+    for (const node of adj.keys()) {
+      if ((color.get(node) ?? WHITE) === WHITE) {
+        const cycle = dfs(node);
+        if (cycle) {
+          throw new BadRequestException(
+            `logicRules: 偵測到無限跳轉迴圈 (${cycle.join(' → ')})，請檢查 skip 規則`,
+          );
+        }
       }
     }
   }
