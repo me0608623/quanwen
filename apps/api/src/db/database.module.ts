@@ -132,8 +132,9 @@ export { DB_TOKEN as DB };
               completed_count  INTEGER      NOT NULL DEFAULT 0,
               expires_at       TIMESTAMPTZ,
               ai_score         INTEGER,
-              ai_reject_reason TEXT,
-              is_anonymous     BOOLEAN      NOT NULL DEFAULT true,
+              ai_reject_reason      TEXT,
+              question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
+              is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
               created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               published_at     TIMESTAMPTZ
@@ -178,6 +179,8 @@ export { DB_TOKEN as DB };
               quality_score        INTEGER,
               quality_breakdown    JSONB,
               behavior_log         JSONB,
+              randomization_seed   TEXT,
+              fingerprint_id       TEXT,
               UNIQUE (survey_id, respondent_id)
             );
 
@@ -196,7 +199,9 @@ export { DB_TOKEN as DB };
           // Sprint 6: notifications
           await client.exec(`
             CREATE TYPE notification_type AS ENUM (
-              'survey_approved','survey_rejected','new_response','reward_issued','system'
+              'survey_approved','survey_rejected','new_response',
+              'response_milestone','daily_response_digest',
+              'reward_issued','system'
             );
 
             CREATE TABLE notifications (

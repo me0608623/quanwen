@@ -98,6 +98,9 @@ export const surveys = pgTable(
     aiScore: integer('ai_score'),           // 0-100
     aiRejectReason: text('ai_reject_reason'),
 
+    // QUA-204: 問券層級題目順序隨機化 ('none' | 'all' | 'exceptLast')
+    questionShuffleMode: varchar('question_shuffle_mode', { length: 16 }).notNull().default('none'),
+
     // 是否允許匿名填答
     isAnonymous: boolean('is_anonymous').notNull().default(true),
 

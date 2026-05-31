@@ -424,6 +424,7 @@ export class ResponsesService {
           fillDurationSeconds,
           antiCheatScore: antiCheatResult.score,
           randomizationSeed,
+          fingerprintId: dto.fingerprintId ?? null,
           suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
           behaviorLog: dto.behaviorLog ?? null,
         })

@@ -57,11 +57,14 @@ export const surveyResponses = pgTable(
     sentiment: responseSentimentEnum('sentiment'),
     // QUA-204: Randomization seed for reproducible shuffle (question/option order)
     randomizationSeed: text('randomization_seed'),
+    // QUA-215: FingerprintJS visitorId — stored as a risk signal, never used as the sole blocking criterion
+    fingerprintId: text('fingerprint_id'),
     // 防重複：每人每份問卷只能提交一次
   },
   (t) => ({
     surveyIdx: index('survey_responses_survey_idx').on(t.surveyId),
     respondentIdx: index('survey_responses_respondent_idx').on(t.respondentId),
+    surveyFingerprintIdx: index('idx_responses_fingerprint').on(t.surveyId, t.fingerprintId),
     // 同一受試者對同一問卷只能有一筆（unique constraint）
     uniqRespondentSurvey: unique('survey_responses_unique').on(t.surveyId, t.respondentId),
   }),
