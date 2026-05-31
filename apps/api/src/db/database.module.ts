@@ -41,6 +41,7 @@ export { DB_TOKEN as DB };
               email_verification_token       VARCHAR(128),
               email_verification_expires_at  TIMESTAMPTZ,
               role_selected_at               TIMESTAMPTZ,
+              email_opt_out                  BOOLEAN      NOT NULL DEFAULT false,
               created_at                     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at                     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               deleted_at                     TIMESTAMPTZ
@@ -86,15 +87,17 @@ export { DB_TOKEN as DB };
               updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
+            CREATE TYPE response_notif_mode AS ENUM ('per_response','daily_digest');
             CREATE TABLE surveyor_profiles (
-              id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id            UUID        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-              institution_name   VARCHAR(200),
-              research_purpose   VARCHAR(500),
-              is_verified        BOOLEAN     NOT NULL DEFAULT false,
-              is_onboarding_done BOOLEAN     NOT NULL DEFAULT false,
-              created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              id                   UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id              UUID                 NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+              institution_name     VARCHAR(200),
+              research_purpose     VARCHAR(500),
+              is_verified          BOOLEAN              NOT NULL DEFAULT false,
+              is_onboarding_done   BOOLEAN              NOT NULL DEFAULT false,
+              response_notif_mode  response_notif_mode  NOT NULL DEFAULT 'per_response',
+              created_at           TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+              updated_at           TIMESTAMPTZ          NOT NULL DEFAULT NOW()
             );
 
             CREATE TABLE interest_tags (

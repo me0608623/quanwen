@@ -1,8 +1,9 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, desc, sql, gte } from 'drizzle-orm';
+import { eq, and, desc, sql, gte, lt } from 'drizzle-orm';
+import { Cron } from '@nestjs/schedule';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { notifications, users } from '../db/schema';
+import { notifications, users, surveyorProfiles, surveys } from '../db/schema';
 import type { NewNotification } from '../db/schema';
 import { MailService } from '../mail/mail.service';
 
@@ -74,8 +75,19 @@ export class NotificationsService {
     type: NewNotification['type'],
     metadata?: Record<string, unknown>,
   ) {
-    // QUA-203: 節流 new_response email（冷卻期內跳過寄信）
+    // QUA-200: new_response email — skip if creator prefers daily digest
     if (type === 'new_response') {
+      const digestRows = await this.db
+        .select({ responseNotifMode: surveyorProfiles.responseNotifMode })
+        .from(surveyorProfiles)
+        .where(eq(surveyorProfiles.userId, userId))
+        .limit(1);
+      if (digestRows[0]?.responseNotifMode === 'daily_digest') {
+        this.logger.debug(`new_response email skipped for userId=${userId} (daily_digest mode)`);
+        return;
+      }
+
+      // QUA-203: 節流 new_response email（冷卻期內跳過寄信）
       const throttled = await this.isNewResponseEmailThrottled(userId);
       if (throttled) {
         this.logger.debug(`new_response email throttled for userId=${userId} (cooldown=${NEW_RESPONSE_EMAIL_COOLDOWN_MINUTES}min)`);
@@ -88,6 +100,7 @@ export class NotificationsService {
         email: users.email,
         displayName: users.displayName,
         emailVerified: users.emailVerified,
+        emailOptOut: users.emailOptOut,
       })
       .from(users)
       .where(eq(users.id, userId))
@@ -95,10 +108,115 @@ export class NotificationsService {
 
     const user = rows[0];
     if (!user || !user.emailVerified) return;
+    // QUA-200: respect opt-out preference
+    if (user.emailOptOut) return;
     // 跳過 placeholder email（OAuth 未填 email 時 fallback 用的格式）
     if (user.email.endsWith('.placeholder')) return;
 
     await this.mail.sendNotificationEmail(user.email, user.displayName, title, body);
+  }
+
+  // ─── QUA-200: 每日填答摘要（每天 08:00 台北時間 = 00:00 UTC）────────────────
+
+  @Cron('0 0 * * *', { timeZone: 'Asia/Taipei' })
+  async sendDailyDigests(): Promise<void> {
+    this.logger.log('daily digest cron started');
+
+    // 找出所有偏好 daily_digest 且 email 有效的問券方
+    const digestUsers = await this.db
+      .select({
+        userId: surveyorProfiles.userId,
+        email: users.email,
+        displayName: users.displayName,
+        emailVerified: users.emailVerified,
+        emailOptOut: users.emailOptOut,
+      })
+      .from(surveyorProfiles)
+      .innerJoin(users, eq(surveyorProfiles.userId, users.id))
+      .where(eq(surveyorProfiles.responseNotifMode, 'daily_digest'));
+
+    const windowStart = new Date(Date.now() - 24 * 60 * 60_000);
+    const windowEnd = new Date();
+
+    for (const u of digestUsers) {
+      if (!u.emailVerified || u.emailOptOut || u.email.endsWith('.placeholder')) continue;
+
+      // 找出該用戶在 24h 內的 new_response 通知，依問卷聚合
+      const notifRows = await this.db
+        .select({
+          surveyId: sql<string>`(metadata->>'surveyId')::text`,
+          count: sql<number>`COUNT(*)::int`,
+        })
+        .from(notifications)
+        .where(
+          and(
+            eq(notifications.userId, u.userId),
+            eq(notifications.type, 'new_response'),
+            gte(notifications.createdAt, windowStart),
+            lt(notifications.createdAt, windowEnd),
+          ),
+        )
+        .groupBy(sql`metadata->>'surveyId'`);
+
+      if (notifRows.length === 0) continue;
+
+      // 取得問卷標題與累計數
+      const digestItems: Array<{ surveyTitle: string; newCount: number; totalCount: number; targetCount: number }> = [];
+      for (const row of notifRows) {
+        if (!row.surveyId) continue;
+        const surveyRows = await this.db
+          .select({ title: surveys.title, completedCount: surveys.completedCount, targetCount: surveys.targetCount })
+          .from(surveys)
+          .where(eq(surveys.id, row.surveyId))
+          .limit(1);
+        if (!surveyRows[0]) continue;
+        digestItems.push({
+          surveyTitle: surveyRows[0].title,
+          newCount: row.count,
+          totalCount: surveyRows[0].completedCount,
+          targetCount: surveyRows[0].targetCount,
+        });
+      }
+
+      if (digestItems.length === 0) continue;
+
+      void this.mail
+        .sendDailyDigestEmail(u.email, u.displayName, digestItems)
+        .catch((err: unknown) =>
+          this.logger.error(`daily digest email failed for userId=${u.userId}`, err),
+        );
+    }
+
+    this.logger.log(`daily digest cron finished, processed ${digestUsers.length} surveyor(s)`);
+  }
+
+  // ─── QUA-200: 受試者感謝 email ──────────────────────────────────────────────
+
+  async sendRespondentThankYou(
+    respondentId: string,
+    surveyTitle: string,
+    rewardPoints: number,
+  ): Promise<void> {
+    const rows = await this.db
+      .select({
+        email: users.email,
+        displayName: users.displayName,
+        emailVerified: users.emailVerified,
+        emailOptOut: users.emailOptOut,
+      })
+      .from(users)
+      .where(eq(users.id, respondentId))
+      .limit(1);
+
+    const user = rows[0];
+    if (!user || !user.emailVerified || user.emailOptOut) return;
+    if (user.email.endsWith('.placeholder')) return;
+
+    void this.mail
+      .sendRespondentThankYouEmail(user.email, user.displayName, surveyTitle, rewardPoints)
+      .catch((err: unknown) =>
+        this.logger.error(`thank-you email failed for respondentId=${respondentId}`, err),
+      );
   }
 
   // ─── 查詢使用者通知 ──────────────────────────────────────────────────────────

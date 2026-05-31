@@ -519,6 +519,13 @@ export class ResponsesService {
           this.logger.error(`new_response 通知失敗 surveyId=${surveyId}`, err),
         );
 
+      // ── 10.1 QUA-200: 感謝受試者 email（fire-and-forget）─────────────────
+      this.notifications
+        .sendRespondentThankYou(respondentId, survey.title, survey.rewardPoints)
+        .catch((err: unknown) =>
+          this.logger.error(`thank-you email 失敗 respondentId=${respondentId}`, err),
+        );
+
       // ── 10.5 QUA-203: 閾值里程碑通知（fire-and-forget）──────────────────
       // 當 completedCount 跨越 50/100/500/1000 時，寄發慶祝通知
       const newCount = survey.completedCount + 1;

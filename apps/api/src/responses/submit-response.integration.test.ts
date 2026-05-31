@@ -48,7 +48,10 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
       evaluate: () => ({ score: 10, flags: [] }),
     } as unknown as AntiCheatService;
     const wallet = { issueReward } as unknown as WalletService;
-    const notifications = { create: async () => undefined } as unknown as NotificationsService;
+    const notifications = {
+      create: async () => undefined,
+      sendRespondentThankYou: async () => undefined,
+    } as unknown as NotificationsService;
     const qualityAudit = {
       audit: async () => ({
         behaviorScore: 60,
