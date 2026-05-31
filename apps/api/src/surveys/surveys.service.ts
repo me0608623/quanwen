@@ -86,6 +86,8 @@ export class SurveysService {
           expiresAt,
           isAnonymous: dto.isAnonymous ?? true,
           audienceCriteria: dto.audienceCriteria,
+          // QUA-204: Store survey-level question shuffle mode
+          questionShuffleMode: dto.questionShuffleMode ?? 'none',
         })
         .returning();
 
@@ -114,6 +116,8 @@ export class SurveysService {
             throw new BadRequestException(`logicRules: targetQuestionId ${rule.targetQuestionId} 不屬於此問卷`);
           }
         }
+
+        this.validateNoSkipCycles(dto.logicRules!);
 
         await tx.insert(surveyLogicRules).values(
           dto.logicRules!.map((r) => ({
@@ -203,6 +207,8 @@ export class SurveysService {
     if (surveyFields.expiresAt !== undefined) updateData.expiresAt = new Date(surveyFields.expiresAt);
     if (surveyFields.isAnonymous !== undefined) updateData.isAnonymous = surveyFields.isAnonymous;
     if (surveyFields.audienceCriteria !== undefined) updateData.audienceCriteria = surveyFields.audienceCriteria;
+    // QUA-204: Allow updating question shuffle mode
+    if (surveyFields.questionShuffleMode !== undefined) updateData.questionShuffleMode = surveyFields.questionShuffleMode;
 
     // Wrap survey update + question replacement in a single transaction:
     // if replaceQuestions fails mid-loop (partial inserts), the survey
