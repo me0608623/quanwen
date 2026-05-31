@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { createSign, randomBytes, createHash } from 'crypto';
 import { DB } from '../db';
@@ -129,7 +129,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, requestMeta?: { ip?: string; userAgent?: string }) {
-    const rows = await this.db.select().from(users).where(eq(users.email, dto.email)).limit(1);
+    const rows = await this.db.select().from(users).where(and(eq(users.email, dto.email), isNull(users.deletedAt))).limit(1);
     const user = rows[0];
 
     // Phase K.5: 把 email 做雜湊再 log，避免 PII 進 log；同時記 IP/UA 給 brute force 監測

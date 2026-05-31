@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException, Inject } from '@nestjs/common';
 import { PassportStrategy } from '@nestjs/passport';
 import { ExtractJwt, Strategy } from 'passport-jwt';
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { DB } from '../../db';
 import type { AppDb } from '../../db';
 import { users } from '../../db/schema';
@@ -44,7 +44,7 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         status: users.status,
       })
       .from(users)
-      .where(eq(users.id, payload.sub))
+      .where(and(eq(users.id, payload.sub), isNull(users.deletedAt)))
       .limit(1);
 
     const user = rows[0];
