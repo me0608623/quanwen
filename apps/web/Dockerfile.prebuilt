@@ -1,0 +1,22 @@
+# Dockerfile.prebuilt — 使用 Windows host 上已 build 好的 .next/standalone 打包
+# 用法（從 monorepo root）：
+#   docker build -f apps/web/Dockerfile.prebuilt -t quanwen-web:latest .
+#
+# 優點：跳過 Docker 內的 next build（無需連外網下載字型）
+# 適用場景：Docker Desktop Windows（fonts.gstatic.com 被封鎖）
+# 注意：必須先在 host 上執行 pnpm --filter web build
+
+FROM node:22-alpine AS runner
+WORKDIR /app
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+RUN addgroup -g 1001 -S nodejs && adduser -S nextjs -u 1001
+
+# 複製預先 build 好的 standalone 輸出（host 上已完成 next build）
+COPY --chown=nextjs:nodejs apps/web/.next/standalone ./
+COPY --chown=nextjs:nodejs apps/web/.next/static ./apps/web/.next/static
+COPY --chown=nextjs:nodejs apps/web/public ./apps/web/public
+
+USER nextjs
+EXPOSE 3000
+CMD ["node", "apps/web/server.js"]

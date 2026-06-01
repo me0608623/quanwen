@@ -5,6 +5,11 @@ node_modules
 **/node_modules
 .next
 **/.next
+# Exception: allow pre-built standalone + static for Dockerfile.prebuilt
+!apps/web/.next/standalone
+!apps/web/.next/standalone/**
+!apps/web/.next/static
+!apps/web/.next/static/**
 dist
 **/dist
 .turbo
