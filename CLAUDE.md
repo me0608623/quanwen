@@ -228,21 +228,90 @@ Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`), Appl
 
 ## Docker Hub Build & Push（Ubuntu 24.04）
 
-> **給 Claude Code 的指示**：在 Ubuntu 上執行時，依照以下步驟 build 並 push image 到 Docker Hub。
+> **給 Claude Code 的指示**：在 Ubuntu 上執行時，依照以下步驟安裝環境、build 並 push image 到 Docker Hub。
 > Docker Hub 帳號：`me0608623`，專案名稱：`quanwen-api` / `quanwen-web`。
 
-### 前置確認
+---
+
+### 環境安裝（全新 Ubuntu 24.04 必做，已安裝可跳過）
+
+#### 1. 系統套件
 
 ```bash
-# 確認工具都已安裝
-docker --version          # 需要 26.x+
-docker compose version    # 需要 v2.x+
-node --version            # 需要 v20+ 或 v22+
-pnpm --version            # 需要 9.x 或 11.x
-git --version
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl wget build-essential ca-certificates gnupg lsb-release
+```
 
-# 確認 Docker 可用（不需要 sudo）
+#### 2. Docker Engine
+
+```bash
+# 加入 Docker 官方 GPG key 與 repository
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 安裝
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# 讓目前使用者不需要 sudo 跑 docker
+sudo usermod -aG docker $USER
+newgrp docker
+
+# 開機自動啟動
+sudo systemctl enable docker && sudo systemctl start docker
+
+# 驗證
+docker --version          # Docker version 26.x.x
+docker compose version    # Docker Compose version v2.x.x
 docker run --rm hello-world
+```
+
+#### 3. Node.js 22（via nvm）
+
+```bash
+# 安裝 nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
+
+# 安裝 Node.js 22 LTS
+nvm install 22
+nvm use 22
+nvm alias default 22
+
+# 驗證
+node --version   # v22.x.x
+```
+
+#### 4. pnpm 11（via corepack）
+
+```bash
+corepack enable
+corepack prepare pnpm@11.4.0 --activate
+
+# 驗證
+pnpm --version   # 11.4.0
+```
+
+#### 5. 確認所有工具就緒
+
+```bash
+docker --version && docker compose version && node --version && pnpm --version && git --version
+# 預期：Docker 26+, Compose v2+, Node v22+, pnpm 11.4.0, git 2.x
+```
+
+---
+
+### 前置確認（已安裝環境用此快速驗證）
+
+```bash
+docker run --rm hello-world   # Docker 可用且不需要 sudo
+node --version                # v22.x.x
+pnpm --version                # 11.x.x
 ```
 
 ### Step 1：取得最新 source code
