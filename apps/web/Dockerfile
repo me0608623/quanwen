@@ -16,6 +16,8 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web ./apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+# next/font/google downloads fonts from fonts.gstatic.com at build time.
+# Requires outbound HTTPS to fonts.gstatic.com — build on Linux/CI (not Docker Desktop Windows).
 RUN pnpm --filter web build
 
 # ─── runner ──
