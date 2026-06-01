@@ -223,3 +223,149 @@ Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`), Appl
 - `README.md` — full DB schema, all API endpoints, sprint history, ADR decisions.
 - `DEPLOYMENT.md` — production environment variables, ECPay sandbox setup.
 - `http://localhost:3001/docs` — Swagger UI (requires `ENABLE_SWAGGER=true` and running API).
+
+---
+
+## Docker Hub Build & Push（Ubuntu 24.04）
+
+> **給 Claude Code 的指示**：在 Ubuntu 上執行時，依照以下步驟 build 並 push image 到 Docker Hub。
+> Docker Hub 帳號：`me0608623`，專案名稱：`quanwen-api` / `quanwen-web`。
+
+### 前置確認
+
+```bash
+# 確認工具都已安裝
+docker --version          # 需要 26.x+
+docker compose version    # 需要 v2.x+
+node --version            # 需要 v20+ 或 v22+
+pnpm --version            # 需要 9.x 或 11.x
+git --version
+
+# 確認 Docker 可用（不需要 sudo）
+docker run --rm hello-world
+```
+
+### Step 1：取得最新 source code
+
+```bash
+# 若尚未 clone
+git clone git@github.com:me0608623/quanwen.git
+cd quanwen
+
+# 若已 clone，更新到最新
+git fetch origin
+git checkout chore/scale-out-p1-p4
+git pull
+```
+
+### Step 2：安裝依賴
+
+```bash
+pnpm install
+```
+
+### Step 3：登入 Docker Hub
+
+```bash
+docker login
+# 輸入 Docker Hub username: me0608623
+# 輸入 password 或 access token
+```
+
+### Step 4：Build + Push API image
+
+```bash
+# Build（Ubuntu 網路正常，直接用標準 Dockerfile）
+docker compose -f docker-compose.yml -f docker-compose.full.yml build api
+
+# 確認 image 存在
+docker images | grep quanwen-api
+
+# Tag
+docker tag quanwen-api:latest me0608623/quanwen-api:latest
+docker tag quanwen-api:latest me0608623/quanwen-api:v0.1.0
+
+# Push
+docker push me0608623/quanwen-api:latest
+docker push me0608623/quanwen-api:v0.1.0
+```
+
+### Step 5：Build + Push Web image
+
+> Ubuntu 網路正常，可以連 `fonts.gstatic.com`，使用標準 Dockerfile 即可。
+
+```bash
+# Build web image（會下載 Google Fonts，需要網路，約 3-5 分鐘）
+docker compose -f docker-compose.yml -f docker-compose.full.yml build web
+
+# 確認 image 存在
+docker images | grep quanwen-web
+
+# Tag
+docker tag quanwen-web:latest me0608623/quanwen-web:latest
+docker tag quanwen-web:latest me0608623/quanwen-web:v0.1.0
+
+# Push
+docker push me0608623/quanwen-web:latest
+docker push me0608623/quanwen-web:v0.1.0
+```
+
+### Step 6：驗證 Docker Hub 上的 image
+
+```bash
+# Pull 並測試（可選）
+docker pull me0608623/quanwen-api:latest
+docker pull me0608623/quanwen-web:latest
+
+# 確認 image 大小正常
+docker images | grep me0608623
+# 預期：quanwen-api ~780MB，quanwen-web ~300MB
+```
+
+### Step 7：一鍵啟動完整 stack 驗證（可選）
+
+```bash
+# 建立 .env（最小設定，僅供驗證）
+cat > /tmp/quanwen-test.env << 'EOF'
+DOCKERHUB_USERNAME=me0608623
+APP_VERSION=latest
+JWT_SECRET=$(openssl rand -base64 48)
+PII_ENCRYPTION_KEY=$(openssl rand -hex 32)
+WEB_URL=http://localhost:3000
+EOF
+
+# 用 docker-compose.hub.yml 啟動（從 Docker Hub pull）
+cp /tmp/quanwen-test.env .env
+docker compose -f docker-compose.hub.yml up -d
+
+# 等待啟動（約 30 秒）
+sleep 30
+
+# 驗證 API
+curl -s http://localhost:3001/api/v1/health
+
+# 驗證 Web
+curl -sI http://localhost:3000 | head -1
+
+# 停止
+docker compose -f docker-compose.hub.yml down
+```
+
+### 常見錯誤
+
+| 錯誤 | 原因 | 解法 |
+|------|------|------|
+| `permission denied` | Docker 未加入群組 | `sudo usermod -aG docker $USER && newgrp docker` |
+| `unauthorized` | 未登入或 token 過期 | `docker login` |
+| fonts.gstatic.com 下載失敗 | 網路問題（通常 Ubuntu 不會出現） | 確認 `curl https://fonts.gstatic.com/` 可連 |
+| `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | pnpm 版本太舊 | `corepack prepare pnpm@11.4.0 --activate` |
+| Web image build 失敗（standalone） | Linux 上不會有 EPERM | 若出現其他錯誤，`rm -rf apps/web/.next && pnpm --filter web build` |
+
+### Windows vs Ubuntu build 差異說明
+
+| 項目 | Windows Docker Desktop | Ubuntu Docker Engine |
+|------|----------------------|---------------------|
+| API build | ✅ 標準 `docker compose build api` | ✅ 相同 |
+| Web build | ⚠️ 需用 `Dockerfile.prebuilt`（Docker 封鎖 Google CDN） | ✅ 標準 `docker compose build web` |
+| Google Fonts 下載 | 只能在 Windows host 上下載 | ✅ 直接在 Docker 內下載 |
+| standalone EPERM | ⚠️ 需先刪 `.next/standalone` | ✅ 無此問題 |
