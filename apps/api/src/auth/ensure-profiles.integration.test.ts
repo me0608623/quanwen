@@ -58,6 +58,7 @@ describe('Phase A: ensureBothProfiles (integration)', () => {
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+      CREATE TYPE response_notif_mode AS ENUM ('per_response','daily_digest');
       CREATE TABLE surveyor_profiles (
         id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id         UUID NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -65,6 +66,7 @@ describe('Phase A: ensureBothProfiles (integration)', () => {
         research_purpose VARCHAR(500),
         is_verified     BOOLEAN NOT NULL DEFAULT false,
         is_onboarding_done BOOLEAN NOT NULL DEFAULT false,
+        response_notif_mode response_notif_mode NOT NULL DEFAULT 'per_response',
         created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );

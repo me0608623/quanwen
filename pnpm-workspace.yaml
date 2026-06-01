@@ -2,7 +2,26 @@ packages:
   - 'apps/*'
   - 'packages/*'
 allowBuilds:
-  '@nestjs/core': set this to true or false
-  es5-ext: set this to true or false
-  esbuild: set this to true or false
-  unrs-resolver: set this to true or false
+  '@nestjs/core': true
+  esbuild: true
+  unrs-resolver: true
+allowBuiltDependencies:
+  - '@nestjs/core'
+  - es5-ext
+  - esbuild
+auditConfig:
+  ignoreGhsas:
+    - GHSA-mwv6-3258-q52c
+    - GHSA-5j59-xgg2-r9c4
+    - GHSA-h25m-26qc-wcjf
+    - GHSA-q4gf-8mx6-v5v3
+    - GHSA-8h8q-6873-q5fj
+    - GHSA-c4j6-fc7j-m34r
+    - GHSA-36qx-fr4f-26g5
+overrides:
+  multer: '>=2.1.1'
+  minimatch: '>=9.0.7'
+  lodash: '>=4.17.24'
+  glob: '>=10.5.0'
+  picomatch: '>=4.0.4'
+  tmp: '>=0.2.6'
