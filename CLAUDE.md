@@ -438,3 +438,146 @@ docker compose -f docker-compose.hub.yml down
 | Web build | ⚠️ 需用 `Dockerfile.prebuilt`（Docker 封鎖 Google CDN） | ✅ 標準 `docker compose build web` |
 | Google Fonts 下載 | 只能在 Windows host 上下載 | ✅ 直接在 Docker 內下載 |
 | standalone EPERM | ⚠️ 需先刪 `.next/standalone` | ✅ 無此問題 |
+
+---
+
+## Ubuntu 上 Pull Image 並啟動服務
+
+> **給 Claude Code 的指示**：不需要 source code，直接從 Docker Hub pull image 啟動完整服務。
+> 適用情境：生產伺服器、新機器、只想跑服務不想 build。
+
+### Step 1：安裝 Docker Engine（若未安裝）
+
+```bash
+# 快速安裝 Docker Engine（Ubuntu 24.04）
+sudo apt update && sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
+
+# 驗證
+docker run --rm hello-world
+```
+
+### Step 2：取得 docker-compose.hub.yml
+
+```bash
+mkdir -p ~/quanwen && cd ~/quanwen
+
+# 方法 A：從 GitHub 直接下載（不需要 clone 整個 repo）
+curl -fsSL https://raw.githubusercontent.com/me0608623/quanwen/chore/scale-out-p1-p4/docker-compose.hub.yml \
+  -o docker-compose.hub.yml
+
+# 方法 B：若已有 git clone
+# cp /path/to/quanwen/docker-compose.hub.yml ~/quanwen/
+```
+
+### Step 3：建立 .env
+
+```bash
+cd ~/quanwen
+
+# 產生 secrets
+JWT_SECRET=$(openssl rand -base64 48)
+PII_KEY=$(openssl rand -hex 32)
+
+cat > .env << EOF
+DOCKERHUB_USERNAME=me0608623
+APP_VERSION=latest
+JWT_SECRET=${JWT_SECRET}
+PII_ENCRYPTION_KEY=${PII_KEY}
+WEB_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+EOF
+
+echo ".env 建立完成，內容："
+cat .env
+```
+
+### Step 4：Pull image 並啟動
+
+```bash
+cd ~/quanwen
+
+# Pull 所有 image（postgres + redis 從 Docker Hub 官方 pull，api + web 從 me0608623）
+docker compose -f docker-compose.hub.yml pull
+
+# 確認 image 已下載
+docker images | grep -E "me0608623|pgvector|redis"
+
+# 啟動全部服務（背景執行）
+docker compose -f docker-compose.hub.yml up -d
+```
+
+### Step 5：確認服務狀態
+
+```bash
+# 查看所有容器狀態（等待 postgres/redis healthy 再繼續）
+docker compose -f docker-compose.hub.yml ps
+
+# 等待 postgres healthy（最多 60 秒）
+until docker inspect --format='{{.State.Health.Status}}' quanwen_postgres 2>/dev/null | grep -q "healthy"; do
+  echo "等待 Postgres..."; sleep 3
+done
+echo "Postgres ready"
+
+# 驗證 API
+curl -s http://localhost:3001/api/v1/health
+# 預期：{"status":"ok"} 或類似
+
+# 驗證 Web
+curl -sI http://localhost:3000 | head -1
+# 預期：HTTP/1.1 200 OK
+```
+
+| 服務 | URL |
+|------|-----|
+| Web 前端 | http://localhost:3000 |
+| API | http://localhost:3001/api/v1 |
+| Swagger | http://localhost:3001/docs（需 `ENABLE_SWAGGER=true`） |
+
+### Step 6：更新版本
+
+```bash
+cd ~/quanwen
+
+# 修改 .env 中的版本號
+sed -i 's/APP_VERSION=.*/APP_VERSION=v0.1.0/' .env
+
+# Pull 新版本 + 重啟（api/web 會更新，postgres/redis 不重啟）
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+
+# 確認新版本在跑
+docker compose -f docker-compose.hub.yml ps
+```
+
+### Step 7：停止服務
+
+```bash
+cd ~/quanwen
+
+# 停止容器（保留資料 volume）
+docker compose -f docker-compose.hub.yml down
+
+# 停止並刪除資料（⚠️ 資料庫資料會消失）
+# docker compose -f docker-compose.hub.yml down -v
+```
+
+### Pull 常見錯誤
+
+| 錯誤 | 原因 | 解法 |
+|------|------|------|
+| `permission denied` | Docker 未加入群組 | `sudo usermod -aG docker $USER && newgrp docker` |
+| `pull access denied` | image 不存在或 private | 確認 `me0608623/quanwen-api` 是 public |
+| `unauthorized` | Private repo 未登入 | `docker login` |
+| API 啟動後 crash | `.env` 缺少必要變數 | 確認 `JWT_SECRET` 和 `PII_ENCRYPTION_KEY` 已設定 |
+| `port is already allocated` | 端口被佔用 | `sudo lsof -i :3000` 找出佔用程序並 kill |
+| Postgres unhealthy | 容器啟動太慢 | 等待 30 秒後再試 `docker compose ps` |
