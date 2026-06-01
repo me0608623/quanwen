@@ -35,6 +35,7 @@ export const users = pgTable(
     emailVerificationToken: varchar('email_verification_token', { length: 128 }),
     emailVerificationExpiresAt: timestamp('email_verification_expires_at', { withTimezone: true }),
     roleSelectedAt: timestamp('role_selected_at', { withTimezone: true }),
+    emailOptOut: boolean('email_opt_out').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     deletedAt: timestamp('deleted_at', { withTimezone: true }),

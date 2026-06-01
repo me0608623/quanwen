@@ -15,6 +15,12 @@ interface Props {
   onApplyChecks: (next: SurveyQuestion[]) => void;
 }
 
+const SEVERITY_LABELS: Record<string, string> = {
+  high: '高',
+  medium: '中',
+  low: '低',
+};
+
 export function AntiCheatPanel({ surveyId, questions, onApplyChecks }: Props) {
   const [acEnabled, setAcEnabled] = useState(false);
   const [prEnabled, setPrEnabled] = useState(false);
@@ -86,6 +92,18 @@ export function AntiCheatPanel({ surveyId, questions, onApplyChecks }: Props) {
             )}
           </button>
         </div>
+
+        {(ac.isLoading || ac.isFetching) && (
+          <div className="space-y-1.5" aria-live="polite">
+            <p className="flex items-center gap-1.5 text-xs text-amber-700">
+              <Spinner className="h-3 w-3" />
+              AI 生成中，約需 20–30 秒，請稍候…
+            </p>
+            <div className="h-1 w-full overflow-hidden rounded-full bg-amber-100">
+              <div className="q-progress-bar h-full w-1/3 rounded-full bg-amber-600" />
+            </div>
+          </div>
+        )}
 
         {!acEnabled && (
           <p className="text-xs text-slate-600">
@@ -267,7 +285,7 @@ function PreReviewBlock({ result }: { result: ReturnType<typeof usePreReview>['d
                     f.severity === 'medium' ? 'bg-amber-200 text-amber-800' :
                     'bg-slate-200 text-slate-700'
                   }`}>
-                    {f.severity.toUpperCase()}
+                    {SEVERITY_LABELS[f.severity] ?? f.severity.toUpperCase()}
                   </span>
                   {f.questionIndex != null && (
                     <span className="text-[10px] text-slate-500">Q{f.questionIndex}</span>

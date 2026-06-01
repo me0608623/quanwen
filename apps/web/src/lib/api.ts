@@ -27,8 +27,8 @@ api.interceptors.response.use(
       !window.location.pathname.startsWith('/auth/')
     ) {
       const hadToken = !!getToken();
-      removeToken();
       if (hadToken) {
+        removeToken();
         sessionStorage.setItem('session_expired', '1');
         window.location.href = '/auth/login';
       }

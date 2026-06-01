@@ -1,40 +1,45 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
+  type AudienceCriteria,
+  type SurveyQuestion,
+  useBudgetCheck,
+  useDeleteSurvey,
+  usePublishSurvey,
   useSurvey,
   useUpdateSurvey,
-  usePublishSurvey,
-  useDeleteSurvey,
-  useBudgetCheck,
-  SurveyQuestion,
-  type AudienceCriteria,
 } from '@/hooks/use-surveys';
-import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
-import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-modal';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { QuestionBlockList } from '@/components/survey-editor/question-block-list';
+import { QuestionEditor } from '@/components/survey-editor/question-editor';
+import { SurveyEditorShell } from '@/components/survey-editor/survey-editor-shell';
+import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-modal';
+import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   pending_review: '審核中',
-  published: '上架中',
+  published: '已發布',
   paused: '已暫停',
-  closed: '已截止',
+  closed: '已關閉',
   rejected: '已退回',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: 'text-muted-foreground',
-  pending_review: 'text-yellow-600',
-  published: 'text-green-600',
-  paused: 'text-orange-500',
-  closed: 'text-muted-foreground',
-  rejected: 'text-destructive',
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
 };
 
 export default function SurveyDetailPage() {
@@ -49,27 +54,32 @@ export default function SurveyDetailPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
-  const [minReputation, setMinReputation] = useState(0); // Phase 7.5
-  const [audience, setAudience] = useState<AudienceCriteria>({}); // 受眾鎖定（人口維度）
+  const [minReputation, setMinReputation] = useState(0);
+  const [audience, setAudience] = useState<AudienceCriteria>({});
   const [dirty, setDirty] = useState(false);
-  const [showPreview, setShowPreview] = useState(false); // Phase G.3
+  const [showPreview, setShowPreview] = useState(false);
+  const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
+  const [initialized, setInitialized] = useState(false);
 
   useEffect(() => {
-    if (survey) {
-      setTitle(survey.title);
-      setDescription(survey.description ?? '');
-      setQuestions(survey.questions);
-      setMinReputation(Number(survey.audienceCriteria?.minReputationScore ?? 0));
-      setAudience(survey.audienceCriteria ?? {});
-    }
+    if (!survey) return;
+    if (dirty && initialized) return; // don't overwrite unsaved edits
+    setTitle(survey.title);
+    setDescription(survey.description ?? '');
+    setQuestions(survey.questions);
+    setMinReputation(Number(survey.audienceCriteria?.minReputationScore ?? 0));
+    setAudience(survey.audienceCriteria ?? {});
+    setInitialized(true);
   }, [survey]);
+
+  const canEdit = survey?.status === 'draft' || survey?.status === 'rejected';
+  const livePreviewDraft = useDebouncedValue({ title, description, questions }, 350);
 
   const markDirty = () => setDirty(true);
 
   const showAxiosError = (err: unknown, fallback: string) => {
-    const e = err as { response?: { data?: { message?: string }; status?: number } };
-    const msg = e?.response?.data?.message ?? fallback;
-    alert(msg);
+    const e = err as { response?: { data?: { message?: string } } };
+    alert(e?.response?.data?.message ?? fallback);
   };
 
   const handleSave = async () => {
@@ -77,317 +87,319 @@ export default function SurveyDetailPage() {
       ...audience,
       minReputationScore: minReputation > 0 ? minReputation : undefined,
     };
+
     try {
       await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria });
       setDirty(false);
     } catch (err) {
-      showAxiosError(err, '儲存失敗，請稍後再試');
+      showAxiosError(err, '儲存草稿失敗，請稍後再試。');
     }
   };
 
   const handlePublish = async () => {
-    if (budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0) {
-      const msg = `錢包餘額不足！\n` +
-        `需要：NT$${budgetCheck.requiredAmount.toLocaleString()}\n` +
-        `目前餘額：NT$${budgetCheck.walletBalance.toLocaleString()}\n\n` +
-        `仍要繼續送出審核嗎？（審核通過後需補足餘額才能正常發獎勵）`;
-      if (!confirm(msg)) return;
-    } else {
-      if (!confirm('確定要送出審核嗎？送出後需等 AI 審核通過才會上架。')) return;
-    }
     try {
       await publishSurvey.mutateAsync(id);
+      // Don't use alert() — it blocks Playwright and delays React re-render.
+      // The UI updates via TanStack query invalidation (status badge changes).
     } catch (err) {
-      showAxiosError(err, '送出審核失敗');
+      showAxiosError(err, '發布問卷失敗，請稍後再試。');
     }
   };
 
   const handleDelete = async () => {
-    if (!confirm('確定要刪除此草稿？')) return;
+    if (!confirm('確定要刪除這份草稿問卷嗎？')) return;
+
     try {
       await deleteSurvey.mutateAsync(id);
       router.push('/dashboard');
     } catch (err) {
-      showAxiosError(err, '刪除失敗');
+      showAxiosError(err, '刪除問卷失敗，請稍後再試。');
     }
   };
 
-  const updateQuestion = (i: number, q: SurveyQuestion) => {
-    setQuestions((prev) => prev.map((old, idx) => (idx === i ? { ...q, sortOrder: i } : old)));
+  const updateQuestion = (index: number, question: SurveyQuestion) => {
+    setQuestions((prev) => prev.map((old, idx) => (idx === index ? { ...question, sortOrder: index } : old)));
     markDirty();
   };
 
-  const removeQuestion = (i: number) => {
-    setQuestions((prev) => prev.filter((_, idx) => idx !== i).map((q, idx) => ({ ...q, sortOrder: idx })));
+  const removeQuestion = (index: number) => {
+    setQuestions((prev) => prev.filter((_, idx) => idx !== index).map((q, idx) => ({ ...q, sortOrder: idx })));
+    // Adjust selected index
+    setSelectedQuestionIndex((prev) => {
+      if (prev === null) return null;
+      if (prev === index) return null;
+      if (prev > index) return prev - 1;
+      return prev;
+    });
     markDirty();
   };
 
-  const addQuestion = () => {
-    setQuestions((prev) => [
-      ...prev,
-      { type: 'single_choice', title: '', sortOrder: prev.length, isRequired: true, options: [{ label: '', sortOrder: 0 }, { label: '', sortOrder: 1 }] },
-    ]);
+  const addQuestion = (type: SurveyQuestion['type'] = 'single_choice') => {
+    let newIndex = 0;
+    setQuestions((prev) => {
+      const newQ: SurveyQuestion = {
+        type,
+        title: '',
+        sortOrder: prev.length,
+        isRequired: true,
+        ...(type === 'single_choice' || type === 'multiple_choice'
+          ? { options: [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }] }
+          : {}),
+      };
+      newIndex = prev.length;
+      return [...prev, newQ];
+    });
+    setSelectedQuestionIndex(newIndex);
     markDirty();
   };
 
-  if (isLoading) return <div className="p-10 text-muted-foreground text-sm">載入中…</div>;
-  if (!survey) return <div className="p-10 text-destructive text-sm">問卷不存在</div>;
+  const handleReorder = (reordered: SurveyQuestion[]) => {
+    setQuestions(reordered);
+    setSelectedQuestionIndex(null);
+    markDirty();
+  };
 
-  const canEdit = survey.status === 'draft' || survey.status === 'rejected';
+  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入問卷中…</div>;
+  if (!survey) return <div className="p-10 text-sm text-destructive">找不到問卷。</div>;
 
-  return (
-    <main className="mx-auto max-w-3xl space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <button
-            onClick={() => router.push('/dashboard')}
-            className="text-sm text-muted-foreground hover:underline"
-          >
-            ← 返回後台
-          </button>
-          <h1 className="mt-1 text-2xl font-bold">{survey.title}</h1>
-          <span className={`text-sm font-medium ${STATUS_COLORS[survey.status] ?? ''}`}>
-            {STATUS_LABELS[survey.status] ?? survey.status}
-          </span>
-          {survey.aiRejectReason && (
-            <p className="mt-1 text-xs text-destructive">退回原因：{survey.aiRejectReason}</p>
-          )}
-        </div>
+  // ─── Sidebar: Questions tab content ────────────────────────────
+  const questionsSidebar = (
+    <QuestionBlockList
+      questions={questions}
+      canEdit={canEdit}
+      onReorder={handleReorder}
+      onDelete={removeQuestion}
+      onAdd={addQuestion}
+      selectedIndex={selectedQuestionIndex ?? undefined}
+      onSelect={setSelectedQuestionIndex}
+    />
+  );
 
-        {canEdit && (
-          <div className="flex gap-2">
-            {questions.length > 0 && (
-              <button
-                onClick={() => setShowPreview(true)}
-                className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                👁️ 預覽
-              </button>
-            )}
-            {dirty && (
-              <button
-                onClick={handleSave}
-                disabled={updateSurvey.isPending}
-                className="rounded-md border border-primary px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
-              >
-                {updateSurvey.isPending ? '儲存…' : '儲存草稿'}
-              </button>
-            )}
-            <button
-              onClick={handlePublish}
-              disabled={publishSurvey.isPending}
-              className="rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
-            >
-              送出審核
-            </button>
-            <button
-              onClick={handleDelete}
-              className="text-sm text-destructive hover:underline"
-            >
-              刪除
-            </button>
-          </div>
-        )}
-
-        {/* Phase G.3: 預覽 modal */}
-        <SurveyPreviewModal
-          title={title}
-          description={description}
-          questions={questions}
-          open={showPreview}
-          onClose={() => setShowPreview(false)}
+  // ─── Sidebar: Settings tab content ─────────────────────────────
+  const settingsSidebar = (
+    <div className="space-y-4 p-3">
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          受眾鎖定
+        </h3>
+        <AudienceTargeting
+          value={audience}
+          onChange={(next) => {
+            setAudience(next);
+            markDirty();
+          }}
+          showReputation={false}
+          disabled={!canEdit}
         />
       </div>
 
-      {/* 預算不足警告 */}
-      {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
-        <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-800">
-          <strong>錢包餘額不足：</strong>此問卷預計需要 NT${budgetCheck.requiredAmount.toLocaleString()} 作為獎勵預算，
-          但您目前錢包餘額為 NT${budgetCheck.walletBalance.toLocaleString()}。
-          {' '}
-          <Link href="/wallet" className="underline font-medium">前往儲值 →</Link>
-        </div>
-      )}
-
-      {/* AI Draft（草稿才顯示） */}
-      {canEdit && (
-        <AiDraftPanel
-          onApply={(draft) => {
-            setTitle(draft.title);
-            setDescription(draft.description ?? '');
-            setQuestions(draft.questions.map((q, i) => ({ ...q, sortOrder: i })));
-            markDirty();
-          }}
-        />
-      )}
-
-      {/* AI 優化建議（有題目時顯示） */}
-      {survey.questions.length > 0 && <AiImprovePanel surveyId={survey.id} />}
-
-      {/* Phase 4：AI 反作弊設計（草稿可編 + 至少 1 題時顯示） */}
-      {canEdit && questions.length > 0 && (
-        <AntiCheatPanel
-          surveyId={survey.id}
-          questions={questions}
-          onApplyChecks={(next) => {
-            setQuestions(next);
-            markDirty();
-          }}
-        />
-      )}
-
-      {/* Basic info */}
-      <section className="space-y-3 rounded-lg border border-border p-4">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本資訊</h2>
+      <div>
+        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+          最低信譽分
+        </h3>
         <input
-          type="text"
-          value={title}
-          onChange={(e) => { setTitle(e.target.value); markDirty(); }}
+          type="range"
+          min={0}
+          max={100}
+          step={5}
+          value={minReputation}
+          onChange={(e) => {
+            setMinReputation(Number(e.target.value));
+            markDirty();
+          }}
           disabled={!canEdit}
-          className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+          className="w-full"
         />
-        <textarea
-          value={description}
-          onChange={(e) => { setDescription(e.target.value); markDirty(); }}
-          disabled={!canEdit}
-          rows={3}
-          className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
-        />
-      </section>
+        <span className="text-xs text-muted-foreground">{minReputation}</span>
+      </div>
 
-      {/* 受眾鎖定 — 人口維度（行業/就業/年齡/性別/學歷/縣市） */}
-      <AudienceTargeting
-        value={audience}
-        onChange={(a) => { setAudience(a); markDirty(); }}
-        showReputation={false}
-        disabled={!canEdit}
-      />
-
-      {/* Phase 7.5: 受眾過濾 — 最低信譽分 */}
-      <section className="space-y-3 rounded-lg border border-amber-300/40 bg-amber-50/30 p-4">
-        <div className="flex items-center justify-between gap-2">
-          <div>
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-amber-700">🛡️ 受眾過濾</h2>
-            <p className="text-[11px] text-slate-600">設定最低信譽分可篩掉常被退件的受試者</p>
-          </div>
-          <span className="rounded bg-amber-200 px-2 py-0.5 text-xs font-bold text-amber-900">
-            {minReputation === 0 ? '不限制' : `≥ ${minReputation} 分`}
-          </span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] text-slate-500 w-8">0</span>
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={5}
-            value={minReputation}
-            onChange={(e) => { setMinReputation(Number(e.target.value)); markDirty(); }}
-            disabled={!canEdit}
-            className="flex-1 accent-amber-600"
-          />
-          <span className="text-[10px] text-slate-500 w-8 text-right">100</span>
-        </div>
-        <div className="grid grid-cols-4 gap-1 text-[10px] text-slate-500">
-          <p>0：所有人</p>
-          <p>≥50：基本門檻</p>
-          <p>≥70：良好受試者</p>
-          <p>≥90：優質受試者</p>
-        </div>
-      </section>
-
-      {/* Questions */}
-      <section className="space-y-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          題目（{questions.length} 題）
-        </h2>
-
-        {questions.map((q, i) => (
-          canEdit ? (
-            <QuestionEditor
-              key={i}
-              question={q}
-              index={i}
-              onChange={(updated) => updateQuestion(i, updated)}
-              onRemove={() => removeQuestion(i)}
-              ratingSiblings={questions
-                .map((qq, idx) => ({ q: qq, idx }))
-                .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== i)
-                .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
-            />
-          ) : (
-            <div key={i} className="rounded-lg border border-border p-4 text-sm">
-              <span className="text-xs text-muted-foreground">Q{i + 1} · {q.type}</span>
-              <p className="mt-1 font-medium">{q.title}</p>
-              {q.options?.map((o, j) => (
-                <p key={j} className="ml-4 mt-0.5 text-muted-foreground">· {o.label}</p>
-              ))}
-            </div>
-          )
-        ))}
-
-        {canEdit && (
-          <button
-            type="button"
-            onClick={addQuestion}
-            className="w-full rounded-lg border-2 border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary transition-colors"
-          >
-            + 新增題目
-          </button>
-        )}
-      </section>
-
-      {/* Stats（非草稿）— mutual 與 standard 分流 */}
-      {survey.status !== 'draft' && survey.type === 'mutual' && (
-        <section className="rounded-lg border border-amber-200 bg-amber-50/50 p-4 space-y-3">
-          <div className="flex items-center gap-2">
-            <span className="text-lg">🤝</span>
-            <h2 className="font-semibold">互惠模式</h2>
-          </div>
-          <p className="text-sm text-muted-foreground">
-            這份問卷不付費取樣，靠系統自動配對另一份互惠問卷的發起人。
-          </p>
-          <p className="text-sm">
-            想看當前配對狀態？到{' '}
-            <Link href="/mutual" className="font-medium text-primary hover:underline">
-              我的互惠
-            </Link>{' '}
-            查看完整列表（配對中 / 輪到我填 / 已解鎖）。
-          </p>
-        </section>
+      {canEdit && (
+        <button
+          type="button"
+          onClick={handleDelete}
+          className="w-full rounded-md border border-destructive/30 py-2 text-xs text-destructive hover:bg-destructive/10 transition-colors"
+        >
+          刪除問卷
+        </button>
       )}
+    </div>
+  );
 
-      {survey.status !== 'draft' && survey.type !== 'mutual' && (
-        <section className="rounded-lg border border-border p-4 space-y-4">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <p className="text-2xl font-bold">{survey.completedCount}</p>
-              <p className="text-xs text-muted-foreground">已收份數</p>
-            </div>
-            <div>
-              <p className="text-2xl font-bold">{survey.targetCount}</p>
-              <p className="text-xs text-muted-foreground">目標份數</p>
-            </div>
-            {survey.aiScore != null && (
-              <div>
-                <p className="text-2xl font-bold">{survey.aiScore}</p>
-                <p className="text-xs text-muted-foreground">AI 品質分</p>
-              </div>
-            )}
+  // ─── Determine what to show in center content ──────────────────
+  const centerContent = (() => {
+    // If a specific question is selected, show its editor
+    if (selectedQuestionIndex !== null && selectedQuestionIndex < questions.length) {
+      const q = questions[selectedQuestionIndex];
+      return canEdit ? (
+        <QuestionEditor
+          question={q}
+          index={selectedQuestionIndex}
+          onChange={(next) => updateQuestion(selectedQuestionIndex, next)}
+          onRemove={() => removeQuestion(selectedQuestionIndex)}
+          jumpTargets={questions
+            .map((qq, idx) => ({ question: qq, idx }))
+            .filter(({ idx }) => idx !== selectedQuestionIndex)
+            .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
+          ratingSiblings={questions
+            .map((qq, idx) => ({ q: qq, idx }))
+            .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== selectedQuestionIndex)
+            .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
+        />
+      ) : (
+        <div className="rounded-lg border border-border p-4 text-sm">
+          <span className="text-xs text-muted-foreground">Q{selectedQuestionIndex + 1} — {QUESTION_TYPE_LABELS[q.type] ?? q.type}</span>
+          <p className="mt-1 font-medium">{q.title}</p>
+        </div>
+      );
+    }
+
+    // Default: show all content (overview mode)
+    return (
+      <div className="space-y-6">
+        {/* Budget warning */}
+        {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
+          <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+            預算不足，無法發布。需要 NT${budgetCheck.requiredAmount.toLocaleString()}，錢包餘額 NT$
+            {budgetCheck.walletBalance.toLocaleString()}。<Link href="/wallet" className="underline">前往儲值</Link>。
           </div>
-          {survey.completedCount > 0 && (
-            <div className="text-center">
-              <Link
-                href={`/dashboard/surveys/${survey.id}/stats`}
-                className="text-sm text-primary hover:underline"
-              >
-                查看詳細統計 →
-              </Link>
-            </div>
+        )}
+
+        {/* AI Draft panel */}
+        {canEdit && (
+          <AiDraftPanel
+            onApply={(draft) => {
+              setTitle(draft.title);
+              setDescription(draft.description ?? '');
+              setQuestions(draft.questions.map((q, idx) => ({ ...q, sortOrder: idx })));
+              markDirty();
+            }}
+          />
+        )}
+
+        {/* AI Improve */}
+        {survey.questions.length > 0 && <AiImprovePanel surveyId={survey.id} />}
+
+        {/* Anti-cheat */}
+        {canEdit && questions.length > 0 && (
+          <AntiCheatPanel
+            surveyId={survey.id}
+            questions={questions}
+            onApplyChecks={(next) => {
+              setQuestions(next);
+              markDirty();
+            }}
+          />
+        )}
+
+        {/* Basic Info section */}
+        <section className="space-y-3 rounded-lg border border-border p-4">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">基本資訊</h2>
+          <input
+            type="text"
+            value={title}
+            onChange={(e) => {
+              setTitle(e.target.value);
+              markDirty();
+            }}
+            disabled={!canEdit}
+            className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+          />
+          <textarea
+            value={description}
+            onChange={(e) => {
+              setDescription(e.target.value);
+              markDirty();
+            }}
+            disabled={!canEdit}
+            rows={3}
+            className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
+          />
+        </section>
+
+        {/* Questions section */}
+        <section className="space-y-3">
+          <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            題目（{questions.length} 題）
+          </h2>
+
+          {questions.map((q, index) =>
+            canEdit ? (
+              <QuestionEditor
+                key={index}
+                question={q}
+                index={index}
+                onChange={(next) => updateQuestion(index, next)}
+                onRemove={() => removeQuestion(index)}
+                jumpTargets={questions
+                  .map((qq, idx) => ({ question: qq, idx }))
+                  .filter(({ idx }) => idx !== index)
+                  .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
+                ratingSiblings={questions
+                  .map((qq, idx) => ({ q: qq, idx }))
+                  .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== index)
+                  .map(({ q: qq, idx }) => ({ index: idx, title: qq.title }))}
+              />
+            ) : (
+              <div key={index} className="rounded-lg border border-border p-4 text-sm">
+                <span className="text-xs text-muted-foreground">Q{index + 1} — {QUESTION_TYPE_LABELS[q.type] ?? q.type}</span>
+                <p className="mt-1 font-medium">{q.title}</p>
+              </div>
+            ),
+          )}
+
+          {canEdit && (
+            <button
+              type="button"
+              onClick={() => addQuestion('single_choice')}
+              className="w-full rounded-lg border-2 border-dashed border-border py-3 text-sm text-muted-foreground hover:border-primary/50 hover:text-primary"
+            >
+              + 新增題目
+            </button>
           )}
         </section>
-      )}
-    </main>
+      </div>
+    );
+  })();
+
+  return (
+    <>
+      <SurveyEditorShell
+        surveyTitle={title}
+        onTitleChange={(t) => {
+          setTitle(t);
+          markDirty();
+        }}
+        canEdit={canEdit}
+        statusLabel={STATUS_LABELS[survey.status] ?? survey.status}
+        dirty={dirty}
+        savePending={updateSurvey.isPending}
+        publishPending={publishSurvey.isPending}
+        onSave={handleSave}
+        onPublish={handlePublish}
+        onBack={() => router.push('/dashboard')}
+        questionsSidebar={questionsSidebar}
+        settingsSidebar={settingsSidebar}
+        previewOpen={showPreview}
+        onPreviewToggle={() => setShowPreview((prev) => !prev)}
+        previewPane={
+          <SurveyPreviewPlayer
+            title={livePreviewDraft.title}
+            description={livePreviewDraft.description}
+            questions={livePreviewDraft.questions}
+          />
+        }
+      >
+        {centerContent}
+      </SurveyEditorShell>
+
+      {/* Full-screen preview modal */}
+      <SurveyPreviewModal
+        title={livePreviewDraft.title}
+        description={livePreviewDraft.description}
+        questions={livePreviewDraft.questions}
+        open={showPreview}
+        onClose={() => setShowPreview(false)}
+      />
+    </>
   );
 }

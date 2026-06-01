@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { LogicRuleSchema } from './logic-rule.dto';
 
 export const QuestionOptionSchema = z.object({
   label: z.string().min(1).max(300),
@@ -44,13 +45,20 @@ export const CreateSurveySchema = z.object({
   // Phase C-2: 是否導入 AI 品質審核 (預設 true)
   aiReviewEnabled: z.boolean().default(true),
   // Phase C-3: mutual 用外部平台 (Google Forms 等) 時的連結
-  externalUrl: z.string().url().max(1000).optional(),
+  externalUrl: z.string().url().max(1000).refine(u => /^https?:\/\//i.test(u), { message: 'URL 必須使用 http 或 https 協議' }).optional(),
   rewardPoints: z.number().int().min(0).max(1000).default(0),
   targetCount: z.number().int().min(1).max(10000).default(100),
   expiresAt: z.string().datetime().optional(),
+  // QUA-34: Rush delivery tier — controls rush multiplier on rewardPoints and default expiresAt
+  // Optional; defaults to 'standard' (1.0x, 14 days) in SurveysService.create
+  deadlineTier: z.enum(['standard', 'express', 'urgent', 'critical']).optional(),
   isAnonymous: z.boolean().default(true),
+  // QUA-204: 問券層級題目順序隨機化 (none=不隨機, all=全部隨機, exceptLast=保留最後一題)
+  questionShuffleMode: z.enum(['none', 'all', 'exceptLast']).optional(),
   audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
+  // QUA-196: Skip Logic / Conditional Branching rules (uses LogicRuleSchema for full validation)
+  logicRules: z.array(LogicRuleSchema).max(200).optional(),
 });
 
 export type CreateSurveyDto = z.infer<typeof CreateSurveySchema>;

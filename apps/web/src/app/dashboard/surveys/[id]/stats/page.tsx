@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment } from '@/hooks/use-surveys';
+import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, type ReportType } from '@/hooks/use-surveys';
 import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
 
 interface OptionCount { optionId: string; label: string; count: number }
@@ -84,7 +84,156 @@ function TrendChart({ surveyId }: { surveyId: string }) {
   );
 }
 
+// ─── Respondents Panel（受訪者清單，匿名化 token）───────────────────────────
+
+function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; totalResponses: number }) {
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
+  const { data, isLoading } = useRespondents(surveyId, page, pageSize);
+
+  const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
+
+  const STATUS_LABELS: Record<string, string> = {
+    submitted: '已提交',
+    rewarded: '已獎勵',
+    rejected: '已退件',
+    pending_review: '待審核',
+  };
+  const STATUS_CLS: Record<string, string> = {
+    submitted: 'bg-green-100 text-green-700',
+    rewarded: 'bg-blue-100 text-blue-700',
+    rejected: 'bg-red-100 text-red-700',
+    pending_review: 'bg-yellow-100 text-yellow-700',
+  };
+
+  return (
+    <section className="rounded-lg border border-border p-5">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+        受訪者清單（匿名化） · 共 {data?.total ?? totalResponses} 人
+      </h2>
+
+      {isLoading && (
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-8 animate-pulse rounded bg-muted" />
+          ))}
+        </div>
+      )}
+
+      {data && data.respondents.length === 0 && (
+        <p className="text-sm text-muted-foreground">尚無受訪者資料</p>
+      )}
+
+      {data && data.respondents.length > 0 && (
+        <>
+          {/* Desktop table */}
+          <div className="hidden sm:block overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-border text-xs text-muted-foreground">
+                  <th className="pb-2 text-left font-medium">匿名代碼</th>
+                  <th className="pb-2 text-left font-medium">狀態</th>
+                  <th className="pb-2 text-left font-medium">提交時間</th>
+                  <th className="pb-2 text-right font-medium">填答時長</th>
+                  <th className="pb-2 text-right font-medium">品質分</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.respondents.map((r) => (
+                  <tr key={r.anonymousToken + r.submittedAt} className="border-b border-border/50 last:border-0">
+                    <td className="py-2 font-mono text-xs">{r.anonymousToken}</td>
+                    <td className="py-2">
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CLS[r.status] ?? 'bg-muted text-muted-foreground'}`}>
+                        {STATUS_LABELS[r.status] ?? r.status}
+                      </span>
+                    </td>
+                    <td className="py-2 text-muted-foreground text-xs">
+                      {r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}
+                    </td>
+                    <td className="py-2 text-right text-muted-foreground text-xs">
+                      {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
+                    </td>
+                    <td className="py-2 text-right">
+                      {r.qualityScore != null ? (
+                        <span className={`font-semibold ${r.qualityScore >= 80 ? 'text-green-600' : r.qualityScore >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                          {r.qualityScore}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Mobile card list */}
+          <div className="space-y-2 sm:hidden">
+            {data.respondents.map((r) => (
+              <div key={r.anonymousToken + r.submittedAt} className="rounded-lg border border-border/60 p-3 space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-mono text-xs">{r.anonymousToken}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${STATUS_CLS[r.status] ?? 'bg-muted text-muted-foreground'}`}>
+                    {STATUS_LABELS[r.status] ?? r.status}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}</span>
+                  <span>
+                    {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
+                    {r.qualityScore != null && (
+                      <span className={`ml-2 font-semibold ${r.qualityScore >= 80 ? 'text-green-600' : r.qualityScore >= 50 ? 'text-amber-600' : 'text-red-600'}`}>
+                        Q:{r.qualityScore}
+                      </span>
+                    )}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="mt-4 flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                第 {data.page} / {totalPages} 頁
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPage((p) => Math.max(1, p - 1))}
+                  disabled={page <= 1}
+                  className="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  上一頁
+                </button>
+                <button
+                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={page >= totalPages}
+                  className="rounded-md border px-3 py-1 text-xs hover:bg-muted disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  下一頁
+                </button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </section>
+  );
+}
+
 // ─── 主頁面 ──────────────────────────────────────────────────────────────────
+
+const QUESTION_TYPE_LABELS: Record<string, string> = {
+  single_choice: '單選',
+  multiple_choice: '多選',
+  text: '問答',
+  rating: '評分',
+  numeric: '數字',
+  yes_no: '是/否',
+  dropdown: '下拉選單',
+};
 
 export default function SurveyStatsPage() {
   const { id } = useParams<{ id: string }>();
@@ -125,6 +274,9 @@ export default function SurveyStatsPage() {
       cleanOnly ? `survey_${id}_responses_clean.xlsx` : `survey_${id}_responses.xlsx`,
     );
 
+  const handleExportJson = () =>
+    downloadBinary(`/surveys/${id}/export.json`, `survey_${id}_responses.json`);
+
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
   if (!stats) return <div className="p-10 text-sm text-destructive">無法取得統計資料</div>;
 
@@ -149,9 +301,16 @@ export default function SurveyStatsPage() {
             CSV
           </button>
           <button
+            onClick={handleExportJson}
+            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            title="結構化 JSON（程式 / 資料分析用）"
+          >
+            {'{ } JSON'}
+          </button>
+          <button
             onClick={() => handleExportXlsx(false)}
             className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs hover:bg-emerald-100"
-            title="Excel: Responses + Summary 兩個 sheet"
+            title="Excel：填答資料 + 摘要兩個工作表"
           >
             📊 Excel
           </button>
@@ -165,7 +324,7 @@ export default function SurveyStatsPage() {
           <button
             onClick={() => handleExportXlsx(true)}
             className="rounded-md border border-[#126b8a] bg-[#126b8a] px-3 py-1.5 text-xs text-white font-semibold hover:bg-[#0f5d78]"
-            title="只匯出 quality score ≥ 70 的高品質樣本（Excel）"
+            title="只匯出品質分數 ≥ 70 的高品質樣本（Excel）"
           >
             ✨ 乾淨 Excel
           </button>
@@ -183,11 +342,14 @@ export default function SurveyStatsPage() {
       {/* 趨勢圖 */}
       <TrendChart surveyId={id} />
 
+      {/* 受訪者清單（匿名化 token） */}
+      <RespondentsPanel surveyId={id} totalResponses={stats.totalResponses} />
+
       {/* 題目統計 */}
       {stats.questionStats.map((q, i) => (
         <section key={q.questionId} className="rounded-lg border border-border p-5 space-y-3">
           <div>
-            <p className="text-xs text-muted-foreground">Q{i + 1} · {q.type}</p>
+            <p className="text-xs text-muted-foreground">Q{i + 1} · {QUESTION_TYPE_LABELS[q.type] ?? q.type}</p>
             <p className="font-medium mt-0.5">{q.title}</p>
             <p className="text-xs text-muted-foreground">{q.totalAnswers} 人回答</p>
           </div>
@@ -334,18 +496,28 @@ function FreqBadge({ freq }: { freq: 'high' | 'medium' | 'low' }) {
 
 function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; totalResponses: number }) {
   const [enabled, setEnabled] = useState(false);
+  const [reportType, setReportType] = useState<ReportType>('simple');
   const queryClient = useQueryClient();
-  const { data, isLoading, isFetching, error, refetch } = useSurveyAiInsights(surveyId, enabled);
+  const { data, isLoading, isFetching, error, refetch } = useSurveyAiInsights(surveyId, enabled, reportType);
 
   const handleGenerate = () => {
     if (!enabled) {
       setEnabled(true);
     } else {
-      // 已生成過 → 強制重新請求
-      queryClient.removeQueries({ queryKey: ['surveys', surveyId, 'ai-insights'] });
+      // 已生成過 → 強制重新請求（針對當前 reportType）
+      queryClient.removeQueries({ queryKey: ['surveys', surveyId, 'ai-insights', reportType] });
       refetch();
     }
   };
+
+  // 切換報告類型：啟用後切換會因 queryKey 改變而自動抓對應報告
+  const handleSwitchType = (t: ReportType) => {
+    if (t === reportType) return;
+    setReportType(t);
+    setEnabled(true);
+  };
+
+  const busy = isLoading || isFetching;
 
   return (
     <section className="relative overflow-hidden rounded-xl border border-[#126b8a]/30 bg-gradient-to-br from-[#0F2A5C]/[0.03] via-[#126b8a]/[0.04] to-[#8B5CF6]/[0.03] p-5">
@@ -358,25 +530,47 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
             <SparkleIcon />
           </div>
           <div>
-            <h2 className="font-bold text-slate-900">AI 洞察報告</h2>
-            <p className="text-[11px] text-slate-500">由 Z.ai LLM 分析填答結果生成</p>
+            <h2 className="font-bold text-slate-900">AI 數據分析報告</h2>
+            <p className="text-[11px] text-slate-500">由後端 AI 分析填答結果生成</p>
           </div>
         </div>
         <button
           onClick={handleGenerate}
-          disabled={isLoading || isFetching}
+          disabled={busy}
           className="shrink-0 rounded-md bg-[#126b8a] px-3.5 py-1.5 text-xs font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#0f5d78] disabled:opacity-60 disabled:hover:translate-y-0"
         >
-          {isLoading || isFetching ? '分析中…' : enabled ? '重新生成' : '生成洞察'}
+          {busy ? '分析中…' : enabled ? '重新生成' : '生成報告'}
         </button>
+      </div>
+
+      {/* 簡單 / 詳細 報告切換 */}
+      <div className="relative mb-3 inline-flex rounded-lg border border-[#126b8a]/20 bg-white/60 p-0.5 text-xs">
+        {([
+          { key: 'simple' as const, label: '簡單報告', hint: '重點摘要' },
+          { key: 'detailed' as const, label: '詳細報告', hint: '逐題 + 交叉 + 方法' },
+        ]).map((opt) => (
+          <button
+            key={opt.key}
+            onClick={() => handleSwitchType(opt.key)}
+            disabled={busy}
+            title={opt.hint}
+            className={`rounded-md px-3 py-1.5 font-semibold transition-all disabled:opacity-60 ${
+              reportType === opt.key
+                ? 'bg-[#126b8a] text-white shadow-sm'
+                : 'text-slate-600 hover:bg-[#126b8a]/10'
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
       </div>
 
       {!enabled && !data && (
         <div className="relative rounded-md border border-dashed border-[#126b8a]/30 bg-white/40 p-4 text-center">
           <p className="text-sm text-slate-600">
-            點擊上方「生成洞察」由 AI 分析這 {totalResponses} 份填答的關鍵發現
+            選擇「簡單 / 詳細」後點「生成報告」，由 AI 分析這 {totalResponses} 份填答
           </p>
-          <p className="mt-1 text-xs text-slate-400">使用本地化大語言模型（Z.ai GLM-5.1）</p>
+          <p className="mt-1 text-xs text-slate-400">詳細報告含逐題洞察、交叉發現與方法/信賴度說明</p>
         </div>
       )}
 
@@ -385,7 +579,9 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
           {[1, 2, 3].map((i) => (
             <div key={i} className="h-3 animate-pulse rounded bg-slate-200" style={{ width: `${100 - i * 8}%` }} />
           ))}
-          <p className="text-xs text-slate-500 mt-2">⏳ LLM 分析中，通常需要 5-15 秒…</p>
+          <p className="text-xs text-slate-500 mt-2">
+            ⏳ AI {reportType === 'detailed' ? '詳細分析中，可能需要 10-30 秒' : '分析中，通常需要 5-15 秒'}…
+          </p>
         </div>
       )}
 
@@ -413,6 +609,28 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
             />
           )}
 
+          {/* 詳細報告：逐題洞察 */}
+          {data.questionBreakdown && data.questionBreakdown.length > 0 && (
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1.5">
+                🔍 逐題洞察
+              </p>
+              <ul className="space-y-2">
+                {data.questionBreakdown.map((b, i) => (
+                  <li key={i} className="rounded-lg border border-slate-200 bg-white p-3">
+                    <p className="text-sm font-semibold text-slate-800">{b.question}</p>
+                    <p className="mt-0.5 text-sm text-slate-600">{b.insight}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* 詳細報告：交叉發現 */}
+          {data.crossFindings && data.crossFindings.length > 0 && (
+            <InsightList label="交叉關聯發現" icon="🔗" items={data.crossFindings} accent="blue" />
+          )}
+
           {/* Concerns */}
           {data.concerns.length > 0 && (
             <InsightList
@@ -433,8 +651,18 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
             />
           )}
 
+          {/* 詳細報告：方法與信賴度 */}
+          {data.methodology && (
+            <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">
+                📐 方法與信賴度
+              </p>
+              <p className="text-sm leading-relaxed text-slate-600">{data.methodology}</p>
+            </div>
+          )}
+
           <p className="text-right text-[10px] text-slate-400">
-            樣本 {data.sampleSize} 份 · 生成於 {new Date(data.generatedAt).toLocaleString('zh-TW')}
+            {data.reportType === 'detailed' ? '詳細報告' : '簡單報告'} · 樣本 {data.sampleSize} 份 · 生成於 {new Date(data.generatedAt).toLocaleString('zh-TW')}
           </p>
         </div>
       )}

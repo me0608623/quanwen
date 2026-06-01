@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase B+: /tasks category filter + category counts 整合測試
  */
 import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
@@ -93,6 +93,8 @@ describe('Tasks category filter (integration)', () => {
         category      survey_category,
         reward_type   reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         audience_criteria JSONB,
         target_count  INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
@@ -123,11 +125,13 @@ describe('Tasks category filter (integration)', () => {
       );
 
       CREATE TYPE response_status AS ENUM ('in_progress','submitted','rewarded','rejected');
+      CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
       CREATE TABLE survey_responses (
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         survey_id     UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         respondent_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         status        response_status NOT NULL DEFAULT 'in_progress',
+        sentiment           response_sentiment,
         started_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         submitted_at  TIMESTAMPTZ,
         fill_duration_seconds INTEGER,
@@ -142,6 +146,7 @@ describe('Tasks category filter (integration)', () => {
         id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         response_id   UUID NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
         question_id   UUID NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+        survey_id     UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         text_answer   TEXT,
         selected_option_ids JSONB,
         rating_value  INTEGER,

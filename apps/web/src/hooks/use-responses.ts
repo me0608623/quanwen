@@ -99,6 +99,18 @@ export function usePublicSurvey(id: string) {
   });
 }
 
+export function usePublicLinkSurvey(id: string) {
+  return useQuery<PublicSurvey>({
+    queryKey: ['public-tasks', id],
+    queryFn: async () => {
+      const { data } = await api.get(`/public/tasks/${id}`);
+      return data;
+    },
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
 export function useMyResponses() {
   return useQuery<MyResponseRecord[]>({
     queryKey: ['tasks', 'history'],
@@ -126,6 +138,21 @@ export function useSubmitResponse(surveyId: string) {
       queryClient.invalidateQueries({ queryKey: ['tasks', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', 'history'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', surveyId] });
+    },
+  });
+}
+
+export function useSubmitPublicResponse(surveyId: string, anonToken: string) {
+  return useMutation({
+    mutationFn: async ({ answers, startedAt, behaviorLog }: {
+      answers: AnswerInput[];
+      startedAt?: string;
+      behaviorLog?: unknown;
+    }) => {
+      const { data } = await api.post(`/public/tasks/${surveyId}/submit`, { answers, startedAt, behaviorLog }, {
+        headers: { 'x-anon-token': anonToken },
+      });
+      return data as { message: string; responseId: string; flagged: boolean };
     },
   });
 }

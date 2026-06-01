@@ -8,6 +8,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { eq, and, desc, sql, inArray } from 'drizzle-orm';
+import { createHash } from 'crypto';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -18,6 +19,8 @@ import {
   responseAnswers,
   respondentProfiles,
   respondentTags,
+  users,
+  surveyLogicRules,
 } from '../db/schema';
 import type { SubmitResponseDto } from './dto/submit-response.dto';
 import { AntiCheatService } from './anti-cheat.service';
@@ -26,6 +29,8 @@ import { ReputationService } from './reputation.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SpinService } from '../spin/spin.service';
+import { redactPii } from '../surveys/analysis/anonymizer';
+import { shuffleOptions, generateSeed, type ShuffleOption } from '../surveys/shuffle';
 
 @Injectable()
 export class ResponsesService {
@@ -44,36 +49,33 @@ export class ResponsesService {
   // ─── 受試者：分類別計數（給 task list 的 filter UI 用） ────────────────────
 
   async getCategoryCounts(respondentId: string): Promise<Record<string, number>> {
+    // 單一 SQL 下推：排除已填(submitted)、過期、已達配額後，依分類計數。
+    // 取代原本「兩次全表查 + JS 迴圈過濾」(published 達數百份時會全撈)。見設計文件 §3-A4。
     const rows = await this.db
       .select({
         category: surveys.category,
-        id: surveys.id,
-        completedCount: surveys.completedCount,
-        targetCount: surveys.targetCount,
-        expiresAt: surveys.expiresAt,
+        cnt: sql<number>`count(*)::int`,
       })
       .from(surveys)
-      .where(and(eq(surveys.status, 'published'), eq(surveys.type, 'standard')));
-
-    const submittedRows = await this.db
-      .select({ surveyId: surveyResponses.surveyId })
-      .from(surveyResponses)
       .where(
         and(
-          eq(surveyResponses.respondentId, respondentId),
-          eq(surveyResponses.status, 'submitted'),
+          eq(surveys.status, 'published'),
+          eq(surveys.type, 'standard'),
+          sql`(${surveys.expiresAt} IS NULL OR ${surveys.expiresAt} > now())`,
+          sql`${surveys.completedCount} < ${surveys.targetCount}`,
+          sql`NOT EXISTS (
+            SELECT 1 FROM ${surveyResponses}
+            WHERE ${surveyResponses.surveyId} = ${surveys.id}
+              AND ${surveyResponses.respondentId} = ${respondentId}
+              AND ${surveyResponses.status} = 'submitted'
+          )`,
         ),
-      );
-    const submitted = new Set(submittedRows.map((r) => r.surveyId));
-    const now = new Date();
+      )
+      .groupBy(surveys.category);
 
     const counts: Record<string, number> = {};
-    for (const s of rows) {
-      if (submitted.has(s.id)) continue;
-      if (s.expiresAt && new Date(s.expiresAt) < now) continue;
-      if (s.completedCount >= s.targetCount) continue;
-      const key = s.category ?? 'uncategorized';
-      counts[key] = (counts[key] ?? 0) + 1;
+    for (const r of rows) {
+      counts[r.category ?? 'uncategorized'] = Number(r.cnt);
     }
     return counts;
   }
@@ -163,7 +165,7 @@ export class ResponsesService {
 
   // ─── 受試者：取得公開問卷詳情（含題目）────────────────────────────────────
 
-  async getPublicSurvey(surveyId: string, respondentId?: string) {
+  async getPublicSurvey(surveyId: string, respondentId?: string, anonToken?: string) {
     const rows = await this.db
       .select()
       .from(surveys)
@@ -173,16 +175,19 @@ export class ResponsesService {
     const survey = rows[0];
     if (!survey) throw new NotFoundException('問卷不存在或尚未上架');
 
-    // 若受試者已填 → 告知
+    // 若受試者已填 → 告知（支援 authenticated respondentId 和 anonymous token）
     let alreadySubmitted = false;
-    if (respondentId) {
+    const resolvedRespondentId = respondentId ?? (anonToken
+      ? await this.resolveAnonymousRespondentReadOnly(anonToken)
+      : undefined);
+    if (resolvedRespondentId) {
       const existing = await this.db
         .select({ id: surveyResponses.id })
         .from(surveyResponses)
         .where(
           and(
             eq(surveyResponses.surveyId, surveyId),
-            eq(surveyResponses.respondentId, respondentId),
+            eq(surveyResponses.respondentId, resolvedRespondentId),
             eq(surveyResponses.status, 'submitted'),
           ),
         )
@@ -210,6 +215,9 @@ export class ResponsesService {
             .orderBy(questionOptions.sortOrder)
         : [];
 
+    // QUA-204: Generate a preview seed so the frontend can shuffle consistently
+    const previewSeed = generateSeed();
+
     return {
       id: survey.id,
       title: survey.title,
@@ -217,16 +225,22 @@ export class ResponsesService {
       rewardPoints: survey.rewardPoints,
       isAnonymous: survey.isAnonymous,
       alreadySubmitted,
-      questions: questions.map((q) => ({
-        id: q.id,
-        type: q.type,
-        title: q.title,
-        description: q.description,
-        sortOrder: q.sortOrder,
-        isRequired: q.isRequired,
-        config: q.config,
-        options: options.filter((o) => o.questionId === q.id),
-      })),
+      randomizationSeed: previewSeed,
+      questions: questions.map((q) => {
+        const shuffleMode = ((q.config as Record<string, unknown> | null)?.shuffleOption as ShuffleOption) ?? 'none';
+        const rawOptions = options.filter((o) => o.questionId === q.id);
+        const shuffledOpts = shuffleOptions(rawOptions, shuffleMode, previewSeed);
+        return {
+          id: q.id,
+          type: q.type,
+          title: q.title,
+          description: q.description,
+          sortOrder: q.sortOrder,
+          isRequired: q.isRequired,
+          config: q.config,
+          options: shuffledOpts,
+        };
+      }),
     };
   }
 
@@ -241,6 +255,7 @@ export class ResponsesService {
       .select({
         id: surveys.id,
         status: surveys.status,
+        title: surveys.title,
         targetCount: surveys.targetCount,
         completedCount: surveys.completedCount,
         surveyorId: surveys.surveyorId,
@@ -277,50 +292,167 @@ export class ResponsesService {
       fillDurationSeconds = Math.round((now.getTime() - started.getTime()) / 1000);
     }
 
-    // ── 4. 反作弊評估 ────────────────────────────────────────────────────────
-    const totalQCount = await this.db
+    // ── 4. 反作弊評估 + 驗證答案歸屬 ────────────────────────────────────────
+    const surveyQRows = await this.db
       .select({ id: surveyQuestions.id })
       .from(surveyQuestions)
       .where(eq(surveyQuestions.surveyId, surveyId));
 
+    // Validate that every submitted questionId belongs to this survey.
+    // Without this check, a user could submit questionIds from other surveys,
+    // corrupting analytics without a DB-level error.
+    const validQuestionIds = new Set(surveyQRows.map((q) => q.id));
+    const invalidIds = dto.answers
+      .filter((a) => a.questionId && !validQuestionIds.has(a.questionId))
+      .map((a) => a.questionId);
+    if (invalidIds.length > 0) {
+      throw new BadRequestException('填答包含不屬於此問卷的題目');
+    }
+
+    // ── 4.5 QUA-204: Accept randomizationSeed from client for reproducibility ─
+    const randomizationSeed = dto.randomizationSeed ?? generateSeed();
+
+    // ── 4.5 QUA-196: Evaluate skip logic / conditional branching ──────────────
+    // If the survey has logic rules, validate that the respondent only answered
+    // visible questions and didn't skip required visible ones.
+    const logicRuleRows = await this.db
+      .select()
+      .from(surveyLogicRules)
+      .where(eq(surveyLogicRules.surveyId, surveyId))
+      .orderBy(surveyLogicRules.sortOrder);
+
+    if (logicRuleRows.length > 0) {
+      // Build answers map for condition evaluation
+      const answersMap: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }> = {};
+      for (const a of dto.answers) {
+        if (a.questionId) {
+          answersMap[a.questionId] = {
+            textAnswer: a.textAnswer,
+            selectedOptionIds: a.selectedOptionIds,
+            ratingValue: a.ratingValue,
+          };
+        }
+      }
+
+      // Get questions sorted by order (with isRequired info)
+      const allSurveyQuestions = await this.db
+        .select({ id: surveyQuestions.id, isRequired: surveyQuestions.isRequired, sortOrder: surveyQuestions.sortOrder })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, surveyId))
+        .orderBy(surveyQuestions.sortOrder);
+
+      // Determine which questions should be visible
+      const visibleIds = new Set(allSurveyQuestions.map((q) => q.id));
+
+      // Apply 'show' rules: target hidden unless trigger condition met
+      for (const rule of logicRuleRows.filter((r) => r.action === 'show')) {
+        if (!this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          visibleIds.delete(rule.targetQuestionId);
+        }
+      }
+
+      // Apply 'hide' rules: target visible unless trigger condition met
+      for (const rule of logicRuleRows.filter((r) => r.action === 'hide')) {
+        if (this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          visibleIds.delete(rule.targetQuestionId);
+        }
+      }
+
+      // Apply 'skip' rules: skip questions between trigger and target
+      const allQIds = allSurveyQuestions.map((q) => q.id);
+      for (const rule of logicRuleRows.filter((r) => r.action === 'skip')) {
+        if (this.evaluateLogicCondition(rule.triggerQuestionId, rule.condition, rule.value, answersMap)) {
+          const triggerIdx = allQIds.indexOf(rule.triggerQuestionId);
+          const targetIdx = allQIds.indexOf(rule.targetQuestionId);
+          if (triggerIdx !== -1 && targetIdx !== -1) {
+            const [from, to] = triggerIdx < targetIdx
+              ? [triggerIdx + 1, targetIdx - 1]
+              : [targetIdx + 1, triggerIdx - 1];
+            for (let i = from; i <= to; i++) {
+              visibleIds.delete(allQIds[i]);
+            }
+          }
+        }
+      }
+
+      // Validate: answered questions must be visible
+      const answeredIds = new Set(dto.answers.filter((a) => a.questionId).map((a) => a.questionId));
+      const hiddenButAnswered = [...answeredIds].filter((id) => !visibleIds.has(id));
+      if (hiddenButAnswered.length > 0) {
+        throw new BadRequestException('填答包含了依據跳題邏輯應被隱藏的題目');
+      }
+
+      // Validate: required visible questions must be answered
+      const requiredVisible = allSurveyQuestions.filter((q) => q.isRequired && visibleIds.has(q.id));
+      const missingRequired = requiredVisible.filter((q) => !answeredIds.has(q.id));
+      if (missingRequired.length > 0) {
+        throw new BadRequestException('尚有必填題目未作答');
+      }
+
+      // Filter out answers for hidden questions before saving
+      dto.answers = dto.answers.filter((a) => !a.questionId || visibleIds.has(a.questionId));
+    }
+
     const antiCheatResult = this.antiCheat.evaluate(
       dto.answers,
-      totalQCount.length,
+      surveyQRows.length,
       fillDurationSeconds,
     );
 
     // 極度可疑（score >= 80）→ 直接標記 rejected，不計入配額
-    const finalStatus = antiCheatResult.score >= 80 ? 'rejected' : 'submitted';
+    // Phase 1: openText 字數 > 10 時先進 pending_review（待人工覆核，不先發獎勵）
+    const hasOpenTextOverThreshold = dto.answers.some(
+      (a) => typeof a.textAnswer === 'string' && a.textAnswer.trim().length > 10,
+    );
+    const finalStatus = antiCheatResult.score >= 80
+      ? 'rejected'
+      : hasOpenTextOverThreshold
+        ? 'pending_review'
+        : 'submitted';
 
-    // ── 5. 建立 response 記錄 ────────────────────────────────────────────────
-    const inserted = await this.db
-      .insert(surveyResponses)
-      .values({
-        surveyId,
-        respondentId,
-        status: finalStatus,
-        submittedAt: now,
-        fillDurationSeconds,
-        antiCheatScore: antiCheatResult.score,
-        suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
-        // Phase 2: 把前端送來的行為訊號存起來
-        behaviorLog: dto.behaviorLog ?? null,
-      })
-      .returning({ id: surveyResponses.id });
+    // ── 5+6. 建立 response 記錄 + 寫入答案（atomic: 避免 orphaned response）──────
+    let responseId = '' as string;
+    try {
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveyResponses)
+        .values({
+          surveyId,
+          respondentId,
+          status: finalStatus,
+          submittedAt: now,
+          fillDurationSeconds,
+          antiCheatScore: antiCheatResult.score,
+          randomizationSeed,
+          fingerprintId: dto.fingerprintId ?? null,
+          suspiciousFlags: antiCheatResult.flags.length > 0 ? antiCheatResult.flags : null,
+          behaviorLog: dto.behaviorLog ?? null,
+        })
+        .returning({ id: surveyResponses.id });
 
-    const responseId = inserted[0].id;
+      responseId = inserted[0].id;
 
-    // ── 6. 寫入答案 ──────────────────────────────────────────────────────────
-    if (dto.answers.length > 0) {
-      await this.db.insert(responseAnswers).values(
-        dto.answers.map((a) => ({
-          responseId,
-          questionId: a.questionId,
-          textAnswer: a.textAnswer,
-          selectedOptionIds: a.selectedOptionIds ?? null,
-          ratingValue: a.ratingValue,
-        })),
-      );
+      if (dto.answers.length > 0) {
+        await tx.insert(responseAnswers).values(
+          dto.answers.map((a) => ({
+            responseId: responseId!,
+            surveyId, // 反正規化（§3-B1）
+            questionId: a.questionId,
+            textAnswer: a.textAnswer,
+            selectedOptionIds: a.selectedOptionIds ?? null,
+            ratingValue: a.ratingValue,
+          })),
+        );
+      }
+    });
+    } catch (err: unknown) {
+      // Concurrent submission race: unique constraint (23505) means another
+      // request already inserted this (surveyId, respondentId) pair.
+      // Return 409 instead of leaking a 500.
+      if ((err as { code?: string })?.code === '23505') {
+        throw new ConflictException('您已填寫過此問卷');
+      }
+      throw err;
     }
 
     // ── 6.5 Quality Audit Pipeline（fire-and-forget，不卡住 submit 回應）────────
@@ -374,17 +506,56 @@ export class ResponsesService {
       }
 
       // ── 10. 通知問券方（fire-and-forget） ─────────────────────────────────
+      // QUA-203: 含問卷標題與累計數，email 有 15min cooldown 防疲勞
       this.notifications
         .create({
           userId: survey.surveyorId,
           type: 'new_response',
           title: '有新的問卷填答',
-          body: `您的問卷收到一份新填答（共 ${survey.completedCount + 1} 份）`,
+          body: `您的問卷「${survey.title}」收到一份新填答（累計 ${survey.completedCount + 1} / ${survey.targetCount} 份）`,
           metadata: { surveyId, responseId },
         })
         .catch((err: unknown) =>
           this.logger.error(`new_response 通知失敗 surveyId=${surveyId}`, err),
         );
+
+      // ── 10.1 QUA-200: 感謝受試者 email（fire-and-forget）─────────────────
+      this.notifications
+        .sendRespondentThankYou(respondentId, survey.title, survey.rewardPoints)
+        .catch((err: unknown) =>
+          this.logger.error(`thank-you email 失敗 respondentId=${respondentId}`, err),
+        );
+
+      // ── 10.5 QUA-203: 閾值里程碑通知（fire-and-forget）──────────────────
+      // 當 completedCount 跨越 50/100/500/1000 時，寄發慶祝通知
+      const newCount = survey.completedCount + 1;
+      const MILESTONES = [50, 100, 500, 1000] as const;
+      const hitMilestone = MILESTONES.find((m) => newCount === m);
+      if (hitMilestone) {
+        this.notifications
+          .create({
+            userId: survey.surveyorId,
+            type: 'response_milestone',
+            title: `里程碑達成！您的問卷已收到 ${hitMilestone} 份填答 🎉`,
+            body: `恭喜！您的問卷「${survey.title}」已累計收到 ${hitMilestone} 份填答。${
+              hitMilestone >= 500
+                ? '您正在收集大量有價值的數據，繼續加油！'
+                : '持續收集更多回覆，讓數據更有代表性。'
+            }`,
+            metadata: { surveyId, milestone: hitMilestone, completedCount: newCount, targetCount: survey.targetCount },
+          })
+          .catch((err: unknown) =>
+            this.logger.error(`milestone 通知失敗 surveyId=${surveyId} milestone=${hitMilestone}`, err),
+          );
+      }
+    }
+
+    if (finalStatus === 'pending_review') {
+      return {
+        message: '已收到填答，正在進行人工複核，完成後會決定是否發放獎勵。',
+        responseId,
+        flagged: true,
+      };
     }
 
     if (finalStatus === 'rejected') {
@@ -396,6 +567,49 @@ export class ResponsesService {
     }
 
     return { message: '填答成功，感謝您的參與！', responseId, flagged: false };
+  }
+
+  async submitPublicResponse(surveyId: string, dto: SubmitResponseDto, anonToken?: string) {
+    const token = (anonToken ?? '').trim();
+    if (!token) {
+      throw new BadRequestException('Missing x-anon-token');
+    }
+    const respondentId = await this.resolveAnonymousRespondent(token);
+    return this.submitResponse(surveyId, respondentId, dto);
+  }
+
+  private async resolveAnonymousRespondentReadOnly(token: string): Promise<string | undefined> {
+    const digest = createHash('sha256').update(token).digest('hex');
+    const email = `anon+${digest.slice(0, 24)}@guest.quanwen.local`;
+    const existing = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    return existing[0]?.id;
+  }
+
+  private async resolveAnonymousRespondent(token: string): Promise<string> {
+    const digest = createHash('sha256').update(token).digest('hex');
+    const email = `anon+${digest.slice(0, 24)}@guest.quanwen.local`;
+
+    const existing = await this.db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.email, email))
+      .limit(1);
+    if (existing[0]) return existing[0].id;
+
+    const created = await this.db
+      .insert(users)
+      .values({
+        email,
+        role: 'respondent',
+        displayName: `guest-${digest.slice(0, 8)}`,
+        emailVerified: false,
+      })
+      .returning({ id: users.id });
+    return created[0].id;
   }
 
   // ─── Quality Audit Pipeline 觸發（fire-and-forget）─────────────────────
@@ -416,7 +630,7 @@ export class ResponsesService {
       const newStatus = breakdown.status === 'rejected'
         ? 'rejected'
         : breakdown.status === 'suspicious'
-          ? 'submitted'   // 仍標為 submitted，但 quality_score 會反映疑似
+          ? 'pending_review'
           : 'submitted';
       await this.db
         .update(surveyResponses)
@@ -697,6 +911,47 @@ export class ResponsesService {
     };
   }
 
+  // ─── 問券方：取得指定題目的逐筆文字回答（供 per-response sentiment 使用）────────
+
+  /**
+   * 取得指定問卷 + 題目的所有已提交文字回答，含 responseId。
+   * 只回傳有非空白 textAnswer 的列。
+   */
+  async getTextAnswersForQuestion(
+    surveyId: string,
+    questionId: string,
+    surveyorId: string,
+  ): Promise<Array<{ responseId: string; text: string }>> {
+    // 確認是問券方本人
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取此問卷');
+
+    const rows = await this.db
+      .select({
+        responseId: responseAnswers.responseId,
+        textAnswer: responseAnswers.textAnswer,
+      })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .where(
+        and(
+          eq(responseAnswers.surveyId, surveyId),
+          eq(responseAnswers.questionId, questionId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+        ),
+      );
+
+    return rows
+      .filter((r) => r.textAnswer && r.textAnswer.trim().length > 0)
+      .map((r) => ({ responseId: r.responseId, text: r.textAnswer! }));
+  }
+
   // ─── 問券方：每日填答趨勢（近 30 天）────────────────────────────────────────
 
   async getSurveyTrend(surveyId: string, surveyorId: string): Promise<{ date: string; count: number }[]> {
@@ -736,6 +991,167 @@ export class ResponsesService {
       result.push({ date: key, count: countByDate.get(key) ?? 0 });
     }
     return result;
+  }
+
+  // ─── 問券方：受訪者清單（匿名化 token + 提交時間）───────────────────────────
+
+  async getRespondents(
+    surveyId: string,
+    surveyorId: string,
+    page = 1,
+    pageSize = 20,
+  ): Promise<{
+    total: number;
+    page: number;
+    pageSize: number;
+    respondents: Array<{
+      anonymousToken: string;
+      status: string;
+      submittedAt: string | null;
+      fillDurationSeconds: number | null;
+      qualityScore: number | null;
+    }>;
+  }> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    const offset = (page - 1) * pageSize;
+
+    const [countRows, rows] = await Promise.all([
+      this.db
+        .select({ cnt: sql<number>`COUNT(*)::int` })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded', 'rejected']),
+          ),
+        ),
+      this.db
+        .select({
+          respondentId: surveyResponses.respondentId,
+          status: surveyResponses.status,
+          submittedAt: surveyResponses.submittedAt,
+          fillDurationSeconds: surveyResponses.fillDurationSeconds,
+          qualityScore: surveyResponses.qualityScore,
+        })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded', 'rejected']),
+          ),
+        )
+        .orderBy(desc(surveyResponses.submittedAt))
+        .limit(pageSize)
+        .offset(offset),
+    ]);
+
+    const total = countRows[0]?.cnt ?? 0;
+
+    // 匿名化：用 SHA-256 hash 取代真實 respondentId（只取前 8 碼作為可讀 token）
+    const respondents = rows.map((r) => {
+      const hash = createHash('sha256').update(r.respondentId).digest('hex');
+      return {
+        anonymousToken: hash.slice(0, 8).toUpperCase(),
+        status: r.status,
+        submittedAt: r.submittedAt?.toISOString() ?? null,
+        fillDurationSeconds: r.fillDurationSeconds,
+        qualityScore: r.qualityScore,
+      };
+    });
+
+    return { total, page, pageSize, respondents };
+  }
+
+  // ─── 問券方：匯出填答 JSON（結構化，給程式/資料分析用）───────────────────
+
+  async exportSurveyResponsesJson(
+    surveyId: string,
+    surveyorId: string,
+    exportOpts: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<{
+    survey: { id: string; title: string };
+    exportedAt: string;
+    totalResponses: number;
+    questions: Array<{ id: string; title: string; type: string; order: number }>;
+    responses: Array<Record<string, unknown>>;
+  }> {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId, title: surveys.title })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, type: surveyQuestions.type, sortOrder: surveyQuestions.sortOrder })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const minScore = exportOpts.minQualityScore ?? 70;
+    let responses = await this.db
+      .select({
+        responseId: surveyResponses.id,
+        submittedAt: surveyResponses.submittedAt,
+        fillDurationSeconds: surveyResponses.fillDurationSeconds,
+        qualityScore: surveyResponses.qualityScore,
+      })
+      .from(surveyResponses)
+      .where(and(eq(surveyResponses.surveyId, surveyId), inArray(surveyResponses.status, ['submitted', 'rewarded'])))
+      .orderBy(surveyResponses.submittedAt);
+    if (exportOpts.cleanOnly) {
+      responses = responses.filter((r) => (r.qualityScore ?? 0) >= minScore);
+    }
+
+    const responseIds = responses.map((r) => r.responseId);
+    const allAnswers = responseIds.length
+      ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, responseIds))
+      : [];
+    const qIds = questions.map((q) => q.id);
+    const options = qIds.length
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+      : [];
+
+    const toValue = (a: typeof allAnswers[number] | undefined): unknown => {
+      if (!a) return null;
+      if (a.textAnswer) return redactPii(a.textAnswer);
+      if (a.ratingValue !== null && a.ratingValue !== undefined) return a.ratingValue;
+      if (a.selectedOptionIds) {
+        const ids = a.selectedOptionIds as string[];
+        return ids.map((id) => options.find((o) => o.id === id)?.label ?? id);
+      }
+      return null;
+    };
+
+    return {
+      survey: { id: surveyId, title: surveyRows[0].title },
+      exportedAt: new Date().toISOString(),
+      totalResponses: responses.length,
+      questions: questions.map((q) => ({ id: q.id, title: q.title, type: q.type, order: q.sortOrder + 1 })),
+      responses: responses.map((r) => {
+        const answers = allAnswers.filter((a) => a.responseId === r.responseId);
+        return {
+          responseId: r.responseId,
+          submittedAt: r.submittedAt,
+          fillDurationSeconds: r.fillDurationSeconds,
+          qualityScore: r.qualityScore,
+          answers: questions.map((q) => ({
+            questionId: q.id,
+            title: q.title,
+            value: toValue(answers.find((a) => a.questionId === q.id)),
+          })),
+        };
+      }),
+    };
   }
 
   // ─── 問券方：匯出填答 CSV ─────────────────────────────────────────────────
@@ -803,7 +1219,7 @@ export class ResponsesService {
       const qCells = questions.map((q) => {
         const a = answers.find((ans) => ans.questionId === q.id);
         if (!a) return '';
-        if (a.textAnswer) return `"${a.textAnswer.replace(/"/g, '""')}"`;
+        if (a.textAnswer) return `"${redactPii(a.textAnswer).replace(/"/g, '""')}"`;
         if (a.ratingValue !== null && a.ratingValue !== undefined) return String(a.ratingValue);
         if (a.selectedOptionIds) {
           const ids = a.selectedOptionIds as string[];
@@ -826,6 +1242,113 @@ export class ResponsesService {
     });
 
     return [headers.join(','), ...rows].join('\n');
+  }
+
+  async analyzeSentimentCrossTab(surveyId: string, surveyorId: string, field: 'gender' | 'ageRange') {
+    const surveyRows = await this.db
+      .select({ surveyorId: surveys.surveyorId })
+      .from(surveys).where(eq(surveys.id, surveyId)).limit(1);
+    if (!surveyRows[0]) throw new NotFoundException('問卷不存在');
+    if (surveyRows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取');
+    const rows = await this.db
+      .select({
+        sentiment: surveyResponses.sentiment,
+        gender: respondentProfiles.gender,
+        ageRange: respondentProfiles.ageRange,
+      })
+      .from(surveyResponses)
+      .innerJoin(respondentProfiles, eq(respondentProfiles.userId, surveyResponses.respondentId))
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+          inArray(surveyResponses.sentiment, ['positive', 'neutral', 'negative']),
+        ),
+      );
+
+    const grouped = new Map<string, { positive: number; neutral: number; negative: number; total: number }>();
+    for (const r of rows) {
+      const group = field === 'gender' ? (r.gender ?? 'unknown') : (r.ageRange ?? 'unknown');
+      const cur = grouped.get(group) ?? { positive: 0, neutral: 0, negative: 0, total: 0 };
+      const sentiment = r.sentiment as 'positive' | 'neutral' | 'negative';
+      cur[sentiment] += 1;
+      cur.total += 1;
+      grouped.set(group, cur);
+    }
+
+    const groups = [...grouped.entries()].map(([label, counts]) => ({
+      groupLabel: label,
+      positive: counts.positive,
+      neutral: counts.neutral,
+      negative: counts.negative,
+      total: counts.total,
+    }));
+
+    return { surveyId, field, groups, generatedAt: new Date().toISOString() };
+  }
+
+  // ─── QUA-196: Logic Condition Evaluator ──────────────────────────────────────
+
+  /**
+   * Evaluate a single logic condition against the current answer map.
+   * Returns true if the condition is satisfied.
+   */
+  private evaluateLogicCondition(
+    triggerQuestionId: string,
+    condition: string,
+    value: string | null,
+    answersMap: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): boolean {
+    const answer = answersMap[triggerQuestionId];
+
+    if (condition === 'is_empty') {
+      if (!answer) return true;
+      const hasText = typeof answer.textAnswer === 'string' && answer.textAnswer.trim().length > 0;
+      const hasOption = Array.isArray(answer.selectedOptionIds) && answer.selectedOptionIds.length > 0;
+      const hasRating = typeof answer.ratingValue === 'number';
+      return !hasText && !hasOption && !hasRating;
+    }
+
+    if (condition === 'is_not_empty') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'is_empty', value, answersMap);
+    }
+
+    if (!answer) return false;
+
+    // Numeric comparisons (rating)
+    if (['gt', 'gte', 'lt', 'lte'].includes(condition)) {
+      const numVal = value !== null ? parseFloat(value) : NaN;
+      const rating = answer.ratingValue;
+      if (typeof rating !== 'number' || isNaN(numVal)) return false;
+      if (condition === 'gt') return rating > numVal;
+      if (condition === 'gte') return rating >= numVal;
+      if (condition === 'lt') return rating < numVal;
+      if (condition === 'lte') return rating <= numVal;
+    }
+
+    // Text / option comparisons
+    if (condition === 'eq') {
+      if (typeof answer.textAnswer === 'string') return answer.textAnswer === value;
+      if (Array.isArray(answer.selectedOptionIds)) return answer.selectedOptionIds.includes(value ?? '');
+      if (typeof answer.ratingValue === 'number') return answer.ratingValue === parseFloat(value ?? '');
+      return false;
+    }
+
+    if (condition === 'neq') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'eq', value, answersMap);
+    }
+
+    if (condition === 'contains') {
+      if (typeof answer.textAnswer === 'string') return answer.textAnswer.includes(value ?? '');
+      if (Array.isArray(answer.selectedOptionIds)) return answer.selectedOptionIds.includes(value ?? '');
+      return false;
+    }
+
+    if (condition === 'not_contains') {
+      return !this.evaluateLogicCondition(triggerQuestionId, 'contains', value, answersMap);
+    }
+
+    return false;
   }
 }
 

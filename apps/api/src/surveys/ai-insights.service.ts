@@ -1,11 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ZaiClient } from '../ai-audit/zai.client';
+import {
+  insightsCacheKey,
+  getCachedInsight,
+  setCachedInsight,
+} from './analysis/insights-cache';
+import { redactPii } from './analysis/anonymizer';
+
+export type ReportType = 'simple' | 'detailed';
 
 export interface SurveyInsights {
+  reportType: ReportType;
   summary: string;
   keyFindings: string[];
   concerns: string[];
   recommendations: string[];
+  // ─── detailed 報告才有的進階區塊（simple 為 undefined）─────────────────────
+  /** 逐題深入洞察 */
+  questionBreakdown?: Array<{ question: string; insight: string }>;
+  /** 交叉/關聯發現（跨題、跨樣本的模式） */
+  crossFindings?: string[];
+  /** 方法與信賴度說明（樣本量、品質、偏差、解讀注意） */
+  methodology?: string;
   sampleSize: number;
   generatedAt: string;
 }
@@ -24,6 +40,20 @@ export interface TextSentimentResult {
   generatedAt: string;
 }
 
+export interface ResponseSentiment {
+  responseId: string;
+  questionId: string;
+  text: string;
+  sentiment: 'positive' | 'neutral' | 'negative';
+}
+
+export interface ResponseSentimentsResult {
+  surveyId: string;
+  questionId: string;
+  sentiments: ResponseSentiment[];
+  generatedAt: string;
+}
+
 interface QuestionStatInput {
   questionId: string;
   title: string;
@@ -38,6 +68,15 @@ interface SurveyStatsInput {
   title: string;
   totalResponses: number;
   questionStats: QuestionStatInput[];
+  // 由 getSurveyStats 一併帶入；detailed 報告用來補「樣本品質/信賴度」說明
+  qualityDistribution?: {
+    total: number;
+    passed: number;
+    suspicious: number;
+    rejected: number;
+    unaudited: number;
+    avgScore: number | null;
+  };
 }
 
 @Injectable()
@@ -47,51 +86,99 @@ export class AiInsightsService {
 
   /**
    * 把問卷統計丟給 LLM，得到結構化洞察。
+   * @param reportType simple = 精簡摘要（預設）；detailed = 加逐題洞察 + 交叉發現 + 方法說明
    * 當樣本 < 3 或 LLM 失敗時，回退到 deterministic 規則生成的 fallback insights。
    */
-  async analyze(stats: SurveyStatsInput): Promise<SurveyInsights> {
+  async analyze(
+    stats: SurveyStatsInput,
+    reportType: ReportType = 'simple',
+  ): Promise<SurveyInsights> {
     const sampleSize = stats.totalResponses;
 
     // 樣本太少時跳過 LLM call，避免浪費 token
     if (sampleSize < 3) {
-      return this.fallback(stats, '樣本數過少（< 3），尚不足以產生統計洞察');
+      return this.fallback(stats, '樣本數過少（< 3），尚不足以產生統計洞察', reportType);
     }
 
-    const prompt = this.buildPrompt(stats);
+    // 兩層快取(L1 in-process 30 分鐘 + L2 Redis 跨進程共享,degradation-safe):
+    // 相同 stats + reportType 直接回,免 LLM token。fallback 路徑不入 cache → 下次重試。設計文件 §5.4。
+    const cacheKey = insightsCacheKey(stats, reportType);
+    const hit = await getCachedInsight<SurveyInsights>(cacheKey);
+    if (hit) {
+      this.logger.log(`AI insights cache hit (${reportType})`);
+      return hit;
+    }
+
+    const detailed = reportType === 'detailed';
+    const prompt = this.buildPrompt(stats, reportType);
+    const system = detailed
+      ? '你是一名資深問卷研究分析師，正在撰寫一份「詳細分析報告」。你的回應**必須**是一個合法的 JSON 物件，' +
+        '不可包含任何 markdown 標記、code fence、前後贅字或註解，直接以 { 開頭、以 } 結尾。' +
+        '所有內容用繁體中文，絕對不可編造資料中沒有的內容。JSON 必須包含這些 key：' +
+        'summary (string), keyFindings (string array), concerns (string array), recommendations (string array), ' +
+        'questionBreakdown (array of {question:string, insight:string}，逐題各 1 句洞察), ' +
+        'crossFindings (string array，跨題/關聯的觀察), methodology (string，樣本量/品質/偏差/解讀限制說明)。'
+      : '你是一名專業的問卷分析師。你的回應**必須**是一個合法的 JSON 物件，' +
+        '不可包含任何 markdown 標記、code fence、前後贅字或註解，直接以 { 開頭、以 } 結尾。' +
+        '所有條目用繁體中文，每項精簡（≤ 40 字），絕對不可編造資料中沒有的內容。' +
+        'JSON 必須包含這四個 key：summary (string), keyFindings (string array), ' +
+        'concerns (string array), recommendations (string array)。';
+
     try {
       const raw = await this.zai.chat(
         [
-          {
-            role: 'system',
-            content:
-              '你是一名專業的問卷分析師。你的回應**必須**是一個合法的 JSON 物件，' +
-              '不可包含任何 markdown 標記、code fence、前後贅字或註解，' +
-              '直接以 { 開頭、以 } 結尾。' +
-              '所有條目用繁體中文，每項精簡（≤ 40 字），絕對不可編造資料中沒有的內容。' +
-              'JSON 必須包含這四個 key：summary (string), keyFindings (string array), ' +
-              'concerns (string array), recommendations (string array)。',
-          },
+          { role: 'system', content: system },
           { role: 'user', content: prompt },
         ],
-        // max_tokens 含 reasoning tokens；GLM-5.1 reasoning 約耗 1000-2000 token，
-        // 要留 1500+ 給實際 JSON 輸出，所以給 8000 才夠。
-        { temperature: 0.3, maxTokens: 8000, jsonMode: true },
+        // max_tokens 含 reasoning tokens；GLM-5.1 reasoning 約耗 1000-2000 token。
+        // detailed 輸出較長，給更大空間。
+        { temperature: 0.3, maxTokens: detailed ? 14000 : 8000, jsonMode: true },
       );
 
-      this.logger.debug(`Raw insights response (first 300): ${raw.slice(0, 300)}`);
+      this.logger.debug(`Raw insights (${reportType}, first 300): ${raw.slice(0, 300)}`);
       const parsed = this.parseJson(raw);
-      return {
-        summary: String(parsed.summary ?? '').slice(0, 300),
-        keyFindings: this.toArray(parsed.keyFindings).slice(0, 6),
-        concerns: this.toArray(parsed.concerns).slice(0, 4),
-        recommendations: this.toArray(parsed.recommendations).slice(0, 5),
+
+      const base: SurveyInsights = {
+        reportType,
+        summary: String(parsed.summary ?? '').slice(0, detailed ? 600 : 300),
+        keyFindings: this.withEvidenceQuotes(
+          this.toArray(parsed.keyFindings),
+          stats,
+        ).slice(0, detailed ? 10 : 6),
+        concerns: this.toArray(parsed.concerns).slice(0, detailed ? 6 : 4),
+        recommendations: this.toArray(parsed.recommendations).slice(0, detailed ? 8 : 5),
         sampleSize,
         generatedAt: new Date().toISOString(),
       };
+
+      if (detailed) {
+        base.questionBreakdown = this.toBreakdown(parsed.questionBreakdown).slice(0, 30);
+        base.crossFindings = this.toArray(parsed.crossFindings).slice(0, 8);
+        const m = typeof parsed.methodology === 'string' ? parsed.methodology.trim() : '';
+        base.methodology = m ? m.slice(0, 600) : undefined;
+      }
+
+      // 僅快取成功結果（fallback 不快取，方便下次 retry）
+      await setCachedInsight(cacheKey, base);
+      return base;
     } catch (err) {
-      this.logger.error('Z.ai AI insights failed, returning fallback', err);
-      return this.fallback(stats, 'AI 服務暫時不可用，以下為基本統計摘要');
+      this.logger.error(`Z.ai AI insights (${reportType}) failed, returning fallback`, err);
+      return this.fallback(stats, 'AI 服務暫時不可用，以下為基本統計摘要', reportType);
     }
+  }
+
+  /** 解析 LLM 回傳的 questionBreakdown array */
+  private toBreakdown(v: unknown): Array<{ question: string; insight: string }> {
+    if (!Array.isArray(v)) return [];
+    return v
+      .map((x) => {
+        const o = (x ?? {}) as Record<string, unknown>;
+        return {
+          question: String(o.question ?? '').slice(0, 120),
+          insight: String(o.insight ?? '').slice(0, 200),
+        };
+      })
+      .filter((b) => b.question && b.insight);
   }
 
   // ─── 開放題情緒分析 ──────────────────────────────────────────────────────
@@ -166,12 +253,116 @@ export class AiInsightsService {
     }
   }
 
+  // ─── 逐筆回應情緒分析（per-response sentiment badges）───────────────────────
+
+  /**
+   * 對指定題目的每一筆文字回答做逐筆情緒分析，回傳 ResponseSentimentsResult。
+   * 會將回答分批送 LLM（每批最多 30 筆），每筆標注 positive / neutral / negative。
+   * 若 LLM 失敗則 fallback 全標 neutral。
+   */
+  async analyzeResponseSentiments(
+    surveyId: string,
+    questionId: string,
+    answers: Array<{ responseId: string; text: string }>,
+  ): Promise<ResponseSentimentsResult> {
+    const empty: ResponseSentimentsResult = {
+      surveyId,
+      questionId,
+      sentiments: [],
+      generatedAt: new Date().toISOString(),
+    };
+    if (answers.length === 0) return empty;
+
+    // 過濾掉空白回答
+    const valid = answers.filter((a) => a.text.trim().length > 0);
+    if (valid.length === 0) return empty;
+
+    const sentiments: ResponseSentiment[] = [];
+
+    // 分批處理，每批最多 30 筆
+    const BATCH = 30;
+    for (let offset = 0; offset < valid.length; offset += BATCH) {
+      const batch = valid.slice(offset, offset + BATCH);
+      const enumerated = batch
+        .map((a, i) => `${offset + i + 1}. [id:${a.responseId}] "${redactPii(a.text).slice(0, 200)}"`)
+        .join('\n');
+
+      const prompt = [
+        `以下共 ${batch.length} 筆文字回答，請為每一筆標注情緒：`,
+        enumerated,
+        '',
+        '請回傳 JSON array，每個元素：',
+        '{ "idx": <編號從1開始>, "responseId": "<id>", "sentiment": "positive|neutral|negative" }',
+        '',
+        '規則：',
+        '- 每筆都要標，不可遺漏',
+        '- positive: 正面/滿意/贊同/開心',
+        '- neutral: 中性/描述性/無明顯傾向',
+        '- negative: 負面/不滿/批評/抱怨',
+        '- 不可編造，只根據文字內容判斷',
+      ].join('\n');
+
+      try {
+        const r = await this.zai.jsonChat<
+          Array<{ idx: number; responseId: string; sentiment: 'positive' | 'neutral' | 'negative' }>
+        >(
+          '你是文字情緒分類專家。請回傳 JSON array，為每筆回答標注情緒。繁體中文判斷。',
+          prompt,
+          { temperature: 0.1 },
+        );
+
+        if (Array.isArray(r)) {
+          for (const item of r) {
+            const s = item?.sentiment;
+            const sentiment: 'positive' | 'neutral' | 'negative' =
+              s === 'positive' || s === 'negative' ? s : 'neutral';
+            const original = batch.find((a) => a.responseId === item?.responseId);
+            if (original) {
+              sentiments.push({
+                responseId: original.responseId,
+                questionId,
+                text: original.text,
+                sentiment,
+              });
+            }
+          }
+        }
+      } catch (err) {
+        this.logger.error('Per-response sentiment analysis batch failed, falling back to neutral', err);
+        // fallback: 全標 neutral
+        for (const a of batch) {
+          sentiments.push({
+            responseId: a.responseId,
+            questionId,
+            text: a.text,
+            sentiment: 'neutral',
+          });
+        }
+      }
+    }
+
+    return {
+      surveyId,
+      questionId,
+      sentiments,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
   // ─── Prompt 組合 ──────────────────────────────────────────────────────────
 
-  private buildPrompt(stats: SurveyStatsInput): string {
+  private buildPrompt(stats: SurveyStatsInput, reportType: ReportType = 'simple'): string {
+    const detailed = reportType === 'detailed';
     const lines: string[] = [];
     lines.push(`問卷標題：${stats.title}`);
     lines.push(`有效樣本數：${stats.totalResponses}`);
+    if (stats.qualityDistribution && stats.qualityDistribution.total > 0) {
+      const q = stats.qualityDistribution;
+      lines.push(
+        `樣本品質：通過 ${q.passed} / 疑似 ${q.suspicious} / 退件 ${q.rejected} / 未審核 ${q.unaudited}` +
+          (q.avgScore !== null ? `，平均品質分 ${q.avgScore}` : ''),
+      );
+    }
     lines.push('');
     lines.push('題目統計：');
 
@@ -198,18 +389,37 @@ export class AiInsightsService {
     });
 
     lines.push('---');
-    lines.push('請回傳 JSON，格式為：');
-    lines.push('{');
-    lines.push('  "summary": "1-2 句話的整體洞察",');
-    lines.push('  "keyFindings": ["主要發現 1", "主要發現 2", "..."],');
-    lines.push('  "concerns": ["資料品質/偏差注意事項"],');
-    lines.push('  "recommendations": ["後續可行動的建議"]');
-    lines.push('}');
-    lines.push('');
-    lines.push('注意：');
-    lines.push('- 樣本數 < 30 時 concerns 必須提及樣本量小');
-    lines.push('- recommendations 要具體可執行（例如「追加 X 題以驗證 Y」）');
-    lines.push('- 不要編造數字或事實');
+    if (detailed) {
+      lines.push('請產生一份「詳細分析報告」，回傳 JSON，格式為：');
+      lines.push('{');
+      lines.push('  "summary": "3-5 句的整體洞察與脈絡",');
+      lines.push('  "keyFindings": ["主要發現（可較多、含具體數字與短引述）", "..."],');
+      lines.push('  "questionBreakdown": [{ "question": "題目（精簡）", "insight": "該題 1 句深入洞察" }],');
+      lines.push('  "crossFindings": ["跨題/關聯觀察，例如 A 題高分者在 B 題傾向…"],');
+      lines.push('  "concerns": ["資料品質/偏差/代表性注意事項"],');
+      lines.push('  "recommendations": ["具體可執行的後續建議"],');
+      lines.push('  "methodology": "說明樣本量、品質分布對結論信賴度的影響、解讀限制（2-4 句）"');
+      lines.push('}');
+      lines.push('');
+      lines.push('注意：');
+      lines.push('- questionBreakdown 要涵蓋每一題（有作答的題目）');
+      lines.push('- crossFindings 只在資料真的呈現關聯時才寫，沒有就回空陣列，禁止臆測');
+      lines.push('- methodology 必須誠實反映樣本量大小與品質對信賴度的影響');
+      lines.push('- 全程不要編造數字或事實，所有結論須可由上方統計推得');
+    } else {
+      lines.push('請回傳 JSON，格式為：');
+      lines.push('{');
+      lines.push('  "summary": "1-2 句話的整體洞察",');
+      lines.push('  "keyFindings": ["主要發現 1（含短引述）", "主要發現 2（含短引述）", "..."],');
+      lines.push('  "concerns": ["資料品質/偏差注意事項"],');
+      lines.push('  "recommendations": ["後續可行動的建議"]');
+      lines.push('}');
+      lines.push('');
+      lines.push('注意：');
+      lines.push('- 樣本數 < 30 時 concerns 必須提及樣本量小');
+      lines.push('- recommendations 要具體可執行（例如「追加 X 題以驗證 Y」）');
+      lines.push('- 不要編造數字或事實');
+    }
 
     return lines.join('\n');
   }
@@ -241,9 +451,44 @@ export class AiInsightsService {
     return [];
   }
 
-  private fallback(stats: SurveyStatsInput, reasonNote: string): SurveyInsights {
+  private withEvidenceQuotes(
+    findings: string[],
+    stats: SurveyStatsInput,
+  ): string[] {
+    if (findings.length === 0) return findings;
+    const quotePool = stats.questionStats
+      .flatMap((q) => q.sampleTexts ?? [])
+      .map((text) => text?.trim())
+      .filter((text): text is string => Boolean(text))
+      .map((text) => this.normalizeQuote(text));
+    if (quotePool.length === 0) return findings;
+
+    let quoteIndex = 0;
+    return findings.map((finding) => {
+      if (this.hasQuotedSnippet(finding)) return finding;
+      const quote = quotePool[quoteIndex % quotePool.length];
+      quoteIndex += 1;
+      return `${finding} (quote: "${quote.slice(0, 60)}")`;
+    });
+  }
+
+  private hasQuotedSnippet(text: string): boolean {
+    return text.includes('"');
+  }
+
+  private normalizeQuote(text: string): string {
+    return text.replace(/\s+/g, ' ').replace(/"/g, '').trim();
+  }
+
+  private fallback(
+    stats: SurveyStatsInput,
+    reasonNote: string,
+    reportType: ReportType = 'simple',
+  ): SurveyInsights {
     const findings: string[] = [];
+    const breakdown: Array<{ question: string; insight: string }> = [];
     stats.questionStats.forEach((q) => {
+      let qInsight = '';
       // 選擇題：找出最多人選的選項
       if (q.optionCounts && q.optionCounts.length > 0) {
         const totalVotes = q.optionCounts.reduce((s, o) => s + o.count, 0);
@@ -252,19 +497,23 @@ export class AiInsightsService {
           const top = sorted[0];
           const pct = Math.round((top.count / totalVotes) * 100);
           findings.push(`「${q.title}」最多人選「${top.label}」（${pct}%）`);
+          qInsight = `最多人選「${top.label}」（${pct}%），共 ${totalVotes} 票`;
         }
       }
       // 評分題：平均分
       if (typeof q.averageRating === 'number') {
         findings.push(`「${q.title}」平均分 ${q.averageRating.toFixed(1)} / 5`);
+        qInsight = `平均分 ${q.averageRating.toFixed(1)} / 5（${q.totalAnswers} 人評分）`;
       }
       // 文字題：列出第一個有效回答
       if (q.sampleTexts && q.sampleTexts.length > 0) {
         const first = q.sampleTexts.find((t) => t && t.trim());
         if (first) {
           findings.push(`「${q.title}」收到開放回答（樣本："${String(first).slice(0, 30)}..."）`);
+          qInsight = `收到 ${q.totalAnswers} 則開放回答，需人工或 AI 進一步歸納主題`;
         }
       }
+      if (qInsight) breakdown.push({ question: q.title, insight: qInsight });
     });
 
     const concerns: string[] = [];
@@ -275,9 +524,10 @@ export class AiInsightsService {
       concerns.push('尚無有效作答可分析，請等待更多受試者填答');
     }
 
-    return {
+    const base: SurveyInsights = {
+      reportType,
       summary: reasonNote,
-      keyFindings: findings.slice(0, 6),
+      keyFindings: findings.slice(0, reportType === 'detailed' ? 10 : 6),
       concerns,
       recommendations: [
         stats.totalResponses < 30
@@ -288,5 +538,18 @@ export class AiInsightsService {
       sampleSize: stats.totalResponses,
       generatedAt: new Date().toISOString(),
     };
+
+    if (reportType === 'detailed') {
+      base.questionBreakdown = breakdown.slice(0, 30);
+      base.crossFindings = [];
+      const q = stats.qualityDistribution;
+      base.methodology =
+        `本報告為規則式 fallback（AI 服務不可用時生成）。樣本數 ${stats.totalResponses} 份` +
+        (q && q.total > 0 && q.avgScore !== null ? `，平均品質分 ${q.avgScore}` : '') +
+        (stats.totalResponses < 30 ? '，樣本量偏小、結論代表性有限。' : '。') +
+        ' AI 恢復後重新生成可取得完整詳細分析。';
+    }
+
+    return base;
   }
 }

@@ -12,11 +12,13 @@ import {
 import { users } from './users';
 
 export const notificationTypeEnum = pgEnum('notification_type', [
-  'survey_approved',  // 問卷審核通過
-  'survey_rejected',  // 問卷審核不通過
-  'new_response',     // 有人填了你的問卷（問券方）
-  'reward_issued',    // 獎勵已發放（受試者）
-  'system',           // 系統公告
+  'survey_approved',      // 問卷審核通過
+  'survey_rejected',      // 問卷審核不通過
+  'new_response',         // 有人填了你的問卷（問券方）
+  'response_milestone',   // QUA-203: 問卷回覆數達到里程碑（50/100/500/1000）
+  'daily_response_digest',// QUA-203: 每日回覆摘要（批次通知）
+  'reward_issued',        // 獎勵已發放（受試者）
+  'system',               // 系統公告
 ]);
 
 export const notifications = pgTable(

@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   unique,
+  index,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 import { surveys } from './surveys';
@@ -65,6 +66,9 @@ export const transactions = pgTable('transactions', {
 }, (t) => ({
   // 外部交易冪等：同 provider + 同 ref 只能入帳一次
   uniqueExternalRef: unique('uq_transactions_external').on(t.externalProvider, t.externalRef),
+  userIdx: index('transactions_user_id_idx').on(t.userId),
+  statusIdx: index('transactions_status_idx').on(t.status),
+  typeIdx: index('transactions_type_idx').on(t.type),
 }));
 
 // 複式記帳分錄
@@ -75,4 +79,7 @@ export const journalEntries = pgTable('journal_entries', {
   debitAmount: integer('debit_amount').notNull().default(0),
   creditAmount: integer('credit_amount').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
-});
+}, (t) => ({
+  txnIdx: index('journal_entries_transaction_id_idx').on(t.transactionId),
+  accountIdx: index('journal_entries_account_name_idx').on(t.accountName),
+}));

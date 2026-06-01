@@ -1,120 +1,583 @@
-# QuanWen — CLAUDE.md
+# CLAUDE.md
 
-## 專案根目錄結構
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Commands
+
+```bash
+# Development (run in two terminals)
+pnpm --filter api dev        # NestJS API  → http://localhost:3001
+pnpm --filter web dev        # Next.js Web → http://localhost:3000
+pnpm dev                     # Both in parallel
+
+# Build
+pnpm build                   # Build all packages then all apps
+pnpm --filter api build      # API only
+pnpm --filter web build      # Web only
+
+# Testing
+pnpm test                    # All unit tests (Vitest)
+pnpm --filter api test       # API unit/integration tests
+pnpm --filter web test       # Web unit tests
+pnpm --filter api test:watch # API tests in watch mode
+pnpm --filter api test:coverage
+pnpm --filter web test:e2e   # Playwright E2E (full browser)
+pnpm --filter web test:e2e --headed  # Playwright with visible browser
+
+# Run a single test file (unit)
+pnpm --filter api test src/wallet/wallet.service.test.ts
+
+# Run a single E2E spec (match by filename fragment)
+pnpm --filter web test:e2e -- --grep "happy-path"
+# Or pass the spec file directly:
+cd apps/web && npx playwright test e2e/happy-path-qua11.spec.ts
+
+# Static analysis
+pnpm lint                    # ESLint across all apps
+pnpm type-check              # tsc --noEmit across all apps
+pnpm verify                  # type-check + test
+
+# Database (requires USE_PG_MEM=false + valid DATABASE_URL)
+pnpm db:push                 # Sync Drizzle schema → DB (dev)
+pnpm db:seed                 # Seed 3 test users
+pnpm db:studio               # Drizzle Studio GUI
+pnpm --filter api db:generate  # Generate migration files
+pnpm --filter api db:reset     # Wipe + re-seed
+```
+
+**Test accounts** (password `000` for all): `user@quanwen.com` (admin → `/admin`), `user1@quanwen.com` (surveyor → `/dashboard`), `user2@quanwen.com` (respondent → `/dashboard`).
+
+**E2E aliases** in `apps/web/e2e/helpers/auth.ts`: `aa`=user2, `bb`=user1, `cc`=admin. Use `login(page, 'aa')` in specs.
+
+**Windows double-click launch**: `start-quanwen.bat` (vault root) auto-starts Docker, waits for Postgres, seeds, then opens two terminal windows for API and Web. `stop-quanwen.bat` shuts them down.
+
+## Architecture
+
+**Monorepo** (`pnpm` workspaces):
+- `apps/api` — NestJS 10, port 3001. All business logic.
+- `apps/web` — Next.js 14 App Router, port 3000. Frontend.
+- `packages/shared-types` — TypeScript types shared by both apps. When a type must be consumed by both `api` and `web`, define it here and import as `@quanwen/shared-types`. Do not duplicate type definitions across apps.
+- `packages/report-generator` — Internal HTML report engine (adapted from nexu-io/html-anything). Used by `ExportService`. Modifiable — it's our code.
+
+### API Module Map
+
+Every feature is a NestJS module: `auth`, `profile`, `tags`, `surveys`, `responses`, `mutual`, `wallet`, `notifications`, `admin`, `ai-audit`, `mail`, `kyc`, `point-shop`, `spin`, `appeals`, `export`, `reconciliation`.
+
+Pattern inside each module: `controller → service → Drizzle ORM → DB`.
+
+Key cross-cutting modules:
+- `db/` — `@Global()` `DatabaseModule` exports a single `AppDb` (Drizzle) token. All services inject `@Inject(DB) private db: AppDb`.
+- `ai-audit/` — `ZaiClient` wraps Z.ai GLM-5.1. Used by `SurveysService` (AI draft + async quality audit) and `MutualService` (response quality gate).
+- `common/pipes/zod-validation.pipe.ts` — Applied globally. DTOs use Zod schemas, not class-validator.
+- `common/filters/http-exception.filter.ts` — Global exception filter; standardises error shape.
+- `appeals/` — Respondent appeal flow for rejected responses; creates `appeals` rows and notifies admin.
+- `export/` — Survey result export in PDF, Excel (buffered + streaming), CSV (streaming, 500-row keyset batches), and Markdown. Text answers pass through `redactPii()` before export.
+- `reconciliation/` — `ReconciliationService` cross-checks ECPay payment callbacks against internal `transactions` records to detect discrepancies.
+
+### Database Modes
+
+| Mode | How to enable | Notes |
+|------|--------------|-------|
+| PGlite (in-memory) | `USE_PG_MEM=true` | Fastest; data lost on restart; auto-runs DDL on startup |
+| Real PostgreSQL | `USE_PG_MEM=false` + `DATABASE_URL` | Requires `pnpm db:push` after schema changes |
+
+`DatabaseModule` detects `USE_PG_MEM` and provides either a PGlite or `pg` Pool driver to Drizzle. All schema DDL is also inlined into the PGlite `useFactory` (`apps/api/src/db/database.module.ts`) so `db:push` is not needed in memory mode.
+
+**Critical**: When adding new tables or columns to the Drizzle schema files, you **must** update **two** additional files or tests will fail:
+1. `apps/api/src/db/database.module.ts` — the PGlite `useFactory` DDL block (for `USE_PG_MEM=true` dev/CI bootstrap).
+2. `apps/api/src/test-helpers/pglite-ddl.ts` — the canonical `FULL_SCHEMA_DDL` used by all integration tests.
+
+Forgetting either causes silent schema drift: `USE_PG_MEM=true` starts with a stale schema, and integration tests fail with "column X does not exist".
+
+### Web Architecture
+
+- Next.js App Router — all pages under `src/app/`.
+- API calls go through `src/lib/api.ts` (axios instance, auto-attaches Bearer token from localStorage).
+- Server state via TanStack Query hooks in `src/hooks/use-*.ts`. Each domain has its own hook file (`use-auth`, `use-surveys`, `use-wallet`, etc.).
+- Zustand is used for lightweight client-only state (e.g. `behavior-tracker`).
+- Auth pages live at `/auth/<name>/page.tsx` — **not** a route group. Navbar hides itself on `/auth/*` via `usePathname()`.
+
+### One Account, Both Roles (Phase A)
+
+Every new user — whether email/password or OAuth — gets **both** a `respondent_profiles` row and a `surveyor_profiles` row created immediately via `ensureBothProfiles()` in `AuthService`. This is called on `register()` and inside `findOrCreateOAuthUser()`.
+
+This means the `users.role` column is **not** used to gate surveyor vs respondent features; it only distinguishes `admin` from regular users. Do not add `role === 'surveyor'` guards for feature access — check the profile's `isOnboardingDone` flag instead.
+
+### Auth Flow
+
+JWT-based. `passport-jwt` validates `Authorization: Bearer <token>` on all `@UseGuards(JwtAuthGuard)` routes. Token is stored in `localStorage` on the frontend and auto-attached by the axios instance.
+
+OAuth (Google, LINE, Apple) implemented without Passport strategies for LINE/Apple — raw `fetch` + `jose` for JWT verification. New OAuth users land on `/auth/select-role` before onboarding.
+
+**OAuth account linking security rule**: `findOrCreateOAuthUser()` does **not** auto-link an OAuth login to an existing email-matching account. A new user record is always created (with a fallback `@oauth.quanwen.local` email if there's a collision). Users who want to merge accounts must log in with the existing account first and bind the provider from Settings → Account. This prevents OAuth accounts from silently gaining access to existing accounts (including admin accounts).
+
+**OAuth binding flow**: `GET /auth/bind/:provider` (requires JWT) creates a short-lived in-memory bind session (10-minute TTL) keyed by a CSPRNG token, then redirects to the provider. The callback resolves the session and links the provider to the existing user.
+
+**Password policy** (enforced in `AuthController.validatePasswordPolicy`): ≥8 chars, ≤72 chars, at least one uppercase letter, at least one digit.
+
+**Token refresh**: `POST /auth/refresh` (requires valid JWT) re-signs a fresh 7-day token without re-authenticating. The frontend should call this before the token expires.
+
+### Response Quality Audit Pipeline
+
+Three layers run sequentially on every submitted response:
+
+1. **Layer 1 — Anti-Cheat** (`AntiCheatService`): deterministic heuristics (fill duration, duplicate detection, suspicious flags). Score 0-100.
+2. **Layer 2 — Behavioral scoring** (`QualityAuditService`): weighted signals — behavior (25%), attention check (20%), reverse-consistency (15%), text relevance (15%), AI-detection (10%), reputation (10%), timing (5%).
+3. **Layer 3 — LLM judge** (`ZaiClient` GLM-5.1): only triggered for gray-zone responses (50-79). Produces `llmScore` + `llmReasoning`.
+
+Final `qualityScore` thresholds: **≥80 = passed** (auto-reward), **50-79 = suspicious** (may trigger LLM), **<50 = rejected** (no reward). Full breakdown stored in `surveyResponses.qualityBreakdown` (JSONB).
+
+`ReputationService` maintains a rolling reputation score per respondent based on their quality history.
+
+### Mutual Survey Flow
+
+1. Surveyor publishes a `type='mutual'` survey → enters FIFO waiting pool.
+2. Cron `matchWaitingPairs()` (every 30s) creates a `mutual_pairs` row linking two surveys.
+3. Each participant fills the other's survey. `AntiCheatService` + `ZaiClient` quality gate runs on submit.
+4. If either side scores < 50 → pair auto-cancelled, survey re-enqueued.
+5. When `status='both_done'` → `GET /mutual/:id` returns `unlocked` block with peer's answers.
+6. Pairs expire after 72 hours (`expireOverduePairs()` cron, every minute).
+
+Standard `/tasks` marketplace filters out `type='mutual'` surveys.
+
+### Wallet / Finance
+
+All monetary amounts are stored as **integers in New Taiwan Dollars (NT$)**. Never use floats.
+
+Double-entry accounting: every `WalletService` mutation creates both a `transactions` record and two `journal_entries` (debit + credit). Survey publication locks budget (`lockedCash`); survey close releases unused budget back to `cashBalance`. Platform takes **15%** fee on each reward payout (`PLATFORM_FEE_RATE = 0.15`).
+
+ECPay deposit limits: NT$100–NT$100,000 per transaction. Withdrawal limits: NT$300 minimum, NT$30,000 maximum per day. KYC verification is required before withdrawal.
+
+Reconciliation runs via `ReconciliationService` to cross-check ECPay callbacks against internal transaction records.
+
+### Export Formats
+
+`ExportService` (`apps/api/src/responses/export.service.ts`) supports four formats for survey creators:
+- **PDF** — stats summary via `pdfmake` (non-streaming; demo uses standard 14 fonts; prod needs Noto Sans TC embed for Chinese).
+- **Excel (buffered)** — `exceljs`, two sheets: Responses + Summary. Suitable for smaller datasets.
+- **CSV (streaming)** — keyset-cursor pagination in batches of 500, constant memory. UTF-8 BOM prepended for Excel compatibility.
+- **Excel (streaming)** — `exceljs` streaming WorkbookWriter, same keyset approach.
+- **Markdown** — aggregated stats report.
+
+Text-type answers (`text`, `matrix`) are passed through `redactPii()` before export. `cleanOnly` mode filters responses below a configurable `minQualityScore` (default 70).
+
+## Key Rules
 
 ```
-問券/                          ← Obsidian Vault + git root
-├── CLAUDE.md                  ← 這個檔案
-├── 00-首頁/  …  13-系統深度設計/  ← 設計藍圖 (SSOT)
-└── quanwen/                   ← 實作 code ★
-    ├── apps/
-    │   ├── web/               ← Next.js 14
-    │   └── api/               ← NestJS (WIP)
-    ├── pnpm-workspace.yaml
-    └── package.json
+❌ Store amounts as float      ✅ Integer NT$ only
+❌ String-concatenate SQL      ✅ Drizzle parameterised queries
+❌ Skip Zod on req.body        ✅ ZodValidationPipe is global — always define a DTO
+❌ Log tokens / secrets        ✅ logger.info + redact sensitive fields
+❌ Hardcode API keys            ✅ process.env, validated at startup
+❌ Call respondent wallet "儲值" ✅ "待領獎勵" / "我的收益"
+❌ Self-collect payments        ✅ ECPay (綠界) payment gateway only
+❌ Send PII to Z.ai             ✅ De-identify before any AI call
+❌ Platform fee = 10%           ✅ PLATFORM_FEE_RATE = 0.15 (15%)
+❌ Auto-link OAuth by email     ✅ Always create new user; explicit binding via /settings/accounts
+❌ Add schema without DDL sync  ✅ Update both schema/*.ts AND database.module.ts PGlite block
+❌ role guard for feature access ✅ Check profile.isOnboardingDone; all users have both profiles
 ```
 
-> **啟動方式:** 在 `問券/` 執行 `claude`，即可讀到此 CLAUDE.md 和所有設計藍圖。
-> 跑 dev server: `cd quanwen && pnpm --filter web dev`
+## Tailwind Setup Checklist
+
+If styles are missing, verify all four files exist in `apps/web/`:
+1. `postcss.config.mjs` — required for `@tailwind` directives to compile
+2. `tailwind.config.ts` — `content` must cover `./src/app/**` and `./src/components/**`
+3. `src/app/globals.css` — must include `@tailwind base/components/utilities`
+4. `src/app/layout.tsx` — must `import './globals.css'`
+
+After changes: `rm -rf apps/web/.next && pnpm --filter web dev`
+
+## Windows .bat Constraints
+
+The double-click launch scripts (`start-quanwen.bat`, `stop-quanwen.bat`) must follow these rules or they break on this machine (system ANSI = Big5/950):
+
+1. **Pure ASCII only** — no Chinese characters in .bat files. Verify: `[IO.File]::ReadAllBytes($p) | ? {$_ -gt 127}` should return 0 results.
+2. **Use `%~dp0` for paths** — never hardcode Chinese directory names. `set "REPO=%~dp0quanwen"` resolves correctly regardless of encoding.
+3. **Use `pnpm.cmd` not `pnpm`** — `set "PNPM=%PNPM_DIR%\pnpm.cmd"`. Bare `pnpm` picks up a broken `pnpm.exe` due to PATHEXT ordering.
+4. **Nested quotes in `start` commands** — use `start "Title" /D "%REPO%" cmd /k "..."`. No PowerShell backtick escapes inside .bat.
+
+## Environment Variables
+
+Minimum required for dev (see `.env.example` for full list):
+
+| Variable | Required | Notes |
+|----------|----------|-------|
+| `USE_PG_MEM` | dev | `true` = PGlite in-memory (no Docker needed) |
+| `DATABASE_URL` | prod | PostgreSQL connection string |
+| `JWT_SECRET` | always | ≥ 64 chars |
+| `PII_ENCRYPTION_KEY` | prod | AES key for encrypting PII at rest; generate with `openssl rand -hex 32` |
+| `PII_KDF_SALT` | prod | KDF salt; generate with `openssl rand -hex 16` |
+| `ZAI_API_KEY` | AI features | Format: `xxx.yyy` from Z.ai dashboard |
+| `WEB_URL` | CORS | Default: `http://localhost:3000` |
+| `API_URL` | frontend | Default: `http://localhost:3001/api/v1` |
+| `ENABLE_SWAGGER` | dev/staging | Set to `true` to expose `/docs` (Swagger UI) |
+| `LINE_CHANNEL_ID` | LINE OAuth | Channel ID from LINE Developers console (not `LINE_CLIENT_ID`) |
+| `LINE_CHANNEL_SECRET` | LINE OAuth | Channel Secret (not `LINE_CLIENT_SECRET`) |
+| `LINE_CALLBACK_URL` | LINE OAuth | `http://localhost:3001/api/v1/auth/line/callback` |
+
+Google (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_CALLBACK_URL`), Apple (`APPLE_CLIENT_ID`, `APPLE_TEAM_ID`, `APPLE_KEY_ID`, `APPLE_PRIVATE_KEY`, `APPLE_CALLBACK_URL`), and ECPay (`ECPAY_*`) vars are optional for local dev but required for production. See `README.md` for the complete variable table.
+
+## Further Reading
+
+- `README.md` — full DB schema, all API endpoints, sprint history, ADR decisions.
+- `DEPLOYMENT.md` — production environment variables, ECPay sandbox setup.
+- `http://localhost:3001/docs` — Swagger UI (requires `ENABLE_SWAGGER=true` and running API).
 
 ---
 
-Monorepo: `apps/api` (NestJS + Drizzle) + `apps/web` (Next.js 14 App Router)
+## Docker Hub Build & Push（Ubuntu 24.04）
 
-## Setup Checklist (Next.js)
+> **給 Claude Code 的指示**：在 Ubuntu 上執行時，依照以下步驟安裝環境、build 並 push image 到 Docker Hub。
+> Docker Hub 帳號：`me0608623`，專案名稱：`quanwen-api` / `quanwen-web`。
 
-When bootstrapping or diagnosing a missing-styles issue, verify ALL of these exist in `apps/web/`:
+---
 
-- [ ] `postcss.config.mjs` — **required** for Tailwind to compile; without it `@tailwind` directives are ignored
-- [ ] `tailwind.config.ts` — must have `content` covering `./src/app/**` and `./src/components/**`
-- [ ] `src/app/globals.css` — must contain `@tailwind base/components/utilities`
-- [ ] `src/app/layout.tsx` — must `import './globals.css'`
+### 環境安裝（全新 Ubuntu 24.04 必做，已安裝可跳過）
 
-After adding or changing any of the above, clear the build cache before restarting:
+#### 1. 系統套件
 
 ```bash
-rm -rf apps/web/.next
-pnpm --filter web dev
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y git curl wget build-essential ca-certificates gnupg lsb-release
 ```
 
-## Tech Stack
-
-| Layer | Tech |
-|-------|------|
-| Frontend | Next.js 14 (App Router), Tailwind CSS v3, shadcn/ui, React Hook Form + Zod |
-| Backend | NestJS, Drizzle ORM, PostgreSQL |
-| Auth | JWT + Google OAuth (Passport.js) |
-| Monorepo | pnpm workspaces |
-
-## Key Conventions
-
-- Auth pages live at `apps/web/src/app/auth/<name>/page.tsx` (not a route group)
-- Shared auth components: `apps/web/src/app/auth/_components/`
-- Root `layout.tsx` renders `<Navbar>` — hide it on `/auth/*` via `usePathname()`
-- API runs on port `3001`, web on port `3000`
-
-## Role 模型（Phase A：一帳號全功能）
-
-- DB `users.role` enum 仍是 `'surveyor' | 'respondent' | 'admin'`，但**只有 `admin` 在 code 裡真的有意義**。
-- 所有 controller 已拆掉 `assertSurveyor` / `assertRespondent`，一般用戶（surveyor 或 respondent）能呼叫所有非 admin 端點。
-- 註冊頁面沒有「選角色」流程，預設 role=`respondent`（純歷史遺留，無功能差別）。
-- 前端 navbar 對非 admin 用戶一律渲染 3 個 tab：發問卷 / 填問卷 / 互惠。
-- middleware 只擋未登入 + admin path（其他 cross-role 限制全部拆掉）。
-
-## 互惠問卷模型（Phase B）
-
-- `surveys.type` enum：`'standard' | 'mutual'` (預設 standard)
-- 新表 `mutual_pairs`：FIFO 配對 + 72hr 超時
-- `mutual_pairs.a_survey_id` partial UNIQUE（只對 active status 唯一，cancelled/expired/both_done 不佔位）
-- 後端：`apps/api/src/mutual/` (controller / service / module)
-- 前端：`apps/web/src/app/mutual/` (列表 + `[id]` 填答 + unlocked view) + `/admin/mutual` 管理頁
-- 配對 cron：`MutualService.matchWaitingPairs()`（@Cron EVERY_30_SECONDS）
-- 超時 cron：`MutualService.expireOverduePairs()`（@Cron EVERY_MINUTE）
-- AI 品質審核接 `QualityAuditService.audit()` — 任一邊 finalScore < 50 → pair 自動 cancelled、對方那份問卷重新入池
-- 停權檢查：`assertNotSuspended` 跟 standard 一致
-- 解鎖（status=`both_done`）後 `GET /mutual/:id` 多回傳 `unlocked` block，內含「我這份問卷的題目 + 對方填的答案」
-- 標準 `/tasks` 任務市場已過濾掉 mutual 問卷（mutual 走 `/mutual` 配對機制）
-
-### Mutual API endpoints (`apps/api/src/mutual/`)
-
-- `GET /mutual` — 我的所有互惠配對
-- `GET /mutual/pool-stats` — 配對池規模 `{ waiting, myWaiting }`
-- `GET /mutual/:id` — 配對詳情(含 unlocked block 當 both_done)
-- `POST /mutual/:id/submit` — 提交對方問卷的填答(走 AI 審核)
-- `POST /mutual/re-enqueue/:surveyId` — 把現有 mutual 問卷重新進池
-- `GET /admin/mutual?status=` — admin 看所有 pair
-- `POST /admin/mutual/:id/cancel` — admin 強制取消
-
-### Mutual 測試
-
-- service-level integration: `apps/api/src/mutual/mutual.integration.test.ts` (15 tests)
-- admin mutual ops: `apps/api/src/admin/admin-mutual.integration.test.ts` (6 tests)
-- E2E shell: `test-mutual.sh` (vault root) — 端到端跑 publish → 配對 → 雙方填寫 → unlocked
-
-## 啟動指令備忘
+#### 2. Docker Engine
 
 ```bash
-docker compose up -d postgres redis    # 起 DB + Redis
-cd apps/api && pnpm db:push            # 同步 schema (含 mutual)
-pnpm db:seed                            # 灌 user/user1/user2 三帳號
-pnpm --filter api dev                   # API @ :3001
-pnpm --filter web dev                   # Web @ :3000
+# 加入 Docker 官方 GPG key 與 repository
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+# 安裝
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+# 讓目前使用者不需要 sudo 跑 docker
+sudo usermod -aG docker $USER
+newgrp docker
+
+# 開機自動啟動
+sudo systemctl enable docker && sudo systemctl start docker
+
+# 驗證
+docker --version          # Docker version 26.x.x
+docker compose version    # Docker Compose version v2.x.x
+docker run --rm hello-world
 ```
 
-### 雙擊啟動（Windows，已驗證 2026-05-27）
+#### 3. Node.js 22（via nvm）
 
-日常啟動**直接雙擊 vault root 的 `start-quanwen.bat`** 即可，毋須先手動開 Docker。
+```bash
+# 安裝 nvm
+curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+source ~/.bashrc
 
-- 流程（5 步）：偵測 Docker daemon → 沒開就自動啟動 Docker Desktop 並等最多 120s → `docker compose up postgres redis` → 等 Postgres healthy → `db:seed` → 開 **QuanWen API**（:3001）與 **QuanWen Web**（:3000）兩個視窗。
-- 看到 Web 視窗出現 `✓ Ready`，即可開 http://localhost:3000。
-- Dev 帳號（密碼皆 `000`）：`user@quanwen.com`(admin)/ `user1@quanwen.com` / `user2@quanwen.com`。
-- 停止：雙擊 `stop-quanwen.bat` → 選 `[1]` 只關 API/Web（Docker 續跑、下次更快）或 `[2]` 連 Docker 一起關（資料仍保留在 volume）。
+# 安裝 Node.js 22 LTS
+nvm install 22
+nvm use 22
+nvm alias default 22
 
-**這台機器的硬性約束（改 .bat 時務必遵守，否則雙擊會壞）：**
+# 驗證
+node --version   # v22.x.x
+```
 
-1. **.bat 一律純 ASCII**（英文訊息、0 個非 ASCII 位元組）。系統 ANSI 是 Big5(950)，雙擊時 cmd 以 950 起始逐行解析；檔內中文（UTF-8）會被拆碎成假指令，`chcp 65001` 救不回。
-2. **路徑不寫死中文**，用 `set "REPO=%~dp0quanwen"`（`%~dp0` 取自檔案系統，與文字編碼無關）。寫死 `…\問券\…` 在 950 下會 `current directory is invalid`。
-3. **pnpm 一律用 `pnpm.cmd`**：bat 內 `set "PNPM=%PNPM_DIR%\pnpm.cmd"`。裸 `pnpm` 會因 PATHEXT（.EXE 先於 .CMD）挑到這台壞掉的 `pnpm.exe`。
-4. **巢狀引號**用 `start "Title" /D "%REPO%" cmd /k "set PATH=%NODE_DIR%;%%PATH%% && %PNPM% --filter api dev"`；別把 PowerShell 反引號跳脫 `` `" `` 漏進 .bat（批次檔裡反引號是字面字元，會讓 `cmd /k` 整條壞掉）。
+#### 4. pnpm 11（via corepack）
 
-> 驗證 .bat 安全：`[IO.File]::ReadAllBytes($p) | ? {$_ -gt 127}` 應為 0 筆。
+```bash
+corepack enable
+corepack prepare pnpm@11.4.0 --activate
+
+# 驗證
+pnpm --version   # 11.4.0
+```
+
+#### 5. 確認所有工具就緒
+
+```bash
+docker --version && docker compose version && node --version && pnpm --version && git --version
+# 預期：Docker 26+, Compose v2+, Node v22+, pnpm 11.4.0, git 2.x
+```
+
+---
+
+### 前置確認（已安裝環境用此快速驗證）
+
+```bash
+docker run --rm hello-world   # Docker 可用且不需要 sudo
+node --version                # v22.x.x
+pnpm --version                # 11.x.x
+```
+
+### Step 1：取得最新 source code
+
+```bash
+# 若尚未 clone
+git clone git@github.com:me0608623/quanwen.git
+cd quanwen
+
+# 若已 clone，更新到最新
+git fetch origin
+git checkout chore/scale-out-p1-p4
+git pull
+```
+
+### Step 2：安裝依賴
+
+```bash
+pnpm install
+```
+
+### Step 3：登入 Docker Hub
+
+```bash
+docker login
+# 輸入 Docker Hub username: me0608623
+# 輸入 password 或 access token
+```
+
+### Step 4：Build + Push API image
+
+```bash
+# Build（Ubuntu 網路正常，直接用標準 Dockerfile）
+docker compose -f docker-compose.yml -f docker-compose.full.yml build api
+
+# 確認 image 存在
+docker images | grep quanwen-api
+
+# Tag
+docker tag quanwen-api:latest me0608623/quanwen-api:latest
+docker tag quanwen-api:latest me0608623/quanwen-api:v0.1.0
+
+# Push
+docker push me0608623/quanwen-api:latest
+docker push me0608623/quanwen-api:v0.1.0
+```
+
+### Step 5：Build + Push Web image
+
+> Ubuntu 網路正常，可以連 `fonts.gstatic.com`，使用標準 Dockerfile 即可。
+
+```bash
+# Build web image（會下載 Google Fonts，需要網路，約 3-5 分鐘）
+docker compose -f docker-compose.yml -f docker-compose.full.yml build web
+
+# 確認 image 存在
+docker images | grep quanwen-web
+
+# Tag
+docker tag quanwen-web:latest me0608623/quanwen-web:latest
+docker tag quanwen-web:latest me0608623/quanwen-web:v0.1.0
+
+# Push
+docker push me0608623/quanwen-web:latest
+docker push me0608623/quanwen-web:v0.1.0
+```
+
+### Step 6：驗證 Docker Hub 上的 image
+
+```bash
+# Pull 並測試（可選）
+docker pull me0608623/quanwen-api:latest
+docker pull me0608623/quanwen-web:latest
+
+# 確認 image 大小正常
+docker images | grep me0608623
+# 預期：quanwen-api ~780MB，quanwen-web ~300MB
+```
+
+### Step 7：一鍵啟動完整 stack 驗證（可選）
+
+```bash
+# 建立 .env（最小設定，僅供驗證）
+cat > /tmp/quanwen-test.env << 'EOF'
+DOCKERHUB_USERNAME=me0608623
+APP_VERSION=latest
+JWT_SECRET=$(openssl rand -base64 48)
+PII_ENCRYPTION_KEY=$(openssl rand -hex 32)
+WEB_URL=http://localhost:3000
+EOF
+
+# 用 docker-compose.hub.yml 啟動（從 Docker Hub pull）
+cp /tmp/quanwen-test.env .env
+docker compose -f docker-compose.hub.yml up -d
+
+# 等待啟動（約 30 秒）
+sleep 30
+
+# 驗證 API
+curl -s http://localhost:3001/api/v1/health
+
+# 驗證 Web
+curl -sI http://localhost:3000 | head -1
+
+# 停止
+docker compose -f docker-compose.hub.yml down
+```
+
+### 常見錯誤
+
+| 錯誤 | 原因 | 解法 |
+|------|------|------|
+| `permission denied` | Docker 未加入群組 | `sudo usermod -aG docker $USER && newgrp docker` |
+| `unauthorized` | 未登入或 token 過期 | `docker login` |
+| fonts.gstatic.com 下載失敗 | 網路問題（通常 Ubuntu 不會出現） | 確認 `curl https://fonts.gstatic.com/` 可連 |
+| `ERR_PNPM_LOCKFILE_CONFIG_MISMATCH` | pnpm 版本太舊 | `corepack prepare pnpm@11.4.0 --activate` |
+| Web image build 失敗（standalone） | Linux 上不會有 EPERM | 若出現其他錯誤，`rm -rf apps/web/.next && pnpm --filter web build` |
+
+### Windows vs Ubuntu build 差異說明
+
+| 項目 | Windows Docker Desktop | Ubuntu Docker Engine |
+|------|----------------------|---------------------|
+| API build | ✅ 標準 `docker compose build api` | ✅ 相同 |
+| Web build | ⚠️ 需用 `Dockerfile.prebuilt`（Docker 封鎖 Google CDN） | ✅ 標準 `docker compose build web` |
+| Google Fonts 下載 | 只能在 Windows host 上下載 | ✅ 直接在 Docker 內下載 |
+| standalone EPERM | ⚠️ 需先刪 `.next/standalone` | ✅ 無此問題 |
+
+---
+
+## Ubuntu 上 Pull Image 並啟動服務
+
+> **給 Claude Code 的指示**：不需要 source code，直接從 Docker Hub pull image 啟動完整服務。
+> 適用情境：生產伺服器、新機器、只想跑服務不想 build。
+
+### Step 1：安裝 Docker Engine（若未安裝）
+
+```bash
+# 快速安裝 Docker Engine（Ubuntu 24.04）
+sudo apt update && sudo apt install -y ca-certificates curl gnupg
+sudo install -m 0755 -d /etc/apt/keyrings
+sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+  -o /etc/apt/keyrings/docker.asc
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] \
+  https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable" | \
+  sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker $USER && newgrp docker
+
+# 驗證
+docker run --rm hello-world
+```
+
+### Step 2：取得 docker-compose.hub.yml
+
+```bash
+mkdir -p ~/quanwen && cd ~/quanwen
+
+# 方法 A：從 GitHub 直接下載（不需要 clone 整個 repo）
+curl -fsSL https://raw.githubusercontent.com/me0608623/quanwen/chore/scale-out-p1-p4/docker-compose.hub.yml \
+  -o docker-compose.hub.yml
+
+# 方法 B：若已有 git clone
+# cp /path/to/quanwen/docker-compose.hub.yml ~/quanwen/
+```
+
+### Step 3：建立 .env
+
+```bash
+cd ~/quanwen
+
+# 產生 secrets
+JWT_SECRET=$(openssl rand -base64 48)
+PII_KEY=$(openssl rand -hex 32)
+
+cat > .env << EOF
+DOCKERHUB_USERNAME=me0608623
+APP_VERSION=latest
+JWT_SECRET=${JWT_SECRET}
+PII_ENCRYPTION_KEY=${PII_KEY}
+WEB_URL=http://localhost:3000
+NEXT_PUBLIC_API_URL=http://localhost:3001/api/v1
+EOF
+
+echo ".env 建立完成，內容："
+cat .env
+```
+
+### Step 4：Pull image 並啟動
+
+```bash
+cd ~/quanwen
+
+# Pull 所有 image（postgres + redis 從 Docker Hub 官方 pull，api + web 從 me0608623）
+docker compose -f docker-compose.hub.yml pull
+
+# 確認 image 已下載
+docker images | grep -E "me0608623|pgvector|redis"
+
+# 啟動全部服務（背景執行）
+docker compose -f docker-compose.hub.yml up -d
+```
+
+### Step 5：確認服務狀態
+
+```bash
+# 查看所有容器狀態（等待 postgres/redis healthy 再繼續）
+docker compose -f docker-compose.hub.yml ps
+
+# 等待 postgres healthy（最多 60 秒）
+until docker inspect --format='{{.State.Health.Status}}' quanwen_postgres 2>/dev/null | grep -q "healthy"; do
+  echo "等待 Postgres..."; sleep 3
+done
+echo "Postgres ready"
+
+# 驗證 API
+curl -s http://localhost:3001/api/v1/health
+# 預期：{"status":"ok"} 或類似
+
+# 驗證 Web
+curl -sI http://localhost:3000 | head -1
+# 預期：HTTP/1.1 200 OK
+```
+
+| 服務 | URL |
+|------|-----|
+| Web 前端 | http://localhost:3000 |
+| API | http://localhost:3001/api/v1 |
+| Swagger | http://localhost:3001/docs（需 `ENABLE_SWAGGER=true`） |
+
+### Step 6：更新版本
+
+```bash
+cd ~/quanwen
+
+# 修改 .env 中的版本號
+sed -i 's/APP_VERSION=.*/APP_VERSION=v0.1.0/' .env
+
+# Pull 新版本 + 重啟（api/web 會更新，postgres/redis 不重啟）
+docker compose -f docker-compose.hub.yml pull
+docker compose -f docker-compose.hub.yml up -d
+
+# 確認新版本在跑
+docker compose -f docker-compose.hub.yml ps
+```
+
+### Step 7：停止服務
+
+```bash
+cd ~/quanwen
+
+# 停止容器（保留資料 volume）
+docker compose -f docker-compose.hub.yml down
+
+# 停止並刪除資料（⚠️ 資料庫資料會消失）
+# docker compose -f docker-compose.hub.yml down -v
+```
+
+### Pull 常見錯誤
+
+| 錯誤 | 原因 | 解法 |
+|------|------|------|
+| `permission denied` | Docker 未加入群組 | `sudo usermod -aG docker $USER && newgrp docker` |
+| `pull access denied` | image 不存在或 private | 確認 `me0608623/quanwen-api` 是 public |
+| `unauthorized` | Private repo 未登入 | `docker login` |
+| API 啟動後 crash | `.env` 缺少必要變數 | 確認 `JWT_SECRET` 和 `PII_ENCRYPTION_KEY` 已設定 |
+| `port is already allocated` | 端口被佔用 | `sudo lsof -i :3000` 找出佔用程序並 kill |
+| Postgres unhealthy | 容器啟動太慢 | 等待 30 秒後再試 `docker compose ps` |

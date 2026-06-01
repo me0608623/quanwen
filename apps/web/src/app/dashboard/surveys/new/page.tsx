@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, type SurveyCategory, type AudienceCriteria } from '@/hooks/use-surveys';
+import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, DEADLINE_TIER_OPTIONS, type SurveyCategory, type AudienceCriteria, type DeadlineTier } from '@/hooks/use-surveys';
 import { usePricingAdvice } from '@/hooks/use-pricing';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-card';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const defaultQuestion = (): SurveyQuestion => ({
   type: 'single_choice',
@@ -15,8 +17,8 @@ const defaultQuestion = (): SurveyQuestion => ({
   sortOrder: 0,
   isRequired: true,
   options: [
-    { label: '', sortOrder: 0 },
-    { label: '', sortOrder: 1 },
+    { id: crypto.randomUUID(), label: '', sortOrder: 0 },
+    { id: crypto.randomUUID(), label: '', sortOrder: 1 },
   ],
 });
 
@@ -31,9 +33,11 @@ export default function NewSurveyPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [rewardPoints, setRewardPoints] = useState(0);
+  const [deadlineTier, setDeadlineTier] = useState<DeadlineTier>('standard');
   const [targetCount, setTargetCount] = useState(100);
   const [audience, setAudience] = useState<AudienceCriteria>({});
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
+  const livePreviewDraft = useDebouncedValue({ title, description, questions }, 300);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
   const pricingAdvice = usePricingAdvice();
@@ -88,6 +92,7 @@ export default function NewSurveyPage() {
         aiReviewEnabled: type === 'mutual' ? true : aiReviewEnabled,
         externalUrl: type === 'mutual' && externalUrl.trim() ? externalUrl.trim() : undefined,
         rewardPoints: type === 'mutual' ? 0 : rewardPoints,
+        deadlineTier: type === 'mutual' ? 'standard' : deadlineTier,
         targetCount: type === 'mutual' ? 9999 : targetCount,
         // 受眾鎖定只對 standard 有意義（mutual 走配對機制）
         audienceCriteria: type === 'standard' && Object.keys(audience).length > 0 ? audience : undefined,
@@ -194,7 +199,7 @@ export default function NewSurveyPage() {
         </div>
 
         <div>
-          <label className="mb-1 block text-sm font-medium">分類（optional）</label>
+          <label className="mb-1 block text-sm font-medium">分類（選填）</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as SurveyCategory | '')}
@@ -242,6 +247,39 @@ export default function NewSurveyPage() {
             currentReward={rewardPoints}
             onApplyFair={setRewardPoints}
           />
+
+          {/* QUA-34: Rush delivery tier selector */}
+          <div>
+            <label className="mb-1 block text-sm font-medium">交付速度</label>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              {DEADLINE_TIER_OPTIONS.map((opt) => {
+                const effectiveReward = Math.round(rewardPoints * opt.multiplier);
+                return (
+                  <button
+                    key={opt.value}
+                    type="button"
+                    onClick={() => setDeadlineTier(opt.value)}
+                    className={`rounded-lg border-2 px-3 py-2 text-left text-xs transition-colors ${
+                      deadlineTier === opt.value
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/40'
+                    }`}
+                  >
+                    <div className="font-semibold">{opt.label}</div>
+                    <div className="mt-0.5 text-muted-foreground">{opt.hint}</div>
+                    {rewardPoints > 0 && opt.multiplier > 1 && (
+                      <div className="mt-1 font-medium text-primary">
+                        NT${effectiveReward}/份
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">
+              選擇較短的交付期限會自動提高每份獎勵吸引受試者，並設定對應截止日。
+            </p>
+          </div>
           </>
         )}
 
@@ -251,7 +289,7 @@ export default function NewSurveyPage() {
               互惠問卷沒有金錢獎勵與配額限制 — 系統會自動幫你配對另一個有 mutual 問卷的人。
             </div>
             <div>
-              <label className="mb-1 block text-sm font-medium">外部問卷連結（optional）</label>
+              <label className="mb-1 block text-sm font-medium">外部問卷連結（選填）</label>
               <input
                 type="url"
                 value={externalUrl}
@@ -315,6 +353,10 @@ export default function NewSurveyPage() {
             index={i}
             onChange={(updated) => updateQuestion(i, updated)}
             onRemove={() => removeQuestion(i)}
+            jumpTargets={questions
+              .map((qq, idx) => ({ question: qq, idx }))
+              .filter(({ idx }) => idx !== i)
+              .map(({ question: qq, idx }) => ({ index: idx, title: qq.title }))}
             ratingSiblings={questions
               .map((qq, idx) => ({ q: qq, idx }))
               .filter(({ q: qq, idx }) => qq.type === 'rating' && idx !== i)
@@ -331,6 +373,15 @@ export default function NewSurveyPage() {
         </button>
       </section>
 
+      <section className="space-y-3 rounded-lg border border-border p-4">
+        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">即時預覽</h2>
+        <SurveyPreviewPlayer
+          title={livePreviewDraft.title}
+          description={livePreviewDraft.description}
+          questions={livePreviewDraft.questions}
+        />
+      </section>
+
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-2">
         {createSurvey.error && (
@@ -338,6 +389,7 @@ export default function NewSurveyPage() {
         )}
         <button
           type="button"
+          aria-label="儲存草稿"
           onClick={handleSaveDraft}
           disabled={createSurvey.isPending}
           className="rounded-md bg-primary px-6 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"

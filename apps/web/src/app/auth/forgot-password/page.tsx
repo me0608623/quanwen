@@ -14,7 +14,7 @@ import { useForgotPassword } from "@/hooks/use-auth";
 import { extractApiError } from "@/lib/extract-error";
 import { AuthShell } from "../_components/auth-shell";
 
-const Schema = z.object({ email: z.string().email("請輸入有效 Email") });
+const Schema = z.object({ email: z.string().email("請輸入有效的電子郵件") });
 type ForgotInput = z.infer<typeof Schema>;
 
 export default function ForgotPasswordPage() {
@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
           <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-left">
             <p className="text-xs leading-relaxed text-amber-800">
               <strong>安全提醒：</strong>連結 1 小時內有效。為防止帳號被入侵，
-              我們不會告知 email 是否存在於系統中。
+              我們不會告知電子郵件是否存在於系統中。
             </p>
           </div>
           <Link
@@ -71,14 +71,14 @@ export default function ForgotPasswordPage() {
         </Link>
         <h2 className="mb-1.5 text-3xl font-bold tracking-tight text-slate-900">忘記密碼?</h2>
         <p className="text-sm text-slate-500">
-          別擔心。輸入註冊 Email，我們會寄出重設密碼連結給你。
+          別擔心。輸入註冊電子郵件，我們會寄出重設密碼連結給你。
         </p>
       </div>
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div>
           <Label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-slate-900">
-            Email
+            電子郵件
           </Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
@@ -86,7 +86,7 @@ export default function ForgotPasswordPage() {
               id="email"
               type="email"
               autoComplete="email"
-              placeholder="you@example.com"
+              placeholder="請輸入電子郵件"
               autoFocus
               className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm focus-visible:border-[#1F6FEB] focus-visible:ring-2 focus-visible:ring-[#1F6FEB]/15"
               {...form.register("email")}

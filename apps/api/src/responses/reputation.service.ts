@@ -1,5 +1,5 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import { respondentProfiles, reputationHistory } from '../db/schema';
@@ -24,38 +24,41 @@ export class ReputationService {
   async adjust(userId: string, delta: number, reason: string): Promise<number | null> {
     if (delta === 0) return null;
 
-    const rows = await this.db
-      .select({
-        id: respondentProfiles.id,
-        reputationScore: respondentProfiles.reputationScore,
-      })
-      .from(respondentProfiles)
-      .where(eq(respondentProfiles.userId, userId))
-      .limit(1);
+    // Transaction ensures the read and atomic SQL update are not interleaved with
+    // other concurrent adjustments; GREATEST/LEAST in the UPDATE enforces [0,100].
+    return this.db.transaction(async (tx) => {
+      const rows = await tx
+        .select({ id: respondentProfiles.id, reputationScore: respondentProfiles.reputationScore })
+        .from(respondentProfiles)
+        .where(eq(respondentProfiles.userId, userId))
+        .limit(1);
 
-    const profile = rows[0];
-    if (!profile) return null;
+      const profile = rows[0];
+      if (!profile) return null;
 
-    const newScore = Math.max(0, Math.min(100, profile.reputationScore + delta));
-    // 若 clamp 後沒變化（例如已 100 又 +1），仍然記一筆 0 變動避免假象，但 delta 用實際變化值
-    const actualDelta = newScore - profile.reputationScore;
+      const newScore = Math.max(0, Math.min(100, profile.reputationScore + delta));
+      const actualDelta = newScore - profile.reputationScore;
 
-    await this.db
-      .update(respondentProfiles)
-      .set({ reputationScore: newScore, updatedAt: new Date() })
-      .where(eq(respondentProfiles.id, profile.id));
+      await tx
+        .update(respondentProfiles)
+        .set({
+          reputationScore: sql`GREATEST(0, LEAST(100, reputation_score + ${delta}))`,
+          updatedAt: new Date(),
+        })
+        .where(eq(respondentProfiles.id, profile.id));
 
-    if (actualDelta !== 0) {
-      await this.db.insert(reputationHistory).values({
-        userId,
-        delta: actualDelta,
-        newScore,
-        reason: reason.slice(0, 200),
-      });
-    }
+      if (actualDelta !== 0) {
+        await tx.insert(reputationHistory).values({
+          userId,
+          delta: actualDelta,
+          newScore,
+          reason: reason.slice(0, 200),
+        });
+      }
 
-    this.logger.log(`Reputation ${userId}: ${profile.reputationScore} → ${newScore} (${reason})`);
-    return newScore;
+      this.logger.log(`Reputation ${userId}: ${profile.reputationScore} → ${newScore} (Δ${actualDelta}, reason: ${reason})`);
+      return newScore;
+    });
   }
 
   /** 取最近 N 筆歷史（給 profile mini chart 用）*/

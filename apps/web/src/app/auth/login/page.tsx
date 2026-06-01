@@ -20,7 +20,7 @@ import { AuthDivider, OAuthButtons } from "../_components/oauth-buttons";
 import { PasswordInput } from "../_components/password-input";
 
 const LoginSchema = z.object({
-  email: z.string().min(1, "請輸入 Email"),
+  email: z.string().min(1, "請輸入電子郵件"),
   password: z.string().min(1, "請輸入密碼"),
   remember: z.boolean().default(false),
 });
@@ -29,8 +29,8 @@ type LoginInput = z.infer<typeof LoginSchema>;
 
 const OAUTH_ERRORS: Record<string, string> = {
   cancelled: "你已取消第三方登入。",
-  oauth_failed: "第三方登入失敗，請稍後再試或改用 Email 登入。",
-  email_missing: "第三方帳號未提供 Email，請改用 Email 註冊。",
+  oauth_failed: "第三方登入失敗，請稍後再試或改用電子郵件登入。",
+  email_missing: "第三方帳號未提供電子郵件，請改用電子郵件註冊。",
 };
 
 function LoginForm() {
@@ -94,12 +94,12 @@ function LoginForm() {
         <OAuthButtons intent="login" role="respondent" />
       </div>
 
-      <AuthDivider text="或使用 Email 登入" />
+      <AuthDivider text="或使用電子郵件登入" />
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
         <div className="animate-[fadeIn_0.75s_ease-out]">
           <Label htmlFor="email" className="mb-1.5 block text-xs font-semibold text-slate-900">
-            Email
+            電子郵件
           </Label>
           <div className="relative">
             <Mail className="pointer-events-none absolute left-3.5 top-1/2 h-[18px] w-[18px] -translate-y-1/2 text-slate-400" />
@@ -107,7 +107,7 @@ function LoginForm() {
               id="email"
               type="email"
               autoComplete="username"
-              placeholder="you@example.com"
+              placeholder="請輸入電子郵件"
               className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/20"
               {...form.register("email")}
             />

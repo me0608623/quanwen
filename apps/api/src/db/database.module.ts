@@ -1,4 +1,4 @@
-import { Global, Module } from '@nestjs/common';
+﻿import { Global, Module } from '@nestjs/common';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import * as schema from './schema';
@@ -41,6 +41,7 @@ export { DB_TOKEN as DB };
               email_verification_token       VARCHAR(128),
               email_verification_expires_at  TIMESTAMPTZ,
               role_selected_at               TIMESTAMPTZ,
+              email_opt_out                  BOOLEAN      NOT NULL DEFAULT false,
               created_at                     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at                     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               deleted_at                     TIMESTAMPTZ
@@ -86,15 +87,17 @@ export { DB_TOKEN as DB };
               updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
 
+            CREATE TYPE response_notif_mode AS ENUM ('per_response','daily_digest');
             CREATE TABLE surveyor_profiles (
-              id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
-              user_id            UUID        NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
-              institution_name   VARCHAR(200),
-              research_purpose   VARCHAR(500),
-              is_verified        BOOLEAN     NOT NULL DEFAULT false,
-              is_onboarding_done BOOLEAN     NOT NULL DEFAULT false,
-              created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-              updated_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
+              id                   UUID                 PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id              UUID                 NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
+              institution_name     VARCHAR(200),
+              research_purpose     VARCHAR(500),
+              is_verified          BOOLEAN              NOT NULL DEFAULT false,
+              is_onboarding_done   BOOLEAN              NOT NULL DEFAULT false,
+              response_notif_mode  response_notif_mode  NOT NULL DEFAULT 'per_response',
+              created_at           TIMESTAMPTZ          NOT NULL DEFAULT NOW(),
+              updated_at           TIMESTAMPTZ          NOT NULL DEFAULT NOW()
             );
 
             CREATE TABLE interest_tags (
@@ -124,14 +127,17 @@ export { DB_TOKEN as DB };
               description      TEXT,
               status           survey_status NOT NULL DEFAULT 'draft',
               reward_points    INTEGER      NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
               reward_type      reward_type  NOT NULL DEFAULT 'cash',
               audience_criteria JSONB,
               target_count     INTEGER      NOT NULL DEFAULT 100,
               completed_count  INTEGER      NOT NULL DEFAULT 0,
               expires_at       TIMESTAMPTZ,
               ai_score         INTEGER,
-              ai_reject_reason TEXT,
-              is_anonymous     BOOLEAN      NOT NULL DEFAULT true,
+              ai_reject_reason      TEXT,
+              question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
+              is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
               created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               published_at     TIMESTAMPTZ
@@ -161,11 +167,13 @@ export { DB_TOKEN as DB };
           await client.exec(`
             CREATE TYPE response_status AS ENUM ('in_progress','submitted','rewarded','rejected');
 
-            CREATE TABLE survey_responses (
+            CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
+      CREATE TABLE survey_responses (
               id                   UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
               survey_id            UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
               respondent_id        UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
               status               response_status NOT NULL DEFAULT 'in_progress',
+        sentiment           response_sentiment,
               started_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
               submitted_at         TIMESTAMPTZ,
               fill_duration_seconds INTEGER,
@@ -174,6 +182,8 @@ export { DB_TOKEN as DB };
               quality_score        INTEGER,
               quality_breakdown    JSONB,
               behavior_log         JSONB,
+              randomization_seed   TEXT,
+              fingerprint_id       TEXT,
               UNIQUE (survey_id, respondent_id)
             );
 
@@ -181,6 +191,7 @@ export { DB_TOKEN as DB };
               id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
               response_id         UUID        NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
               question_id         UUID        NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              survey_id           UUID        NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
               text_answer         TEXT,
               selected_option_ids JSONB,
               rating_value        INTEGER,
@@ -191,7 +202,9 @@ export { DB_TOKEN as DB };
           // Sprint 6: notifications
           await client.exec(`
             CREATE TYPE notification_type AS ENUM (
-              'survey_approved','survey_rejected','new_response','reward_issued','system'
+              'survey_approved','survey_rejected','new_response',
+              'response_milestone','daily_response_digest',
+              'reward_issued','system'
             );
 
             CREATE TABLE notifications (
@@ -352,6 +365,129 @@ export { DB_TOKEN as DB };
               created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             );
+          `);
+
+          // ── Phase B/II 後續 schema（補回 inline DDL 漂移：與 Drizzle schema 對齊）──
+          // 之前這些表/欄位只進了 Drizzle schema + SQL migration，沒同步到這份 PGlite
+          // inline DDL，導致 USE_PG_MEM 開的是舊 schema（/surveys 500: column "type"
+          // does not exist、mutual cron: relation "mutual_pairs" does not exist）。
+          // PGlite 每次 boot 都是全新空庫，故用裸 CREATE/ALTER（毋須 IF NOT EXISTS 守衛）。
+          await client.exec(`
+            CREATE TYPE survey_type AS ENUM ('standard','mutual');
+            CREATE TYPE survey_category AS ENUM (
+              'consumer','academic','wellness','workplace','lifestyle',
+              'tech','social','education','finance','other'
+            );
+            CREATE TYPE mutual_pair_status AS ENUM (
+              'waiting','matched','a_done','b_done','both_done','expired','cancelled'
+            );
+            CREATE TYPE industry AS ENUM (
+              'info_tech','manufacturing','engineering_construction','healthcare',
+              'education','finance','legal','public_sector','service','food_beverage',
+              'hospitality_travel','retail_wholesale','transport_logistics','agriculture',
+              'arts_media','marketing_pr','nonprofit','freelance','student','other'
+            );
+
+            -- surveys 後加欄位（Phase B 互惠 / 分類 / AI 審核開關 / 外部連結）
+            ALTER TABLE surveys ADD COLUMN type survey_type NOT NULL DEFAULT 'standard';
+            ALTER TABLE surveys ADD COLUMN category survey_category;
+            ALTER TABLE surveys ADD COLUMN ai_review_enabled BOOLEAN NOT NULL DEFAULT true;
+            ALTER TABLE surveys ADD COLUMN external_url TEXT;
+
+            -- respondent_profiles 行業欄位（受眾媒合）
+            ALTER TABLE respondent_profiles ADD COLUMN industry industry;
+            ALTER TABLE respondent_profiles ADD COLUMN industry_other VARCHAR(50);
+
+            -- 互惠配對表（Phase B）
+            CREATE TABLE mutual_pairs (
+              id            UUID               PRIMARY KEY DEFAULT gen_random_uuid(),
+              status        mutual_pair_status NOT NULL DEFAULT 'waiting',
+              a_user_id     UUID               NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              a_survey_id   UUID               NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              a_response_id UUID               REFERENCES survey_responses(id) ON DELETE SET NULL,
+              a_filled_at   TIMESTAMPTZ,
+              b_user_id     UUID               REFERENCES users(id) ON DELETE CASCADE,
+              b_survey_id   UUID               REFERENCES surveys(id) ON DELETE CASCADE,
+              b_response_id UUID               REFERENCES survey_responses(id) ON DELETE SET NULL,
+              b_filled_at   TIMESTAMPTZ,
+              a_proof_url   TEXT,
+              b_proof_url   TEXT,
+              a_rating      INTEGER,
+              b_rating      INTEGER,
+              a_rated_at    TIMESTAMPTZ,
+              b_rated_at    TIMESTAMPTZ,
+              matched_at    TIMESTAMPTZ,
+              expires_at    TIMESTAMPTZ,
+              created_at    TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
+              updated_at    TIMESTAMPTZ        NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX mutual_pairs_status_idx ON mutual_pairs(status);
+            CREATE INDEX mutual_pairs_a_user_idx ON mutual_pairs(a_user_id);
+            CREATE INDEX mutual_pairs_b_user_idx ON mutual_pairs(b_user_id);
+            CREATE UNIQUE INDEX mutual_pairs_a_survey_active_unique
+              ON mutual_pairs(a_survey_id)
+              WHERE status IN ('waiting','matched','a_done','b_done');
+
+            -- 轉盤抽獎（spin）
+            CREATE TABLE spin_chances (
+              user_id      UUID        PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+              available    INTEGER     NOT NULL DEFAULT 0,
+              earned_total INTEGER     NOT NULL DEFAULT 0,
+              spent_total  INTEGER     NOT NULL DEFAULT 0,
+              updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE TABLE spin_records (
+              id         UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id    UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              prize_key  VARCHAR(40) NOT NULL,
+              points_won INTEGER     NOT NULL,
+              spin_date  VARCHAR(10) NOT NULL,
+              created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX spin_records_user_idx ON spin_records(user_id);
+
+            -- LLM telemetry（Phase II.11）
+            CREATE TABLE zai_call_log (
+              id                UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+              model             VARCHAR(64)  NOT NULL,
+              prompt_key        VARCHAR(100),
+              prompt_version    VARCHAR(32),
+              prompt_tokens     INTEGER      NOT NULL DEFAULT 0,
+              completion_tokens INTEGER      NOT NULL DEFAULT 0,
+              total_tokens      INTEGER      NOT NULL DEFAULT 0,
+              latency_ms        INTEGER      NOT NULL DEFAULT 0,
+              attempts          INTEGER      NOT NULL DEFAULT 1,
+              finish_reason     VARCHAR(32)  NOT NULL,
+              error_kind        VARCHAR(32),
+              cache_hit         BOOLEAN      NOT NULL DEFAULT false,
+              created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX zai_call_log_created_idx ON zai_call_log(created_at);
+            CREATE INDEX zai_call_log_prompt_key_idx ON zai_call_log(prompt_key);
+            CREATE INDEX zai_call_log_error_idx ON zai_call_log(error_kind);
+          `);
+
+          // QUA-196: Skip Logic / Conditional Branching
+          await client.exec(`
+            CREATE TYPE logic_condition AS ENUM (
+              'eq','neq','gt','gte','lt','lte',
+              'contains','not_contains','is_empty','is_not_empty'
+            );
+            CREATE TYPE logic_action AS ENUM ('show','hide','skip');
+            CREATE TABLE survey_logic_rules (
+              id                  UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+              survey_id           UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              trigger_question_id UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              condition           logic_condition NOT NULL,
+              value               TEXT,
+              action              logic_action    NOT NULL DEFAULT 'show',
+              target_question_id  UUID            NOT NULL REFERENCES survey_questions(id) ON DELETE CASCADE,
+              sort_order          INTEGER         NOT NULL DEFAULT 0,
+              created_at          TIMESTAMPTZ     NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX survey_logic_rules_survey_idx  ON survey_logic_rules(survey_id);
+            CREATE INDEX survey_logic_rules_trigger_idx ON survey_logic_rules(trigger_question_id);
+            CREATE INDEX survey_logic_rules_target_idx  ON survey_logic_rules(target_question_id);
           `);
 
           // ── Seed dev users (auto-created on every startup) ──
@@ -650,13 +786,13 @@ export { DB_TOKEN as DB };
 
           // ── Seed actual answers for aa's response (survey-1 has full questions) ──
           await client.exec(`
-            INSERT INTO response_answers (response_id, question_id, selected_option_ids, rating_value, text_answer)
+            INSERT INTO response_answers (response_id, survey_id, question_id, selected_option_ids, rating_value, text_answer)
             VALUES
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440101',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440101',
                 '[]'::jsonb, NULL, NULL),
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440103',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440103',
                 NULL, 4, NULL),
-              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '44444444-4444-4444-4444-444444440104',
+              ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa01', '${SURVEY_IDS[0]}', '44444444-4444-4444-4444-444444440104',
                 NULL, NULL, '希望加快配送速度，選項更多樣化');
           `);
 
@@ -715,15 +851,15 @@ export { DB_TOKEN as DB };
               ON CONFLICT (survey_id, respondent_id) DO NOTHING;
             `);
             await client.exec(`
-              INSERT INTO response_answers (response_id, question_id, selected_option_ids, rating_value, text_answer)
+              INSERT INTO response_answers (response_id, survey_id, question_id, selected_option_ids, rating_value, text_answer)
               VALUES
-                ('${d.rid}', '44444444-4444-4444-4444-444444440101',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440101',
                   '["${q1Opts[d.q1Pick] ?? ''}"]'::jsonb, NULL, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440102',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440102',
                   '${JSON.stringify(q2Selected)}'::jsonb, NULL, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440103',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440103',
                   NULL, ${d.rating}, NULL),
-                ('${d.rid}', '44444444-4444-4444-4444-444444440104',
+                ('${d.rid}', '33333333-3333-3333-3333-333333333301', '44444444-4444-4444-4444-444444440104',
                   NULL, NULL, '${d.text.replace(/'/g, "''")}');
             `);
           }

@@ -6,12 +6,15 @@ import {
   Param,
   Query,
   Res,
+  Headers,
   UseGuards,
   Req,
   HttpCode,
   HttpStatus,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response as ExpressResponse } from 'express';
 import { ResponsesService } from './responses.service';
 import { RespondentAssistantService } from './respondent-assistant.service';
@@ -117,6 +120,37 @@ export class TasksController {
 
 }
 
+const ANON_TOKEN_MAX_LENGTH = 256;
+
+@Controller('public/tasks')
+export class PublicTasksController {
+  constructor(private readonly responsesService: ResponsesService) {}
+
+  @Get(':id')
+  getPublic(
+    @Param('id') id: string,
+    @Headers('x-anon-token') anonToken: string | undefined,
+  ) {
+    const token = (anonToken ?? '').trim().slice(0, ANON_TOKEN_MAX_LENGTH);
+    return this.responsesService.getPublicSurvey(id, undefined, token || undefined);
+  }
+
+  @Post(':id/submit')
+  @HttpCode(HttpStatus.CREATED)
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 10 } })
+  submitPublic(
+    @Param('id') id: string,
+    @Headers('x-anon-token') anonToken: string | undefined,
+    @Body(new ZodValidationPipe(SubmitResponseSchema)) dto: SubmitResponseDto,
+  ) {
+    const token = (anonToken ?? '').trim();
+    if (token.length > ANON_TOKEN_MAX_LENGTH) {
+      throw new BadRequestException('x-anon-token exceeds maximum length');
+    }
+    return this.responsesService.submitPublicResponse(id, dto, token || undefined);
+  }
+}
+
 // ─── 問券方統計（掛在 /surveys/:id/stats）──────────────────────────────────────
 
 @Controller('surveys')
@@ -128,6 +162,23 @@ export class ResponsesController {
     private readonly exportSvc: ExportService,
   ) {}
 
+  /** GET /surveys/:id/respondents — 受訪者清單（匿名化 token） */
+  @Get(':id/respondents')
+  getRespondents(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('page') page?: string,
+    @Query('pageSize') pageSize?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.responsesService.getRespondents(
+      id,
+      user.id,
+      page ? parseInt(page, 10) : 1,
+      pageSize ? parseInt(pageSize, 10) : 20,
+    );
+  }
+
   /** GET /surveys/:id/stats — 問券方查看填答統計 */
   @Get(':id/stats')
   getStats(@Param('id') id: string, @Req() req: Request) {
@@ -135,12 +186,17 @@ export class ResponsesController {
     return this.responsesService.getSurveyStats(id, user.id);
   }
 
-  /** GET /surveys/:id/ai-insights — AI 生成的填答洞察報告 */
+  /** GET /surveys/:id/ai-insights?type=simple|detailed — AI 生成的填答洞察報告 */
   @Get(':id/ai-insights')
-  async getAiInsights(@Param('id') id: string, @Req() req: Request) {
+  async getAiInsights(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('type') type?: string,
+  ) {
     const user = req.user as AuthenticatedUser;
+    const reportType = type === 'detailed' ? 'detailed' : 'simple';
     const stats = await this.responsesService.getSurveyStats(id, user.id);
-    return this.aiInsights.analyze(stats);
+    return this.aiInsights.analyze(stats, reportType);
   }
 
   /** GET /surveys/:id/questions/:qid/sentiment — 開放題情緒分析 */
@@ -156,6 +212,39 @@ export class ResponsesController {
     if (!q) throw new ForbiddenException('題目不存在或無權存取');
     const texts = (q.sampleTexts ?? []).filter((t: string | null): t is string => !!t && t.trim().length > 0);
     return this.aiInsights.analyzeTextSentiment(q.title, texts);
+  }
+
+  /** GET /surveys/:id/analyze/sentiment?questionId=<qid> — 逐筆回應情緒 badges */
+  @Get(':id/analyze/sentiment')
+  async getResponseSentiments(
+    @Param('id') surveyId: string,
+    @Query('questionId') questionId: string | undefined,
+    @Req() req: Request,
+  ) {
+    if (!questionId) {
+      throw new BadRequestException('缺少 questionId 查詢參數');
+    }
+    const user = req.user as AuthenticatedUser;
+    const answers = await this.responsesService.getTextAnswersForQuestion(
+      surveyId,
+      questionId,
+      user.id,
+    );
+    return this.aiInsights.analyzeResponseSentiments(surveyId, questionId, answers);
+  }
+
+  /** GET /surveys/:id/analyze/cross-tab?field=gender|ageRange — 情緒 × 人口統計交叉分析 */
+  @Get(':id/analyze/cross-tab')
+  analyzeCrossTab(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Query('field') field?: string,
+  ) {
+    if (field !== 'gender' && field !== 'ageRange') {
+      throw new BadRequestException('field must be one of: gender, ageRange');
+    }
+    const user = req.user as AuthenticatedUser;
+    return this.responsesService.analyzeSentimentCrossTab(id, user.id, field);
   }
 
   /** GET /surveys/:id/trend — 近 30 天每日填答趨勢 */
@@ -198,6 +287,87 @@ export class ResponsesController {
     const suffix = isClean ? '_clean' : '';
     res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}.xlsx"`);
     res.send(buf);
+  }
+
+  /** GET /surveys/:id/export.json — 匯出結構化 JSON（survey + questions + 每筆 answers） */
+  @Get(':id/export.json')
+  async exportJson(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    const data = await this.responsesService.exportSurveyResponsesJson(id, user.id, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+    res.setHeader('Content-Type', 'application/json; charset=utf-8');
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${id}_responses${suffix}.json"`);
+    res.send(JSON.stringify(data, null, 2));
+  }
+
+  /** GET /surveys/:id/export.stream.csv — 串流匯出（去識別化 + 防注入；數千份不爆記憶體）*/
+  @Get(':id/export.stream.csv')
+  async exportStreamCsv(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    // Sanitize id before embedding in header value to prevent response-splitting
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_responses${suffix}_stream.csv"`);
+    await this.exportSvc.streamResponsesCsv(id, user.id, res, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+  }
+
+  /** GET /surveys/:id/export.stream.md — 串流匯出 Markdown 報告（聚合摘要）*/
+  @Get(':id/export.stream.md')
+  async exportStreamMd(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
+    res.setHeader('Content-Type', 'text/markdown; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_report.md"`);
+    await this.exportSvc.streamResponsesMarkdown(id, user.id, res);
+  }
+
+  /** GET /surveys/:id/export.stream.xlsx — 串流匯出 Excel（去識別化 + 批次）*/
+  @Get(':id/export.stream.xlsx')
+  async exportStreamXlsx(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    const suffix = isClean ? '_clean' : '';
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_responses${suffix}_stream.xlsx"`);
+    await this.exportSvc.streamResponsesXlsx(id, user.id, res, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
   }
 
   /** GET /surveys/:id/export — 匯出 CSV */

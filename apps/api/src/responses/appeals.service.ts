@@ -67,14 +67,23 @@ export class AppealsService {
       throw new ConflictException('此填答已提交過申訴');
     }
 
-    const inserted = await this.db
-      .insert(responseAppeals)
-      .values({
-        responseId,
-        respondentId,
-        reason: reason.trim().slice(0, 2000),
-      })
-      .returning();
+    let inserted: typeof responseAppeals.$inferSelect[];
+    try {
+      inserted = await this.db
+        .insert(responseAppeals)
+        .values({
+          responseId,
+          respondentId,
+          reason: reason.trim().slice(0, 2000),
+        })
+        .returning();
+    } catch (err: unknown) {
+      // Concurrent appeal race: unique constraint on responseId hit
+      if ((err as { code?: string })?.code === '23505') {
+        throw new ConflictException('此填答已提交過申訴');
+      }
+      throw err;
+    }
 
     this.logger.log(`受試者 ${respondentId} 申訴 response=${responseId}`);
     return { message: '申訴已提交，請等待管理員處理', appeal: inserted[0] };

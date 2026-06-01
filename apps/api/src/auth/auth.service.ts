@@ -7,7 +7,7 @@ import {
   Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, isNull } from 'drizzle-orm';
 import * as bcrypt from 'bcryptjs';
 import { createSign, randomBytes, createHash } from 'crypto';
 import { DB } from '../db';
@@ -21,6 +21,17 @@ import { MailService } from '../mail/mail.service';
 
 const BCRYPT_ROUNDS = 12;
 
+/** Shared password strength validation — same rules as RegisterSchema and auth.controller.ts validatePasswordPolicy */
+function validatePasswordStrength(password: string): void {
+  if (!password || password.length < 8) throw new Error('密碼至少 8 個字元');
+  if (password.length > 72) throw new Error('密碼最多 72 個字元');
+  if (!/[A-Z]/.test(password)) throw new Error('密碼需包含至少一個大寫字母');
+  if (!/[0-9]/.test(password)) throw new Error('密碼需包含至少一個數字');
+}
+// Note: auth.controller.ts has the same check at the HTTP layer. The service-level
+// check here ensures any direct service calls (e.g., from tests or future non-HTTP
+// integrations) also enforce the policy without depending on the controller.
+
 // Short-lived in-memory store for OAuth binding sessions (MVP, non-clustered)
 const bindSessions = new Map<string, { userId: string; provider: string; expiresAt: number }>();
 
@@ -28,6 +39,17 @@ function cleanExpiredBindSessions() {
   const now = Date.now();
   for (const [key, val] of bindSessions) {
     if (val.expiresAt < now) bindSessions.delete(key);
+  }
+}
+
+// Short-lived CSRF state tokens for non-bind LINE/OAuth login flows
+// Prevents an attacker from forging a callback with a crafted ?code= parameter
+const loginStateSessions = new Map<string, { expiresAt: number }>();
+
+function cleanExpiredLoginStates() {
+  const now = Date.now();
+  for (const [key, val] of loginStateSessions) {
+    if (val.expiresAt < now) loginStateSessions.delete(key);
   }
 }
 
@@ -68,28 +90,35 @@ export class AuthService {
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
 
     try {
-      const inserted = await this.db
-        .insert(users)
-        .values({ email: dto.email, passwordHash, displayName: dto.displayName, role: dto.role, roleSelectedAt: new Date() } as NewUser)
-        .returning({
-          id: users.id,
-          email: users.email,
-          displayName: users.displayName,
-          role: users.role,
-          status: users.status,
-          emailVerified: users.emailVerified,
-        });
+      // user + both profiles must be atomic: if profile inserts fail after
+      // user creation, the account is broken (no profile = no dashboard data)
+      let user: { id: string; email: string; displayName: string; role: string; status: string; emailVerified: boolean };
+      await this.db.transaction(async (tx) => {
+        const inserted = await tx
+          .insert(users)
+          .values({ email: dto.email, passwordHash, displayName: dto.displayName, role: dto.role, roleSelectedAt: new Date() } as NewUser)
+          .returning({
+            id: users.id,
+            email: users.email,
+            displayName: users.displayName,
+            role: users.role,
+            status: users.status,
+            emailVerified: users.emailVerified,
+          });
 
-      const user = inserted[0];
-      const token = this.signToken({ sub: user.id, email: user.email, role: user.role });
+        user = inserted[0];
 
-      // Phase A: 一帳號全功能 — 註冊時同時建立兩種 profile，避免「沒 profile 看不到媒合 / 收益不被計入」
-      await this.ensureBothProfiles(user.id);
+        // Phase A: both profiles created atomically with user record
+        await tx.insert(respondentProfiles).values({ userId: user.id, isOnboardingDone: false }).onConflictDoNothing();
+        await tx.insert(surveyorProfiles).values({ userId: user.id, isOnboardingDone: false }).onConflictDoNothing();
+      });
+
+      const token = this.signToken({ sub: user!.id, email: user!.email, role: user!.role });
 
       // Send verification email non-blocking — registration succeeds even if mail fails
-      void this.sendVerificationEmail(user.id);
+      void this.sendVerificationEmail(user!.id);
 
-      return { user: { ...user, avatarUrl: null as string | null }, token };
+      return { user: { ...user!, avatarUrl: null as string | null }, token };
     } catch (err) {
       // PostgreSQL unique violation code 23505 — email already taken
       if ((err as { code?: string })?.code === '23505') {
@@ -100,7 +129,7 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, requestMeta?: { ip?: string; userAgent?: string }) {
-    const rows = await this.db.select().from(users).where(eq(users.email, dto.email)).limit(1);
+    const rows = await this.db.select().from(users).where(and(eq(users.email, dto.email), isNull(users.deletedAt))).limit(1);
     const user = rows[0];
 
     // Phase K.5: 把 email 做雜湊再 log，避免 PII 進 log；同時記 IP/UA 給 brute force 監測
@@ -232,42 +261,59 @@ export class AuthService {
     }
 
     // ── New OAuth user: create account ──
-    let userId: string;
+    // 安全原則：OAuth 登入「不」自動合併同 email 的既有帳號，
+    // 以防止 Google/LINE 用戶意外取得其他帳號（含管理員）的資料與權限。
+    // 若用戶希望合併帳號，應先用既有帳號登入，再從「設定 → 連結帳號」綁定。
+    let userId = '' as string; // assigned inside db.transaction below
     let isNewUser = false;
 
-    const existingByEmail = await this.db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.email, email))
-      .limit(1);
+    // Create user + profiles + OAuth account atomically:
+    // if oauthAccounts insert fails after user creation, the user has no auth
+    // method and becomes a ghost account with no way to log back in.
+    await this.db.transaction(async (tx) => {
+      let effectiveEmail = email;
+      try {
+        const inserted = await tx
+          .insert(users)
+          .values({
+            email,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            role: 'respondent',
+            emailVerified: !email.endsWith('.placeholder'),
+          } as NewUser)
+          .returning({ id: users.id });
+        userId = inserted[0].id;
+      } catch (err: unknown) {
+        if ((err as { code?: string })?.code !== '23505') throw err;
+        // email conflict → fallback email
+        effectiveEmail = `${profile.providerAccountId}+${profile.provider}@oauth.quanwen.local`;
+        const inserted = await tx
+          .insert(users)
+          .values({
+            email: effectiveEmail,
+            displayName: profile.displayName,
+            avatarUrl: profile.avatarUrl,
+            role: 'respondent',
+            emailVerified: true,
+          } as NewUser)
+          .returning({ id: users.id });
+        userId = inserted[0].id;
+      }
 
-    if (existingByEmail.length > 0) {
-      userId = existingByEmail[0].id;
-    } else {
-      const newUser = await this.db
-        .insert(users)
-        .values({
-          email,
-          displayName: profile.displayName,
-          avatarUrl: profile.avatarUrl,
-          role: 'respondent',       // default; 一帳號全功能, role 欄位僅用於 admin 區分
-          emailVerified: !email.endsWith('.placeholder'),
-        } as NewUser)
-        .returning({ id: users.id });
-      userId = newUser[0].id;
-      isNewUser = true;
-    }
+      // Phase A: OAuth 新用戶也補建兩種 profile（idempotent via onConflictDoNothing）
+      await tx.insert(respondentProfiles).values({ userId, isOnboardingDone: false }).onConflictDoNothing();
+      await tx.insert(surveyorProfiles).values({ userId, isOnboardingDone: false }).onConflictDoNothing();
 
-    // Phase A: OAuth 新用戶也補建兩種 profile
-    await this.ensureBothProfiles(userId);
-
-    await this.db.insert(oauthAccounts).values({
-      userId,
-      provider: profile.provider,
-      providerAccountId: profile.providerAccountId,
-      providerEmail: email,
-      providerAvatarUrl: profile.avatarUrl,
+      await tx.insert(oauthAccounts).values({
+        userId,
+        provider: profile.provider,
+        providerAccountId: profile.providerAccountId,
+        providerEmail: effectiveEmail,
+        providerAvatarUrl: profile.avatarUrl,
+      });
     });
+    isNewUser = true;
 
     const userRows = await this.db
       .select({
@@ -355,6 +401,9 @@ export class AuthService {
   // ─── Security: Set / Change Password ──────────────────────────────────────
 
   async setPassword(userId: string, newPassword: string) {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ passwordHash: users.passwordHash })
       .from(users)
@@ -371,6 +420,9 @@ export class AuthService {
   }
 
   async changePassword(userId: string, currentPassword: string, newPassword: string) {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ passwordHash: users.passwordHash })
       .from(users)
@@ -463,6 +515,21 @@ export class AuthService {
     }
     bindSessions.delete(stateToken);
     return { userId: session.userId, provider: session.provider };
+  }
+
+  /** Create a one-time CSRF state token for non-bind OAuth login flows (5 min TTL) */
+  createLoginStateToken(): string {
+    cleanExpiredLoginStates();
+    const token = randomBytes(24).toString('hex');
+    loginStateSessions.set(token, { expiresAt: Date.now() + 5 * 60 * 1000 });
+    return token;
+  }
+
+  /** Validate and consume a CSRF state token. Returns false if invalid or expired. */
+  validateAndConsumeLoginState(token: string): boolean {
+    const session = loginStateSessions.get(token);
+    loginStateSessions.delete(token); // consume regardless (prevent replay)
+    return !!session && session.expiresAt > Date.now();
   }
 
   // ─── LINE OAuth helpers ────────────────────────────────────────────────────
@@ -668,6 +735,9 @@ export class AuthService {
   }
 
   async resetPassword(token: string, newPassword: string): Promise<void> {
+    try { validatePasswordStrength(newPassword); }
+    catch (e) { throw new BadRequestException((e as Error).message); }
+
     const rows = await this.db
       .select({ id: users.id, passwordResetToken: users.passwordResetToken, passwordResetExpiresAt: users.passwordResetExpiresAt })
       .from(users)

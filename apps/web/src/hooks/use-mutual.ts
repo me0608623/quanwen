@@ -64,6 +64,7 @@ export interface MutualUnlockedQuestion {
   title: string;
   type: 'single_choice' | 'multiple_choice' | 'text' | 'rating' | 'matrix';
   sortOrder: number;
+  config?: Record<string, unknown> | null;
   options: Array<{ id: string; label: string; sortOrder: number }>;
   answer: MutualUnlockedAnswer | null;
 }

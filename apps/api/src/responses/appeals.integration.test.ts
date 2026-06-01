@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase AA: 申訴流程 + ReputationService 整合測試
  *
  * 涵蓋：
@@ -105,6 +105,8 @@ describe('AppealsService + ReputationService (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
@@ -114,11 +116,13 @@ describe('AppealsService + ReputationService (integration)', () => {
       );
 
       CREATE TYPE response_status AS ENUM ('in_progress','submitted','rewarded','rejected');
+      CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
       CREATE TABLE survey_responses (
         id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
         survey_id            UUID NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
         respondent_id        UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
         status               response_status NOT NULL DEFAULT 'in_progress',
+        sentiment           response_sentiment,
         started_at           TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         submitted_at         TIMESTAMPTZ,
         fill_duration_seconds INTEGER,

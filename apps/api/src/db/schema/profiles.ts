@@ -71,6 +71,8 @@ export const respondentProfiles = pgTable(
 
 // ─── Surveyor Profiles ────────────────────────────────────────────────────────
 
+export const responseNotifModeEnum = pgEnum('response_notif_mode', ['per_response', 'daily_digest']);
+
 export const surveyorProfiles = pgTable(
   'surveyor_profiles',
   {
@@ -80,6 +82,7 @@ export const surveyorProfiles = pgTable(
     researchPurpose: varchar('research_purpose', { length: 500 }),
     isVerified: boolean('is_verified').notNull().default(false),
     isOnboardingDone: boolean('is_onboarding_done').notNull().default(false),
+    responseNotifMode: responseNotifModeEnum('response_notif_mode').notNull().default('per_response'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },

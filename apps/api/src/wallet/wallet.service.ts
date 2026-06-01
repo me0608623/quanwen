@@ -22,7 +22,7 @@ import { EcpayService } from './ecpay.service';
 import { CryptoService } from '../common/crypto.service';
 import { KycService } from '../kyc/kyc.service';
 
-const PLATFORM_FEE_RATE = 0.1; // 10% 手續費
+const PLATFORM_FEE_RATE = 0.15; // 15% 手續費
 const MIN_WITHDRAWAL = 300;
 const MAX_DAILY_WITHDRAWAL = 30_000;
 
@@ -165,31 +165,42 @@ export class WalletService {
       return '1|OK';
     }
 
-    // Payment succeeded — credit wallet
+    // Payment succeeded — credit wallet.
+    // Guard against concurrent ECPay retries: claim exclusive processing by
+    // doing an atomic conditional UPDATE (WHERE status='pending'). If 0 rows
+    // are updated, another thread already claimed this txn — skip safely.
     const now = new Date();
-    await this.db
-      .update(transactions)
-      .set({
-        status: 'success',
-        note: `ECPay 儲值完成 NT$${txn.amount}（TradeNo: ${result.tradeNo}）`,
-        completedAt: now,
-        metadata: { ecpayTradeNo: result.merchantTradeNo, ecpayServerTradeNo: result.tradeNo },
-      })
-      .where(eq(transactions.id, txn.id));
+    await this.db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(transactions)
+        .set({
+          status: 'success',
+          note: `ECPay 儲值完成 NT$${txn.amount}（TradeNo: ${result.tradeNo}）`,
+          completedAt: now,
+          metadata: { ecpayTradeNo: result.merchantTradeNo, ecpayServerTradeNo: result.tradeNo },
+        })
+        .where(and(eq(transactions.id, txn.id), eq(transactions.status, 'pending')))
+        .returning({ id: transactions.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'escrow_ecpay', debitAmount: txn.amount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${txn.userId}`, debitAmount: 0, creditAmount: txn.amount },
-    ]);
+      if (claimed.length === 0) {
+        // Concurrent callback already processed — skip to avoid double-credit
+        return;
+      }
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'escrow_ecpay', debitAmount: txn.amount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${txn.userId}`, debitAmount: 0, creditAmount: txn.amount },
+      ]);
+
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, txn.userId));
+    });
 
     this.logger.log(`ECPay payment success: user=${txn.userId} amount=${txn.amount} tradeNo=${result.merchantTradeNo}`);
     return '1|OK';
@@ -200,34 +211,36 @@ export class WalletService {
   async mockDeposit(userId: string, amount: number): Promise<void> {
     await this.ensureWallet(userId);
 
-    // 建立 transaction 紀錄
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId,
-        type: 'deposit',
-        amount,
-        status: 'success',
-        note: 'Mock 儲值（開發用）',
-        completedAt: new Date(),
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      // 建立 transaction 紀錄
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId,
+          type: 'deposit',
+          amount,
+          status: 'success',
+          note: 'Mock 儲值（開發用）',
+          completedAt: new Date(),
+        })
+        .returning();
 
-    // 複式記帳分錄：DR escrow_mock / CR surveyor_wallet
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'escrow_mock', debitAmount: amount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: 0, creditAmount: amount },
-    ]);
+      // 複式記帳分錄：DR escrow_mock / CR surveyor_wallet
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'escrow_mock', debitAmount: amount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: 0, creditAmount: amount },
+      ]);
 
-    // 更新錢包餘額
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${amount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, userId));
+      // 更新錢包餘額
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${amount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(wallets.userId, userId));
+    });
 
     this.logger.log(`Mock deposit: user=${userId} amount=${amount}`);
   }
@@ -255,90 +268,97 @@ export class WalletService {
 
     const now = new Date();
 
-    // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ──────────────────────────────
-    // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
-    const deducted = await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance - ${totalDeduct}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${totalDeduct}`))
-      .returning({ id: wallets.id });
-
-    const txStatus = deducted.length > 0 ? 'success' : 'pending';
-
-    // ── 建立三筆 transaction（狀態由實際扣款結果決定）────────────────────────
-    const [rewardOutTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'reward_out',
-        amount: totalDeduct,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `問券方支付獎勵 NT$${rewardAmount} + 手續費 NT$${platformFee}`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    const [rewardInTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: respondentId,
-        type: 'reward_in',
-        amount: rewardAmount,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `完成問卷獲得獎勵 NT$${rewardAmount}`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    const [feeTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'platform_fee',
-        amount: platformFee,
-        status: txStatus,
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `平台手續費 10%`,
-        completedAt: txStatus === 'success' ? now : null,
-      })
-      .returning();
-
-    // ── 複式記帳分錄 ────────────────────────────────────────────────────────
-    await this.db.insert(journalEntries).values([
-      { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: totalDeduct, creditAmount: 0 },
-      { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
-      { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
-      { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
-      { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
-      { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
-    ]);
-
-    if (txStatus === 'success') {
-      // 受試者入帳
-      await this.db
+    // ── 整個 issueReward 包在一個 db.transaction 裡 ──────────────────────────
+    // 原因：若 deduction 成功但後續 INSERT/UPDATE 失敗，錢會從問券方扣掉
+    // 但受試者沒收到、journal 也沒有記錄 → 帳務資料不一致。
+    // 將全部操作包在同一個 transaction，保證「扣問券方 + 入受試者 + 帳分錄」要嘛全成功要嘛全滾回。
+    const txResult = { status: 'pending' as 'success' | 'pending' }; // hoisted so logger/notification can read outside tx
+    await this.db.transaction(async (tx) => {
+      // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ─────────────────────────
+      // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
+      const deducted = await tx
         .update(wallets)
         .set({
-          cashBalance: sql`cash_balance + ${rewardAmount}`,
+          cashBalance: sql`cash_balance - ${totalDeduct}`,
           version: sql`version + 1`,
           updatedAt: now,
         })
-        .where(eq(wallets.userId, respondentId));
-    }
+        .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${totalDeduct}`))
+        .returning({ id: wallets.id });
+
+      txResult.status = deducted.length > 0 ? 'success' : 'pending';
+
+      // ── 建立三筆 transaction（狀態由實際扣款結果決定）──────────────────────
+      const [rewardOutTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'reward_out',
+          amount: totalDeduct,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `問券方支付獎勵 NT$${rewardAmount} + 手續費 NT$${platformFee}`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      const [rewardInTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: respondentId,
+          type: 'reward_in',
+          amount: rewardAmount,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `完成問卷獲得獎勵 NT$${rewardAmount}`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      const [feeTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'platform_fee',
+          amount: platformFee,
+          status: txResult.status,
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `平台手續費 15%`,
+          completedAt: txResult.status === 'success' ? now : null,
+        })
+        .returning();
+
+      // ── 複式記帳分錄 ──────────────────────────────────────────────────────
+      await tx.insert(journalEntries).values([
+        { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: totalDeduct, creditAmount: 0 },
+        { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
+        { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
+        { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
+        { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
+        { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
+      ]);
+
+      if (txResult.status === 'success') {
+        // 受試者入帳
+        await tx
+          .update(wallets)
+          .set({
+            cashBalance: sql`cash_balance + ${rewardAmount}`,
+            version: sql`version + 1`,
+            updatedAt: now,
+          })
+          .where(eq(wallets.userId, respondentId));
+      }
+    });
 
     this.logger.log(
-      `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txStatus}`,
+      `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txResult.status}`,
     );
 
-    if (txStatus === 'success') {
+    if (txResult.status === 'success') {
       this.notifications
         .create({
           userId: respondentId,
@@ -545,31 +565,33 @@ export class WalletService {
     await this.ensureWallet(userId);
     const now = new Date();
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId,
-        type: 'points_in',
-        amount: pointsAmount,
-        status: 'success',
-        note,
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId,
+          type: 'points_in',
+          amount: pointsAmount,
+          status: 'success',
+          note,
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
-    ]);
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
+      ]);
 
-    await this.db
-      .update(wallets)
-      .set({
-        pointsBalance: sql`points_balance + ${pointsAmount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, userId));
+      await tx
+        .update(wallets)
+        .set({
+          pointsBalance: sql`points_balance + ${pointsAmount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, userId));
+    });
 
     this.logger.log(`Bonus points granted: user=${userId.slice(0, 8)} points=${pointsAmount} (${note})`);
   }
@@ -588,33 +610,35 @@ export class WalletService {
     await this.ensureWallet(respondentId);
     const now = new Date();
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: respondentId,
-        type: 'points_in',
-        amount: pointsAmount,
-        status: 'success',
-        relatedSurveyId: surveyId,
-        relatedResponseId: responseId,
-        note: `完成問卷獲得 ${pointsAmount} 積分`,
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: respondentId,
+          type: 'points_in',
+          amount: pointsAmount,
+          status: 'success',
+          relatedSurveyId: surveyId,
+          relatedResponseId: responseId,
+          note: `完成問卷獲得 ${pointsAmount} 積分`,
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `points_wallet_${respondentId}`, debitAmount: 0, creditAmount: pointsAmount },
-    ]);
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `points_wallet_${respondentId}`, debitAmount: 0, creditAmount: pointsAmount },
+      ]);
 
-    await this.db
-      .update(wallets)
-      .set({
-        pointsBalance: sql`points_balance + ${pointsAmount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, respondentId));
+      await tx
+        .update(wallets)
+        .set({
+          pointsBalance: sql`points_balance + ${pointsAmount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(eq(wallets.userId, respondentId));
+    });
 
     this.logger.log(`Points issued: survey=${surveyId} response=${responseId} points=${pointsAmount}`);
 
@@ -725,33 +749,47 @@ export class WalletService {
 
     if (lockAmount <= 0) return;
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'reward_out',
-        amount: lockAmount,
-        status: 'pending',
-        relatedSurveyId: surveyId,
-        note: `問卷預算鎖定 NT$${lockAmount}（總需 NT$${totalBudget}）`,
-        metadata: { event: 'survey_budget_lock', totalRequired: totalBudget },
-      })
-      .returning();
+    // Wrap in a DB transaction: do the atomic wallet update FIRST inside the
+    // transaction boundary, then insert the journal entries only if it succeeds.
+    // Previously the journal entries were inserted before the wallet update, meaning
+    // a concurrent depletion could cause the wallet update to silently no-op while
+    // leaving orphaned transaction + journal records in the DB.
+    await this.db.transaction(async (tx) => {
+      const updateResult = await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance - ${lockAmount}`,
+          lockedCash: sql`locked_cash + ${lockAmount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${lockAmount}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: lockAmount, creditAmount: 0 },
-      { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: 0, creditAmount: lockAmount },
-    ]);
+      if (updateResult.length === 0) {
+        // Insufficient balance after concurrent depletion — skip lock silently
+        // (the survey was published with aiReviewEnabled=false or insufficient budget warning was shown)
+        return;
+      }
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance - ${lockAmount}`,
-        lockedCash: sql`locked_cash + ${lockAmount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${lockAmount}`));
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'reward_out',
+          amount: lockAmount,
+          status: 'pending',
+          relatedSurveyId: surveyId,
+          note: `問卷預算鎖定 NT$${lockAmount}（總需 NT$${totalBudget}）`,
+          metadata: { event: 'survey_budget_lock', totalRequired: totalBudget },
+        })
+        .returning();
+
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: lockAmount, creditAmount: 0 },
+        { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: 0, creditAmount: lockAmount },
+      ]);
+    });
 
     this.logger.log(`Budget locked: survey=${surveyId} amount=${lockAmount}`);
   }
@@ -786,33 +824,43 @@ export class WalletService {
 
     if (toUnlock <= 0) return;
 
-    const [txn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: surveyorId,
-        type: 'refund',
-        amount: toUnlock,
-        status: 'success',
-        relatedSurveyId: surveyId,
-        note: `問卷關閉，退回未用預算 NT$${toUnlock}`,
-        completedAt: new Date(),
-      })
-      .returning();
+    // Same atomicity pattern as lockSurveyBudget: update wallet first inside
+    // a transaction, insert journal entries only if the update succeeds.
+    await this.db.transaction(async (tx) => {
+      const updateResult = await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${toUnlock}`,
+          lockedCash: sql`locked_cash - ${toUnlock}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, surveyorId), sql`locked_cash >= ${toUnlock}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: toUnlock, creditAmount: 0 },
-      { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: 0, creditAmount: toUnlock },
-    ]);
+      if (updateResult.length === 0) {
+        // locked_cash was already depleted by a concurrent call — skip silently
+        return;
+      }
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${toUnlock}`,
-        lockedCash: sql`locked_cash - ${toUnlock}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, surveyorId));
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId: surveyorId,
+          type: 'refund',
+          amount: toUnlock,
+          status: 'success',
+          relatedSurveyId: surveyId,
+          note: `問卷關閉，退回未用預算 NT$${toUnlock}`,
+          completedAt: new Date(),
+        })
+        .returning();
+
+      await tx.insert(journalEntries).values([
+        { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: toUnlock, creditAmount: 0 },
+        { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: 0, creditAmount: toUnlock },
+      ]);
+    });
 
     this.logger.log(`Budget unlocked: survey=${surveyId} refund=${toUnlock}`);
   }
@@ -841,39 +889,47 @@ export class WalletService {
 
     const now = new Date();
 
-    // 建立 withdraw_complete transaction
-    const [completeTxn] = await this.db
-      .insert(transactions)
-      .values({
-        userId: txn.userId,
-        type: 'withdraw_complete',
-        amount: txn.amount,
-        status: 'success',
-        note: `提領核准完成（申請單 ${transactionId}）`,
-        metadata: { originalTxnId: transactionId },
-        completedAt: now,
-      })
-      .returning();
+    await this.db.transaction(async (tx) => {
+      // Atomic: deduct lockedCash first (guarded), then create records
+      const updated = await tx
+        .update(wallets)
+        .set({
+          lockedCash: sql`locked_cash - ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: now,
+        })
+        .where(and(eq(wallets.userId, txn.userId), sql`locked_cash >= ${txn.amount}`))
+        .returning({ id: wallets.id });
 
-    await this.db.insert(journalEntries).values([
-      { transactionId: completeTxn.id, accountName: 'withdraw_pending', debitAmount: txn.amount, creditAmount: 0 },
-      { transactionId: completeTxn.id, accountName: 'escrow_esun', debitAmount: 0, creditAmount: txn.amount },
-    ]);
+      if (updated.length === 0) {
+        throw new BadRequestException('lockedCash 不足，可能已被其他操作消耗');
+      }
 
-    // 更新原申請單 → success；解鎖 lockedCash（真正扣除）
-    await this.db
-      .update(transactions)
-      .set({ status: 'success', completedAt: now })
-      .where(eq(transactions.id, transactionId));
+      // 建立 withdraw_complete transaction
+      const [completeTxn] = await tx
+        .insert(transactions)
+        .values({
+          userId: txn.userId,
+          type: 'withdraw_complete',
+          amount: txn.amount,
+          status: 'success',
+          note: `提領核准完成（申請單 ${transactionId}）`,
+          metadata: { originalTxnId: transactionId },
+          completedAt: now,
+        })
+        .returning();
 
-    await this.db
-      .update(wallets)
-      .set({
-        lockedCash: sql`locked_cash - ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: now,
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx.insert(journalEntries).values([
+        { transactionId: completeTxn.id, accountName: 'withdraw_pending', debitAmount: txn.amount, creditAmount: 0 },
+        { transactionId: completeTxn.id, accountName: 'escrow_esun', debitAmount: 0, creditAmount: txn.amount },
+      ]);
+
+      // 更新原申請單 → success
+      await tx
+        .update(transactions)
+        .set({ status: 'success', completedAt: now })
+        .where(eq(transactions.id, transactionId));
+    });
 
     this.logger.log(`Withdrawal approved: txn=${transactionId} user=${txn.userId} amount=${txn.amount}`);
   }
@@ -889,21 +945,23 @@ export class WalletService {
     if (!txn) throw new NotFoundException('找不到提領申請');
     if (txn.status !== 'pending') throw new BadRequestException('此提領申請狀態不可拒絕');
 
-    // 退回 lockedCash → cashBalance
-    await this.db
-      .update(transactions)
-      .set({ status: 'cancelled', note: `拒絕原因：${reason}` })
-      .where(eq(transactions.id, transactionId));
+    // 退回 lockedCash → cashBalance (atomic: wallet update first, status update inside tx)
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(wallets)
+        .set({
+          cashBalance: sql`cash_balance + ${txn.amount}`,
+          lockedCash: sql`locked_cash - ${txn.amount}`,
+          version: sql`version + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(wallets.userId, txn.userId), sql`locked_cash >= ${txn.amount}`));
 
-    await this.db
-      .update(wallets)
-      .set({
-        cashBalance: sql`cash_balance + ${txn.amount}`,
-        lockedCash: sql`locked_cash - ${txn.amount}`,
-        version: sql`version + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(wallets.userId, txn.userId));
+      await tx
+        .update(transactions)
+        .set({ status: 'cancelled', note: `拒絕原因：${reason}` })
+        .where(eq(transactions.id, transactionId));
+    });
 
     this.logger.log(`Withdrawal rejected: txn=${transactionId} reason=${reason}`);
   }

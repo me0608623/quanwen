@@ -78,9 +78,22 @@ function AccountsContent() {
 
   const linkedSet = new Set(linked.map((l) => l.provider));
 
+  const OAUTH_ALLOWED_HOSTS = new Set(['accounts.google.com', 'access.line.me', 'appleid.apple.com']);
+
   const handleBind = async (bindUrl: string) => {
     try {
       const { data } = await api.get<{ redirectUrl: string }>(bindUrl);
+      // Validate redirect stays on known OAuth provider domains
+      try {
+        const { hostname } = new URL(data.redirectUrl);
+        if (!OAUTH_ALLOWED_HOSTS.has(hostname)) {
+          throw new Error(`unexpected redirect host: ${hostname}`);
+        }
+      } catch {
+        setToast({ message: '綁定啟動失敗：非預期的重導目標', type: 'error' });
+        setTimeout(() => setToast(null), 3000);
+        return;
+      }
       window.location.href = data.redirectUrl;
     } catch {
       setToast({ message: '綁定啟動失敗，請重試', type: 'error' });

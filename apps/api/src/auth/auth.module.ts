@@ -17,7 +17,15 @@ import { MailModule } from '../mail/mail.module';
     MailModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, GoogleStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    // GoogleStrategy 永遠註冊。strategy constructor 在 NestFactory.create() 裡執行，
+    // 此時 dotenv.config() 已完成，process.env 有正確的值。
+    // 模組層級的 googleConfigured 檢查因 CommonJS import hoisting 會在 dotenv 前執行，
+    // 造成 credentials 存在時仍回傳 500，故移除。
+    GoogleStrategy,
+  ],
   exports: [AuthService],
 })
 export class AuthModule {}

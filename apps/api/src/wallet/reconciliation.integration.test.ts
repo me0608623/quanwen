@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase CC: ReconciliationService 整合測試
  *
  * 紅線「複式記帳」+「平台帳上永遠 = 0」+「對帳異常立刻可知」。
@@ -105,6 +105,8 @@ describe('ReconciliationService.runDaily (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
@@ -184,9 +186,9 @@ describe('ReconciliationService.runDaily (integration)', () => {
     expect(fails).toEqual([]);
     expect(report.unbalancedTransactions).toEqual([]);
 
-    // wallets 加總應等於 problem.surveyor 餘額 + respondent 餘額 = (1000 - 220) + 200 = 980
-    expect(report.totals.walletSum).toBe(980);
-    expect(report.totals.platformFeeRevenue).toBe(20);
+    // wallets 加總應等於 problem.surveyor 餘額 + respondent 餘額 = (1000 - 230) + 200 = 970 (fee=15%: 30)
+    expect(report.totals.walletSum).toBe(970);
+    expect(report.totals.platformFeeRevenue).toBe(30);
     expect(report.totals.rewardPayableOutstanding).toBe(0);
   });
 

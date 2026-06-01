@@ -66,6 +66,7 @@ export function useLogin() {
     },
     onSuccess: ({ user, token }) => {
       setToken(token);
+      queryClient.clear(); // 清除前一個用戶的快取，避免跨帳號資料污染
       queryClient.setQueryData(['auth', 'me'], user);
       router.push(user.role === 'admin' ? '/admin' : '/dashboard');
     },
@@ -88,6 +89,7 @@ export function useRegister() {
     },
     onSuccess: ({ user, token }) => {
       setToken(token);
+      queryClient.clear(); // 清除前一個用戶的快取，避免跨帳號資料污染
       queryClient.setQueryData(['auth', 'me'], user);
       // profile 自動建立 + 已 onboarding 完成, 直接進 dashboard
       router.push(user.role === 'admin' ? '/admin' : '/dashboard');

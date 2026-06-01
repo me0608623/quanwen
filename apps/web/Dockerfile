@@ -1,6 +1,6 @@
 # Phase F.5: Web (Next.js) Dockerfile
-FROM node:20-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9.15.4 --activate
+FROM node:22-alpine AS base
+RUN corepack enable && corepack prepare pnpm@11.4.0 --activate
 WORKDIR /app
 
 # ─── deps ──
@@ -16,10 +16,12 @@ COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY pnpm-workspace.yaml pnpm-lock.yaml package.json ./
 COPY apps/web ./apps/web
 ENV NEXT_TELEMETRY_DISABLED=1
+# next/font/google downloads fonts from fonts.gstatic.com at build time.
+# Requires outbound HTTPS to fonts.gstatic.com — build on Linux/CI (not Docker Desktop Windows).
 RUN pnpm --filter web build
 
 # ─── runner ──
-FROM node:20-alpine AS runner
+FROM node:22-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1

@@ -31,6 +31,10 @@ export const SubmitResponseSchema = z.object({
   startedAt: z.string().datetime().optional(),
   // Phase 2 behavior log
   behaviorLog: BehaviorLogSchema.optional(),
+  // QUA-204: Client-side randomization seed for reproducible shuffle
+  randomizationSeed: z.string().max(32).optional(),
+  // QUA-215: FingerprintJS visitorId — risk signal only, never used as sole blocking criterion
+  fingerprintId: z.string().min(1).max(255).optional(),
 });
 
 export type AnswerDto = z.infer<typeof AnswerSchema>;

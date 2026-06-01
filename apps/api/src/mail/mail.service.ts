@@ -95,6 +95,94 @@ export class MailService {
     }
   }
 
+  async sendRespondentThankYouEmail(
+    to: string,
+    displayName: string,
+    surveyTitle: string,
+    rewardPoints: number,
+  ): Promise<void> {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+      this.logger.debug(`[noop] thank-you email to ${to} for survey "${surveyTitle}"`);
+      return;
+    }
+    const subject = '【券問】感謝您完成問卷填答！';
+    const rewardLine =
+      rewardPoints > 0
+        ? `<p>您已獲得 <strong>${rewardPoints} 點</strong>獎勵，將在審核通過後發放至您的帳戶。</p>`
+        : '';
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+        <h2 style="color:#1a1a1a">感謝您的填答！</h2>
+        <p>您好，${escapeHtml(displayName)}，</p>
+        <p>感謝您完成問卷「<strong>${escapeHtml(surveyTitle)}</strong>」的填答。您的意見對研究者非常寶貴！</p>
+        ${rewardLine}
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#999;font-size:12px">
+          券問 QuanWen · 台灣雙邊問卷平台<br/>
+          <a href="${process.env.WEB_URL ?? 'https://quanwen.tw'}/dashboard">前往我的儀表板</a>
+          ｜<a href="${process.env.WEB_URL ?? 'https://quanwen.tw'}/profile/notifications">通知設定</a>
+        </p>
+      </div>
+    `;
+
+    try {
+      await this.transporter.sendMail({ from: this.from, to, subject, html });
+    } catch (err) {
+      this.logger.error(`Failed to send thank-you email to ${to}`, err);
+      // 不 re-throw — email 失敗不該卡住業務流程
+    }
+  }
+
+  async sendDailyDigestEmail(
+    to: string,
+    displayName: string,
+    digestItems: Array<{ surveyTitle: string; newCount: number; totalCount: number; targetCount: number }>,
+  ): Promise<void> {
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER) {
+      this.logger.debug(`[noop] daily digest email to ${to}`);
+      return;
+    }
+    const subject = '【券問】每日問卷填答摘要';
+    const rows = digestItems
+      .map(
+        (item) =>
+          `<tr>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee">${escapeHtml(item.surveyTitle)}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">+${item.newCount}</td>
+            <td style="padding:8px 12px;border-bottom:1px solid #eee;text-align:center">${item.totalCount} / ${item.targetCount}</td>
+          </tr>`,
+      )
+      .join('');
+    const html = `
+      <div style="font-family:sans-serif;max-width:600px;margin:0 auto;padding:24px">
+        <h2 style="color:#1a1a1a">每日問卷填答摘要</h2>
+        <p>您好，${escapeHtml(displayName)}，以下是您昨日問卷的填答統計：</p>
+        <table style="width:100%;border-collapse:collapse;margin:16px 0">
+          <thead>
+            <tr style="background:#f5f5f5">
+              <th style="padding:8px 12px;text-align:left">問卷名稱</th>
+              <th style="padding:8px 12px;text-align:center">昨日新增</th>
+              <th style="padding:8px 12px;text-align:center">累計 / 目標</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        <hr style="border:none;border-top:1px solid #eee;margin:24px 0">
+        <p style="color:#999;font-size:12px">
+          券問 QuanWen · 台灣雙邊問卷平台<br/>
+          <a href="${process.env.WEB_URL ?? 'https://quanwen.tw'}/dashboard">查看問卷詳情</a>
+          ｜<a href="${process.env.WEB_URL ?? 'https://quanwen.tw'}/profile/notifications">更改通知設定</a>
+        </p>
+      </div>
+    `;
+
+    try {
+      await this.transporter.sendMail({ from: this.from, to, subject, html });
+    } catch (err) {
+      this.logger.error(`Failed to send daily digest email to ${to}`, err);
+    }
+  }
+
   async sendPasswordResetEmail(to: string, displayName: string, resetUrl: string): Promise<void> {
     const subject = '【券問】重設密碼';
     const html = `

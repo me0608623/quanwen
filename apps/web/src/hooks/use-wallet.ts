@@ -68,10 +68,15 @@ export function useEcpayDeposit() {
       return data.html;
     },
     onSuccess: (html) => {
-      // Write ECPay form into a hidden iframe and auto-submit
-      const div = document.createElement('div');
-      div.innerHTML = html;
-      document.body.appendChild(div);
+      // Parse the server-generated ECPay form and submit it.
+      // innerHTML does not execute <script> tags, so we extract the form
+      // element directly and call .submit() ourselves.
+      const doc = new DOMParser().parseFromString(html, 'text/html');
+      const form = doc.getElementById('ecpay') as HTMLFormElement | null;
+      if (!form) return;
+      form.style.display = 'none';
+      document.body.appendChild(form);
+      form.submit();
     },
   });
 }

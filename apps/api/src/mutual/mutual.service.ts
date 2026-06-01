@@ -272,6 +272,7 @@ export class MutualService {
         title: string;
         type: string;
         sortOrder: number;
+        config: Record<string, unknown> | null;
         options: Array<{ id: string; label: string; sortOrder: number }>;
         answer: {
           textAnswer: string | null;
@@ -332,6 +333,7 @@ export class MutualService {
             title: q.title,
             type: q.type,
             sortOrder: q.sortOrder,
+            config: (q.config as Record<string, unknown> | null) ?? null,
             options: q.options.map((o) => ({ id: o.id, label: o.label, sortOrder: o.sortOrder })),
             answer: answerByQ.get(q.id) ?? null,
           })),
@@ -479,30 +481,55 @@ export class MutualService {
       throw new BadRequestException('你已提交過此配對的填答');
     }
 
-    const now = new Date();
-    const inserted = await this.db
-      .insert(surveyResponses)
-      .values({
-        surveyId: targetSurveyId,
-        respondentId: userId,
-        status: 'submitted',
-        submittedAt: now,
-      })
-      .returning({ id: surveyResponses.id });
-
-    const responseId = inserted[0].id;
-
-    // 寫 answers
+    // Validate that every submitted questionId belongs to targetSurvey
     if (answers.length > 0) {
-      await this.db.insert(responseAnswers).values(
-        answers.map((a) => ({
-          responseId,
-          questionId: a.questionId,
-          textAnswer: a.textAnswer ?? null,
-          selectedOptionIds: a.selectedOptionIds ?? null,
-          ratingValue: a.ratingValue ?? null,
-        })),
-      );
+      const targetQRows = await this.db
+        .select({ id: surveyQuestions.id })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, targetSurveyId));
+      const validQIds = new Set(targetQRows.map((q) => q.id));
+      const invalidIds = answers.filter((a) => a.questionId && !validQIds.has(a.questionId));
+      if (invalidIds.length > 0) {
+        throw new BadRequestException('填答包含不屬於此問卷的題目');
+      }
+    }
+
+    const now = new Date();
+    // response + answers must be atomic: if answer insert fails, response is orphaned
+    let responseId = '' as string; // assigned inside db.transaction below
+    try {
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveyResponses)
+        .values({
+          surveyId: targetSurveyId,
+          respondentId: userId,
+          status: 'submitted',
+          submittedAt: now,
+        })
+        .returning({ id: surveyResponses.id });
+
+      responseId = inserted[0].id;
+
+      if (answers.length > 0) {
+        await tx.insert(responseAnswers).values(
+          answers.map((a) => ({
+            responseId: responseId!,
+            surveyId: targetSurveyId, // 反正規化（§3-B1）
+            questionId: a.questionId,
+            textAnswer: a.textAnswer ?? null,
+            selectedOptionIds: a.selectedOptionIds ?? null,
+            ratingValue: a.ratingValue ?? null,
+          })),
+        );
+      }
+    });
+    } catch (err: unknown) {
+      // Concurrent submit race: unique constraint on (surveyId, respondentId) hit
+      if ((err as { code?: string })?.code === '23505') {
+        throw new BadRequestException('你已提交過此配對的填答');
+      }
+      throw err;
     }
 
     // ── AI 品質審核（不能讓對方拿到灌水的填答）──

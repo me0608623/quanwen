@@ -198,14 +198,14 @@ function PointsCard() {
 
       <p className="text-4xl font-bold tabular-nums text-amber-900">
         {summary.balance.toLocaleString()}
-        <span className="ml-1 text-lg font-normal text-amber-600">pts</span>
+        <span className="ml-1 text-lg font-normal text-amber-600">積分</span>
       </p>
       <p className="mt-1 text-sm text-amber-700">≈ NT${summary.estimatedValue.toLocaleString()} 等值</p>
 
       <div className="mt-4 grid grid-cols-3 gap-3 border-t border-amber-200 pt-4">
-        <Stat icon={<TrendingUp className="h-3.5 w-3.5" />} label="累計獲得" value={`${summary.totalEarned.toLocaleString()} pts`} />
-        <Stat icon={<Clock className="h-3.5 w-3.5" />} label="本月獲得" value={`${summary.thisMonth.toLocaleString()} pts`} />
-        <Stat icon={<Coins className="h-3.5 w-3.5" />} label="已兌換" value={`${summary.totalSpent.toLocaleString()} pts`} />
+        <Stat icon={<TrendingUp className="h-3.5 w-3.5" />} label="累計獲得" value={`${summary.totalEarned.toLocaleString()} 積分`} />
+        <Stat icon={<Clock className="h-3.5 w-3.5" />} label="本月獲得" value={`${summary.thisMonth.toLocaleString()} 積分`} />
+        <Stat icon={<Coins className="h-3.5 w-3.5" />} label="已兌換" value={`${summary.totalSpent.toLocaleString()} 積分`} />
       </div>
 
       <p className="mt-4 text-xs text-amber-600">
@@ -248,7 +248,7 @@ function TxList({ txns }: { txns: { id: string; type: string; amount: number; st
             <p className={cn('text-sm font-semibold tabular-nums', isCreditType(tx.type) ? 'text-green-600' : 'text-foreground')}>
               {isCreditType(tx.type) ? '+' : '-'}
               {tx.type === 'points_in' || tx.type === 'points_spend'
-                ? `${tx.amount.toLocaleString()} pts`
+                ? `${tx.amount.toLocaleString()} 積分`
                 : `NT$${tx.amount.toLocaleString()}`}
             </p>
             <p className={cn('text-xs', TX_STATUS_COLORS[tx.status] ?? 'text-muted-foreground')}>

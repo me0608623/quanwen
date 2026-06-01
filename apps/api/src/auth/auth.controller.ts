@@ -262,7 +262,9 @@ export class AuthController {
 
   @Get('line')
   lineAuth(@Query('bind') bind: string | undefined, @Res() res: Response) {
-    const state = bind ? `bind:${bind}` : secureRandomToken();
+    // For non-bind flows, use a server-tracked CSRF state token (5 min TTL)
+    // instead of a random token that is never validated on callback.
+    const state = bind ? `bind:${bind}` : `login:${this.authService.createLoginStateToken()}`;
     const params = new URLSearchParams({
       response_type: 'code',
       client_id: process.env.LINE_CHANNEL_ID ?? '',
@@ -303,14 +305,46 @@ export class AuthController {
 
     try {
       const isBindAttempt = state?.startsWith('bind:');
-      const bindSession = isBindAttempt
-        ? this.authService.resolveBindSession(state!.slice(5))
-        : null;
+      const isLoginAttempt = state?.startsWith('login:');
 
-      if (isBindAttempt && !bindSession) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+      // Validate CSRF state token for both bind and normal login flows
+      if (isBindAttempt) {
+        const bindSession = this.authService.resolveBindSession(state!.slice(5));
+        if (!bindSession) {
+          return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+        }
+        // Re-assign for the code below (TypeScript narrowing)
+        const resolvedBind = bindSession;
+
+        const tokenData = await this.authService.exchangeLineCode(code);
+        const profile = await this.authService.getLineProfile(tokenData.access_token);
+        const email = tokenData.id_token
+          ? this.authService.extractEmailFromIdToken(tokenData.id_token) ?? `line_${profile.userId}@line.placeholder`
+          : `line_${profile.userId}@line.placeholder`;
+        await this.authService.findOrCreateOAuthUser({
+          provider: 'line',
+          providerAccountId: profile.userId,
+          email,
+          displayName: profile.displayName,
+          avatarUrl: profile.pictureUrl,
+          bindToUserId: resolvedBind.userId,
+        });
+        return res.redirect(`${WEB_URL()}/settings/accounts?bound=line`);
       }
 
+      // Validate CSRF state for normal login flow
+      if (isLoginAttempt) {
+        const valid = this.authService.validateAndConsumeLoginState(state!.slice(6));
+        if (!valid) {
+          return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+        }
+      }
+      // Legacy: state from old clients without login: prefix — allow through but log
+      if (!isLoginAttempt) {
+        this.logger.warn('LINE callback: unrecognized state prefix, allowing for backward compat');
+      }
+
+      // Normal login flow — exchange code and create/find user
       const tokenData = await this.authService.exchangeLineCode(code);
       const profile = await this.authService.getLineProfile(tokenData.access_token);
       const email = tokenData.id_token
@@ -323,12 +357,8 @@ export class AuthController {
         email,
         displayName: profile.displayName,
         avatarUrl: profile.pictureUrl,
-        bindToUserId: bindSession?.userId,
       });
 
-      if (bindSession) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?bound=line`);
-      }
       // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
       return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
     } catch (err) {
@@ -344,13 +374,15 @@ export class AuthController {
 
   @Get('apple')
   appleAuth(@Res() res: Response) {
+    // Use server-tracked state token (same CSRF pattern as LINE login)
+    const state = `login:${this.authService.createLoginStateToken()}`;
     const params = new URLSearchParams({
       response_type: 'code id_token',
       response_mode: 'form_post',
       client_id: process.env.APPLE_CLIENT_ID ?? '',
       redirect_uri: process.env.APPLE_CALLBACK_URL ?? '',
       scope: 'name email',
-      state: secureRandomToken(),
+      state,
     });
     return res.redirect(`https://appleid.apple.com/auth/authorize?${params}`);
   }
@@ -384,12 +416,25 @@ export class AuthController {
 
     try {
       const isBindAttempt = body.state?.startsWith('bind:');
+      const isLoginAttempt = body.state?.startsWith('login:');
+
       const bindSession = isBindAttempt
         ? this.authService.resolveBindSession(body.state!.slice(5))
         : null;
 
       if (isBindAttempt && !bindSession) {
         return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+      }
+
+      // Validate CSRF state for normal login flow (same pattern as LINE)
+      if (isLoginAttempt) {
+        const valid = this.authService.validateAndConsumeLoginState(body.state!.slice(6));
+        if (!valid) {
+          return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+        }
+      } else if (!isBindAttempt) {
+        this.logger.warn('Apple callback: unrecognized state prefix, rejecting for security');
+        return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
       }
 
       // Exchange code for id_token (validates server-side)

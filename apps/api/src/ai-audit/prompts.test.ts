@@ -44,7 +44,7 @@ describe('AI prompt registry', () => {
   });
 
   it('SURVEY_DRAFT v2.1+ 支援使用者偏好題型', () => {
-    expect(SURVEY_DRAFT.version).toBe('2.1.0');
+    expect(SURVEY_DRAFT.version).toBe('2.2.0');
     expect(SURVEY_DRAFT.system).toContain('偏好題型');
   });
 

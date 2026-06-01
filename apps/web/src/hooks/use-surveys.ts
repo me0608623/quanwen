@@ -5,21 +5,37 @@ import { api } from '@/lib/api';
 
 // ─── AI Insights ──────────────────────────────────────────────────────────────
 
+export type ReportType = 'simple' | 'detailed';
+
 export interface SurveyAiInsights {
+  reportType: ReportType;
   summary: string;
   keyFindings: string[];
   concerns: string[];
   recommendations: string[];
+  // detailed 報告才有：
+  questionBreakdown?: Array<{ question: string; insight: string }>;
+  crossFindings?: string[];
+  methodology?: string;
   sampleSize: number;
   generatedAt: string;
 }
 
-/** 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）*/
-export function useSurveyAiInsights(surveyId: string, enabled = false) {
+/**
+ * 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）
+ * @param reportType simple = 精簡摘要；detailed = 詳細報告（逐題 + 交叉 + 方法）
+ */
+export function useSurveyAiInsights(
+  surveyId: string,
+  enabled = false,
+  reportType: ReportType = 'simple',
+) {
   return useQuery<SurveyAiInsights>({
-    queryKey: ['surveys', surveyId, 'ai-insights'],
+    queryKey: ['surveys', surveyId, 'ai-insights', reportType],
     queryFn: async () => {
-      const { data } = await api.get<SurveyAiInsights>(`/surveys/${surveyId}/ai-insights`);
+      const { data } = await api.get<SurveyAiInsights>(
+        `/surveys/${surveyId}/ai-insights?type=${reportType}`,
+      );
       return data;
     },
     enabled: enabled && !!surveyId,
@@ -99,6 +115,21 @@ export const SURVEY_CATEGORY_LABELS: Record<SurveyCategory, string> = {
   other:     '其他',
 };
 
+export type DeadlineTier = 'standard' | 'express' | 'urgent' | 'critical';
+
+export const DEADLINE_TIER_OPTIONS: Array<{
+  value: DeadlineTier;
+  label: string;
+  days: number;
+  multiplier: number;
+  hint: string;
+}> = [
+  { value: 'standard', label: '標準 (14天)',  days: 14, multiplier: 1.00, hint: '基準費率' },
+  { value: 'express',  label: '快速 (7天)',   days: 7,  multiplier: 1.20, hint: '+20% 獎勵' },
+  { value: 'urgent',   label: '緊急 (3天)',   days: 3,  multiplier: 1.50, hint: '+50% 獎勵' },
+  { value: 'critical', label: '超急 (24小時)', days: 1,  multiplier: 1.75, hint: '+75% 獎勵，未達標全額退款' },
+];
+
 export interface Survey {
   id: string;
   title: string;
@@ -109,6 +140,8 @@ export interface Survey {
   aiReviewEnabled?: boolean;
   externalUrl?: string | null;
   rewardPoints: number;
+  baseRewardPoints?: number;
+  deadlineTier?: DeadlineTier;
   targetCount: number;
   completedCount: number;
   expiresAt?: string;
@@ -176,7 +209,7 @@ export function useUpdateSurvey(id: string) {
 
   return useMutation({
     mutationFn: async (dto: Partial<Survey> & { questions?: SurveyQuestion[] }) => {
-      const { data } = await api.put<Survey>(`/surveys/${id}`, dto);
+      const { data } = await api.patch<Survey>(`/surveys/${id}`, dto);
       return data;
     },
     onSuccess: (data) => {
@@ -223,13 +256,28 @@ export function useAiDraft() {
       language?: string;
       targetAudience?: string;
       preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+      // Phase II.15: 逐題型題數(含學術量表變體)
+      typeSpecs?: Array<{
+        type:
+          | 'single_choice'
+          | 'multiple_choice'
+          | 'text'
+          | 'rating'
+          | 'scale_agreement'
+          | 'scale_frequency';
+        count: number;
+      }>;
       avoidTitles?: string[];
     }) => {
-      const { data } = await api.post<AiDraftResult>('/surveys/ai-draft', {
-        questionCount: 8,
-        language: 'zh-TW',
-        ...dto,
-      });
+      const { data } = await api.post<AiDraftResult>(
+        '/surveys/ai-draft',
+        {
+          questionCount: 8,
+          language: 'zh-TW',
+          ...dto,
+        },
+        { timeout: 120_000 }, // AI 生成較慢,給足時間;逾時轉成錯誤而非無限轉圈
+      );
       return data;
     },
   });
@@ -254,6 +302,7 @@ export function useRegenerateQuestion() {
       const { data } = await api.post<RegenerateQuestionResult>(
         '/surveys/ai-regenerate-question',
         { otherTitles: [], ...dto },
+        { timeout: 120_000 },
       );
       return data;
     },
@@ -342,6 +391,37 @@ export interface TextSentimentResult {
   generatedAt: string;
 }
 
+// ─── Respondents (anonymized tokens) ────────────────────────────────────────
+
+export interface Respondent {
+  anonymousToken: string;
+  status: string;
+  submittedAt: string | null;
+  fillDurationSeconds: number | null;
+  qualityScore: number | null;
+}
+
+export interface RespondentsPage {
+  total: number;
+  page: number;
+  pageSize: number;
+  respondents: Respondent[];
+}
+
+export function useRespondents(surveyId: string, page = 1, pageSize = 20) {
+  return useQuery<RespondentsPage>({
+    queryKey: ['surveys', surveyId, 'respondents', page, pageSize],
+    queryFn: async () => {
+      const { data } = await api.get<RespondentsPage>(
+        `/surveys/${surveyId}/respondents?page=${page}&pageSize=${pageSize}`,
+      );
+      return data;
+    },
+    enabled: !!surveyId,
+    staleTime: 30_000,
+  });
+}
+
 export function useQuestionSentiment(surveyId: string, questionId: string, enabled = false) {
   return useQuery<TextSentimentResult>({
     queryKey: ['surveys', surveyId, 'sentiment', questionId],
@@ -407,6 +487,7 @@ export function useAntiCheatSuggestions(surveyId: string, enabled = false) {
     queryFn: async () => {
       const { data } = await api.get<AntiCheatSuggestionResult>(
         `/surveys/${surveyId}/ai-design/anti-cheat`,
+        { timeout: 120_000 },
       );
       return data;
     },

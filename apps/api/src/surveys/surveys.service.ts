@@ -9,9 +9,10 @@ import {
 import { eq, desc, inArray } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyQuestions, questionOptions, mutualPairs } from '../db/schema';
+import { surveys, surveyQuestions, questionOptions, surveyLogicRules, mutualPairs } from '../db/schema';
 import type { CreateSurveyDto, SurveyQuestionDto } from './dto/create-survey.dto';
 import type { UpdateSurveyDto } from './dto/update-survey.dto';
+import type { LogicRuleDto } from './dto/logic-rule.dto';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
@@ -25,6 +26,26 @@ import {
 } from '../ai-audit/survey-draft';
 
 // Phase II.12: 原 inline prompt 已移到 prompts.ts 的 SURVEY_DRAFT (v2.0.0)
+
+// ─── QUA-34: Rush delivery tier constants ─────────────────────────────────────
+export type DeadlineTier = 'standard' | 'express' | 'urgent' | 'critical';
+
+export const RUSH_TIERS: Record<DeadlineTier, { days: number; multiplier: number }> = {
+  standard: { days: 14,  multiplier: 1.00 },
+  express:  { days: 7,   multiplier: 1.20 },
+  urgent:   { days: 3,   multiplier: 1.50 },
+  critical: { days: 1,   multiplier: 1.75 },
+};
+
+export function applyRushMultiplier(basePoints: number, tier: DeadlineTier): number {
+  return Math.round(basePoints * RUSH_TIERS[tier].multiplier);
+}
+
+export function tierExpiresAt(tier: DeadlineTier, from = new Date()): Date {
+  const d = new Date(from);
+  d.setDate(d.getDate() + RUSH_TIERS[tier].days);
+  return d;
+}
 
 @Injectable()
 export class SurveysService {
@@ -40,28 +61,76 @@ export class SurveysService {
   // ─── CRUD ─────────────────────────────────────────────────────────────────
 
   async create(surveyorId: string, dto: CreateSurveyDto) {
-    const inserted = await this.db
-      .insert(surveys)
-      .values({
-        surveyorId,
-        title: dto.title,
-        description: dto.description,
-        type: dto.type ?? 'standard',
-        category: dto.category,
-        aiReviewEnabled: dto.aiReviewEnabled ?? true,
-        externalUrl: dto.externalUrl,
-        rewardPoints: dto.rewardPoints ?? 0,
-        targetCount: dto.targetCount ?? 100,
-        expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
-        isAnonymous: dto.isAnonymous ?? true,
-        audienceCriteria: dto.audienceCriteria,
-      })
-      .returning();
+    const tier = (dto.deadlineTier ?? 'standard') as DeadlineTier;
+    const basePoints = dto.rewardPoints ?? 0;
+    const effectivePoints = applyRushMultiplier(basePoints, tier);
+    // If caller explicitly set expiresAt use it; otherwise derive from tier
+    const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : tierExpiresAt(tier);
 
-    const survey = inserted[0];
+    let survey = {} as typeof surveys.$inferSelect;
+    await this.db.transaction(async (tx) => {
+      const inserted = await tx
+        .insert(surveys)
+        .values({
+          surveyorId,
+          title: dto.title,
+          description: dto.description,
+          type: dto.type ?? 'standard',
+          category: dto.category,
+          aiReviewEnabled: dto.aiReviewEnabled ?? true,
+          externalUrl: dto.externalUrl,
+          rewardPoints: effectivePoints,
+          baseRewardPoints: basePoints,
+          deadlineTier: tier,
+          targetCount: dto.targetCount ?? 100,
+          expiresAt,
+          isAnonymous: dto.isAnonymous ?? true,
+          audienceCriteria: dto.audienceCriteria,
+          // QUA-204: Store survey-level question shuffle mode
+          questionShuffleMode: dto.questionShuffleMode ?? 'none',
+        })
+        .returning();
 
-    if (dto.questions?.length) {
-      await this.replaceQuestions(survey.id, dto.questions);
+      survey = inserted[0];
+
+      if (dto.questions?.length) {
+        await this.replaceQuestionsInTx(tx, survey.id, dto.questions);
+      }
+    });
+
+    // QUA-196: Insert logic rules after questions are created (need their IDs)
+    if (dto.logicRules?.length) {
+      await this.db.transaction(async (tx) => {
+        // Validate trigger/target question IDs belong to this survey
+        const surveyQs = await tx
+          .select({ id: surveyQuestions.id })
+          .from(surveyQuestions)
+          .where(eq(surveyQuestions.surveyId, survey.id));
+        const validIds = new Set(surveyQs.map((q) => q.id));
+
+        for (const rule of dto.logicRules!) {
+          if (!validIds.has(rule.triggerQuestionId)) {
+            throw new BadRequestException(`logicRules: triggerQuestionId ${rule.triggerQuestionId} 不屬於此問卷`);
+          }
+          if (!validIds.has(rule.targetQuestionId)) {
+            throw new BadRequestException(`logicRules: targetQuestionId ${rule.targetQuestionId} 不屬於此問卷`);
+          }
+        }
+
+        this.validateNoSkipCycles(dto.logicRules!);
+
+        await tx.insert(surveyLogicRules).values(
+          dto.logicRules!.map((r) => ({
+            surveyId: survey.id,
+            triggerQuestionId: r.triggerQuestionId,
+            condition: r.condition,
+            value: r.value ?? null,
+            action: r.action ?? 'show',
+            targetQuestionId: r.targetQuestionId,
+            sortOrder: r.sortOrder ?? 0,
+          })),
+        );
+      });
     }
 
     return this.findOneDetailed(survey.id, surveyorId);
@@ -114,13 +183,19 @@ export class SurveysService {
         ...q,
         options: options.filter((o) => o.questionId === q.id),
       })),
+      // QUA-196: include logic rules for conditional branching
+      logicRules: await this.db
+        .select()
+        .from(surveyLogicRules)
+        .where(eq(surveyLogicRules.surveyId, surveyId))
+        .orderBy(surveyLogicRules.sortOrder),
     };
   }
 
   async update(surveyId: string, surveyorId: string, dto: UpdateSurveyDto) {
     await this.assertOwnerAndDraft(surveyId, surveyorId);
 
-    const { questions, ...surveyFields } = dto;
+    const { questions, logicRules, ...surveyFields } = dto;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
 
     if (surveyFields.title !== undefined) updateData.title = surveyFields.title;
@@ -132,11 +207,22 @@ export class SurveysService {
     if (surveyFields.expiresAt !== undefined) updateData.expiresAt = new Date(surveyFields.expiresAt);
     if (surveyFields.isAnonymous !== undefined) updateData.isAnonymous = surveyFields.isAnonymous;
     if (surveyFields.audienceCriteria !== undefined) updateData.audienceCriteria = surveyFields.audienceCriteria;
+    // QUA-204: Allow updating question shuffle mode
+    if (surveyFields.questionShuffleMode !== undefined) updateData.questionShuffleMode = surveyFields.questionShuffleMode;
 
-    await this.db.update(surveys).set(updateData).where(eq(surveys.id, surveyId));
+    // Wrap survey update + question replacement in a single transaction:
+    // if replaceQuestions fails mid-loop (partial inserts), the survey
+    // update rolls back too — prevents inconsistent state.
+    await this.db.transaction(async (tx) => {
+      await tx.update(surveys).set(updateData).where(eq(surveys.id, surveyId));
+      if (questions !== undefined) {
+        await this.replaceQuestionsInTx(tx, surveyId, questions);
+      }
+    });
 
-    if (questions !== undefined) {
-      await this.replaceQuestions(surveyId, questions);
+    // QUA-196: Replace logic rules (after questions are settled so IDs are valid)
+    if (logicRules !== undefined) {
+      await this.replaceLogicRules(surveyId, logicRules);
     }
 
     return this.findOneDetailed(surveyId, surveyorId);
@@ -228,6 +314,17 @@ export class SurveysService {
     targetAudience?: string;
     purpose?: string;
     preferredTypes?: Array<'single_choice' | 'multiple_choice' | 'text' | 'rating'>;
+    // Phase II.15: 逐題型指定題數（含學術量表變體）
+    typeSpecs?: Array<{
+      type:
+        | 'single_choice'
+        | 'multiple_choice'
+        | 'text'
+        | 'rating'
+        | 'scale_agreement'
+        | 'scale_frequency';
+      count: number;
+    }>;
     // Phase II.14: 換個角度再生 — 避開前一版題目 + 換切入角度
     avoidTitles?: string[];
   }): Promise<{
@@ -241,11 +338,25 @@ export class SurveysService {
       multiple_choice: '多選',
       text: '開放問答',
       rating: '評分',
+      scale_agreement: '同意度量表(非常不同意→非常同意 0~5)',
+      scale_frequency: '頻率量表(從來沒有→總是如此 0~5)',
     };
+
+    // Phase II.15: 逐型題數優先；沒給 typeSpecs 時才回退到舊的 preferredTypes
+    const validSpecs = (dto.typeSpecs ?? []).filter((s) => s.count > 0);
+    const specsTotal = validSpecs.reduce((sum, s) => sum + s.count, 0);
+    const specsLine =
+      validSpecs.length > 0
+        ? `各題型題數（務必精確照數量產生，總題數 = ${specsTotal}）：\n` +
+          validSpecs.map((s) => `  - ${TYPE_LABELS[s.type] ?? s.type}：${s.count} 題`).join('\n')
+        : '';
     const preferredLine =
-      dto.preferredTypes && dto.preferredTypes.length > 0
+      validSpecs.length === 0 && dto.preferredTypes && dto.preferredTypes.length > 0
         ? `偏好題型（請優先使用，其餘酌量）：${dto.preferredTypes.map((t) => TYPE_LABELS[t] ?? t).join('、')}`
         : '';
+
+    // 有 typeSpecs 用其加總；否則用 questionCount。上限 30。
+    const totalQuestions = Math.min(validSpecs.length > 0 ? specsTotal : dto.questionCount, 30);
 
     const avoidLine =
       dto.avoidTitles && dto.avoidTitles.length > 0
@@ -255,7 +366,7 @@ export class SurveysService {
     const userPrompt = [
       `主題：${dto.topic}`,
       dto.purpose ? `目的：${dto.purpose}` : '',
-      `題目數量：${dto.questionCount} 題`,
+      specsLine ? specsLine : `題目數量：${totalQuestions} 題`,
       `語言：${dto.language}`,
       dto.targetAudience ? `目標受眾：${dto.targetAudience}` : '',
       preferredLine,
@@ -272,7 +383,7 @@ export class SurveysService {
     });
 
     const parsed = parseAiSurveyDraft(raw);
-    const normalized = normalizeSurveyDraft(parsed, { maxQuestions: dto.questionCount });
+    const normalized = normalizeSurveyDraft(parsed, { maxQuestions: totalQuestions });
 
     // normalized.questions 已是 {type,title,sortOrder,isRequired,config?,options?}
     // 直接當 SurveyQuestionDto[] 回（options 內含 sortOrder）
@@ -591,13 +702,302 @@ export class SurveysService {
     return survey;
   }
 
+  // ─── QUA-196: Logic Rules Helpers ──────────────────────────────────────────
+
+  /**
+   * Replace all logic rules for a survey (delete + re-insert in a tx).
+   * Validates that trigger/target question IDs belong to this survey,
+   * and checks for infinite loops in skip chains.
+   */
+  private async replaceLogicRules(
+    surveyId: string,
+    rules: LogicRuleDto[],
+  ) {
+    // Fetch current question IDs for this survey
+    const surveyQs = await this.db
+      .select({ id: surveyQuestions.id })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId));
+    const validIds = new Set(surveyQs.map((q) => q.id));
+
+    // Validate all trigger/target IDs
+    for (const rule of rules) {
+      if (!validIds.has(rule.triggerQuestionId)) {
+        throw new BadRequestException(`logicRules: triggerQuestionId ${rule.triggerQuestionId} 不屬於此問卷`);
+      }
+      if (!validIds.has(rule.targetQuestionId)) {
+        throw new BadRequestException(`logicRules: targetQuestionId ${rule.targetQuestionId} 不屬於此問卷`);
+      }
+    }
+
+    // Check for infinite loops in skip chains
+    this.validateNoSkipCycles(rules);
+
+    await this.db.transaction(async (tx) => {
+      // Delete existing rules
+      await tx
+        .delete(surveyLogicRules)
+        .where(eq(surveyLogicRules.surveyId, surveyId));
+
+      // Insert new rules
+      if (rules.length > 0) {
+        await tx.insert(surveyLogicRules).values(
+          rules.map((r) => ({
+            surveyId,
+            triggerQuestionId: r.triggerQuestionId,
+            condition: r.condition,
+            value: r.value ?? null,
+            action: r.action ?? 'show',
+            targetQuestionId: r.targetQuestionId,
+            sortOrder: r.sortOrder ?? 0,
+          })),
+        );
+      }
+    });
+  }
+
+  /**
+   * Validate that skip rules don't create cycles (infinite loops).
+   * A cycle exists if following skip chains from any question leads back to itself.
+   */
+  private validateNoSkipCycles(
+    rules: Array<{ triggerQuestionId: string; action?: string; targetQuestionId: string }>,
+  ) {
+    // Build multi-edge adjacency list (a question may have multiple skip rules with different conditions)
+    const adj = new Map<string, Set<string>>();
+    for (const rule of rules) {
+      if (rule.action !== 'skip') continue;
+      const targets = adj.get(rule.triggerQuestionId) ?? new Set<string>();
+      targets.add(rule.targetQuestionId);
+      adj.set(rule.triggerQuestionId, targets);
+    }
+
+    // DFS cycle detection with explicit recursion stack (iterative to avoid stack overflow on large graphs)
+    const WHITE = 0, GRAY = 1, BLACK = 2;
+    const color = new Map<string, number>();
+
+    const dfs = (start: string): string[] | null => {
+      const stack: Array<{ node: string; iter: Iterator<string> }> = [];
+      const path: string[] = [];
+
+      color.set(start, GRAY);
+      path.push(start);
+      stack.push({ node: start, iter: (adj.get(start) ?? new Set()).values() });
+
+      while (stack.length > 0) {
+        const frame = stack[stack.length - 1]!;
+        const next = frame.iter.next();
+
+        if (next.done) {
+          color.set(frame.node, BLACK);
+          stack.pop();
+          path.pop();
+        } else {
+          const neighbor = next.value;
+          const c = color.get(neighbor) ?? WHITE;
+          if (c === GRAY) {
+            // Found cycle — reconstruct path from where we re-entered
+            const cycleStart = path.indexOf(neighbor);
+            return [...path.slice(cycleStart), neighbor];
+          }
+          if (c === WHITE) {
+            color.set(neighbor, GRAY);
+            path.push(neighbor);
+            stack.push({ node: neighbor, iter: (adj.get(neighbor) ?? new Set()).values() });
+          }
+        }
+      }
+      return null;
+    };
+
+    for (const node of adj.keys()) {
+      if ((color.get(node) ?? WHITE) === WHITE) {
+        const cycle = dfs(node);
+        if (cycle) {
+          throw new BadRequestException(
+            `logicRules: 偵測到無限跳轉迴圈 (${cycle.join(' → ')})，請檢查 skip 規則`,
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * Evaluate logic rules for a survey response.
+   * Returns the set of question IDs that should be VISIBLE to the respondent,
+   * based on the answers they've provided so far.
+   *
+   * Logic:
+   *  - By default, all questions are visible.
+   *  - 'show' rules: target is HIDDEN unless trigger condition is met.
+   *  - 'hide' rules: target is VISIBLE unless trigger condition is met.
+   *  - 'skip' rules: if trigger condition is met, jump to target (hide everything between).
+   */
+  async evaluateLogicRules(
+    surveyId: string,
+    answers: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): Promise<{ visibleQuestionIds: Set<string>; skippedQuestionIds: Set<string> }> {
+    const rules = await this.db
+      .select()
+      .from(surveyLogicRules)
+      .where(eq(surveyLogicRules.surveyId, surveyId))
+      .orderBy(surveyLogicRules.sortOrder);
+
+    if (rules.length === 0) {
+      // No rules → all questions visible
+      const allQs = await this.db
+        .select({ id: surveyQuestions.id })
+        .from(surveyQuestions)
+        .where(eq(surveyQuestions.surveyId, surveyId));
+      return {
+        visibleQuestionIds: new Set(allQs.map((q) => q.id)),
+        skippedQuestionIds: new Set(),
+      };
+    }
+
+    // Get all question IDs for this survey, sorted by sortOrder
+    const allQs = await this.db
+      .select({ id: surveyQuestions.id, sortOrder: surveyQuestions.sortOrder })
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const allQuestionIds = allQs.map((q) => q.id);
+    const visible = new Set(allQuestionIds);
+    const skipped = new Set<string>();
+
+    // Group rules by action type
+    const showRules = rules.filter((r) => r.action === 'show');
+    const hideRules = rules.filter((r) => r.action === 'hide');
+    const skipRules = rules.filter((r) => r.action === 'skip');
+
+    // For 'show' rules: target starts HIDDEN, becomes visible when condition is met
+    for (const rule of showRules) {
+      if (!this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        visible.delete(rule.targetQuestionId);
+      }
+    }
+
+    // For 'hide' rules: target starts VISIBLE, becomes hidden when condition is met
+    for (const rule of hideRules) {
+      if (this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        visible.delete(rule.targetQuestionId);
+      }
+    }
+
+    // For 'skip' rules: if condition met, mark questions between trigger and target as skipped
+    for (const rule of skipRules) {
+      if (this.evaluateCondition(rule.triggerQuestionId, rule.condition, rule.value, answers)) {
+        const triggerIdx = allQuestionIds.indexOf(rule.triggerQuestionId);
+        const targetIdx = allQuestionIds.indexOf(rule.targetQuestionId);
+        if (triggerIdx !== -1 && targetIdx !== -1) {
+          const [from, to] = triggerIdx < targetIdx
+            ? [triggerIdx + 1, targetIdx - 1]
+            : [targetIdx + 1, triggerIdx - 1];
+          for (let i = from; i <= to; i++) {
+            const qId = allQuestionIds[i];
+            visible.delete(qId);
+            skipped.add(qId);
+          }
+        }
+      }
+    }
+
+    return { visibleQuestionIds: visible, skippedQuestionIds: skipped };
+  }
+
+  /**
+   * Evaluate a single condition against the given answers.
+   */
+  private evaluateCondition(
+    triggerQuestionId: string,
+    condition: string,
+    value: string | null,
+    answers: Record<string, { textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>,
+  ): boolean {
+    const answer = answers[triggerQuestionId];
+
+    switch (condition) {
+      case 'is_empty':
+        return !answer || (
+          (answer.textAnswer === undefined || answer.textAnswer === '') &&
+          (!answer.selectedOptionIds || answer.selectedOptionIds.length === 0) &&
+          (answer.ratingValue === undefined || answer.ratingValue === null)
+        );
+
+      case 'is_not_empty':
+        return !!answer && (
+          (answer.textAnswer !== undefined && answer.textAnswer !== '') ||
+          (answer.selectedOptionIds && answer.selectedOptionIds.length > 0) ||
+          (answer.ratingValue !== undefined && answer.ratingValue !== null)
+        );
+
+      default:
+        break;
+    }
+
+    // All other conditions require an answer
+    if (!answer) return false;
+
+    const valueStr = value ?? '';
+
+    // Text-based comparison
+    const textVal = answer.textAnswer ?? '';
+
+    // Option-based comparison
+    const options = answer.selectedOptionIds ?? [];
+
+    // Numeric comparison (for rating)
+    const numVal = answer.ratingValue;
+    const numTarget = parseFloat(valueStr);
+
+    switch (condition) {
+      case 'eq':
+        return textVal === valueStr || options.includes(valueStr) || (numVal !== undefined && numVal === numTarget);
+
+      case 'neq':
+        return textVal !== valueStr && !options.includes(valueStr) && (numVal === undefined || numVal !== numTarget);
+
+      case 'gt':
+        return numVal !== undefined && !isNaN(numTarget) && numVal > numTarget;
+
+      case 'gte':
+        return numVal !== undefined && !isNaN(numTarget) && numVal >= numTarget;
+
+      case 'lt':
+        return numVal !== undefined && !isNaN(numTarget) && numVal < numTarget;
+
+      case 'lte':
+        return numVal !== undefined && !isNaN(numTarget) && numVal <= numTarget;
+
+      case 'contains':
+        return textVal.includes(valueStr) || options.some((o) => o.includes(valueStr));
+
+      case 'not_contains':
+        return !textVal.includes(valueStr) && !options.some((o) => o.includes(valueStr));
+
+      default:
+        return false;
+    }
+  }
+
   private async replaceQuestions(surveyId: string, questionDtos: SurveyQuestionDto[]) {
-    await this.db
+    await this.db.transaction(async (tx) => {
+      await this.replaceQuestionsInTx(tx, surveyId, questionDtos);
+    });
+  }
+
+  private async replaceQuestionsInTx(
+    tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
+    surveyId: string,
+    questionDtos: SurveyQuestionDto[],
+  ) {
+    await tx
       .delete(surveyQuestions)
       .where(eq(surveyQuestions.surveyId, surveyId));
 
     for (const qDto of questionDtos) {
-      const inserted = await this.db
+      const inserted = await tx
         .insert(surveyQuestions)
         .values({
           surveyId,
@@ -613,7 +1013,7 @@ export class SurveysService {
       const questionId = inserted[0].id;
 
       if (qDto.options?.length) {
-        await this.db.insert(questionOptions).values(
+        await tx.insert(questionOptions).values(
           qDto.options.map((o, i) => ({
             questionId,
             label: o.label,

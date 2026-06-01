@@ -14,6 +14,9 @@ interface ZaiChatRequest {
   temperature?: number;
   max_tokens?: number;
   response_format?: { type: 'json_object' | 'text' };
+  // glm-5.1 等推理模型預設會生成大量 reasoning_content（一次呼叫可達 25s+），
+  // 關閉後同樣品質但快 4~5 倍。type:'disabled' 跳過思考鏈。
+  thinking?: { type: 'enabled' | 'disabled' };
 }
 
 interface ZaiChatResponse {
@@ -73,7 +76,7 @@ interface ZaiTelemetry {
   promptVersion?: string;
 }
 
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 60_000; // 推理模型較慢，給足單次完成的時間(避免被 abort 後狂重試)
 const DEFAULT_MAX_RETRIES = 2; // 共嘗試 1 + 2 = 3 次
 const RETRY_BASE_MS = 500;
 
@@ -139,6 +142,7 @@ export class ZaiClient {
   private readonly model: string;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
+  private readonly thinkingDisabled: boolean;
   private readonly cacheEnabled: boolean;
   private readonly cache: ZaiCache;
   private readonly l2: RedisCache | null;
@@ -149,6 +153,8 @@ export class ZaiClient {
     this.model = process.env.ZAI_MODEL ?? 'glm-5.1';
     this.timeoutMs = parseInt(process.env.ZAI_TIMEOUT_MS ?? String(DEFAULT_TIMEOUT_MS), 10);
     this.maxRetries = parseInt(process.env.ZAI_MAX_RETRIES ?? String(DEFAULT_MAX_RETRIES), 10);
+    // 預設關閉推理鏈(快 4~5 倍);要恢復深度推理設 ZAI_ENABLE_THINKING=true
+    this.thinkingDisabled = process.env.ZAI_ENABLE_THINKING !== 'true';
 
     const ttlMs = parseInt(process.env.ZAI_CACHE_TTL_MS ?? String(DEFAULT_CACHE_TTL_MS), 10);
     const cacheMax = parseInt(
@@ -192,6 +198,7 @@ export class ZaiClient {
       maxTokens?: number;
       jsonMode?: boolean;
       cache?: boolean;
+      thinking?: 'enabled' | 'disabled';  // 覆寫全域 ZAI_ENABLE_THINKING 設定
       promptKey?: string;     // Phase II.5: telemetry 用
       promptVersion?: string;
     } = {},
@@ -212,7 +219,7 @@ export class ZaiClient {
         this.logger.log(
           `zai.chat CACHE_HIT(L1) model=${this.model} key=${cacheK.slice(0, 16)} size=${this.cache.size}`,
         );
-        this.recordCacheHit(options);
+        this.recordCacheHit({ ...options, model: this.model });
         return l1Hit;
       }
       // L2：Redis（跨進程）。命中後回填 L1
@@ -221,7 +228,7 @@ export class ZaiClient {
         if (l2Hit !== undefined) {
           this.logger.log(`zai.chat CACHE_HIT(L2) model=${this.model} key=${cacheK.slice(0, 16)}`);
           this.cache.set(cacheK, l2Hit); // 回填 L1
-          this.recordCacheHit(options);
+          this.recordCacheHit({ ...options, model: this.model });
           return l2Hit;
         }
       }
@@ -235,6 +242,13 @@ export class ZaiClient {
     };
     if (options.jsonMode) {
       body.response_format = { type: 'json_object' };
+    }
+    // 關閉推理鏈以大幅降低延遲(per-call 可用 options.thinking 覆寫)
+    const disableThinking = options.thinking
+      ? options.thinking === 'disabled'
+      : this.thinkingDisabled;
+    if (disableThinking) {
+      body.thinking = { type: 'disabled' };
     }
 
     const startedAt = Date.now();
@@ -299,6 +313,7 @@ export class ZaiClient {
             ts: Date.now(),
             promptKey: options.promptKey,
             promptVersion: options.promptVersion,
+            model: this.model,
             totalTokens: telemetry.totalTokens,
             promptTokens: telemetry.promptTokens,
             completionTokens: telemetry.completionTokens,
@@ -367,11 +382,12 @@ export class ZaiClient {
     }
   }
 
-  private recordCacheHit(options: { promptKey?: string; promptVersion?: string }): void {
+  private recordCacheHit(options: { promptKey?: string; promptVersion?: string; model?: string }): void {
     zaiTelemetry.record({
       ts: Date.now(),
       promptKey: options.promptKey,
       promptVersion: options.promptVersion,
+      model: options.model,
       totalTokens: 0,
       promptTokens: 0,
       completionTokens: 0,
@@ -396,6 +412,7 @@ export class ZaiClient {
       ts: Date.now(),
       promptKey: options.promptKey,
       promptVersion: options.promptVersion,
+      model: this.model,
       totalTokens: 0,
       promptTokens: 0,
       completionTokens: 0,

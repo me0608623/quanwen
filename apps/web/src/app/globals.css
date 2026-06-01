@@ -408,6 +408,19 @@
   }
 }
 
+/* ---- 不確定式進度條(AI 生成中):一段亮條來回滑動 ---- */
+@keyframes q-progress-slide {
+  0% {
+    transform: translateX(-120%);
+  }
+  100% {
+    transform: translateX(320%);
+  }
+}
+.q-progress-bar {
+  animation: q-progress-slide 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+}
+
 /* ---- 尊重使用者「減少動態」偏好:整層關閉 ---- */
 @media (prefers-reduced-motion: reduce) {
   .q-btn-anim {
@@ -418,5 +431,10 @@
   }
   .q-btn-anim::after {
     display: none;
+  }
+  .q-progress-bar {
+    animation: none;
+    transform: translateX(0);
+    width: 100%;
   }
 }

@@ -32,7 +32,16 @@ const rawOptionSchema = z
 const rawQuestionSchema = z
   .object({
     type: z
-      .enum(['single_choice', 'multiple_choice', 'text', 'rating', 'matrix'])
+      .enum([
+        'single_choice',
+        'multiple_choice',
+        'text',
+        'rating',
+        'matrix',
+        // Phase II.15: 學術量表 — normalize 會轉成帶固定錨點的 rating
+        'scale_agreement',
+        'scale_frequency',
+      ])
       .catch('text'),
     title: z.string().max(1000).optional().catch(undefined),
     description: z.string().max(500).optional().catch(undefined),
@@ -85,6 +94,15 @@ const MIN_CHOICE_OPTIONS = 2;
 const MAX_CHOICE_OPTIONS = 8;
 const DEFAULT_MAX_RATING = 5;
 
+// Phase II.15: 學術量表 preset — 兩種常見李克特量表，固定錨點 + 0~5 分。
+// 量表題在 DB 仍存為 rating，靠 config 的 scaleStart/minLabel/maxLabel 表達語意。
+const SCALE_PRESETS = {
+  scale_agreement: { minLabel: '非常不同意', maxLabel: '非常同意' },
+  scale_frequency: { minLabel: '從來沒有', maxLabel: '總是如此' },
+} as const;
+const SCALE_MAX_RATING = 5;
+const SCALE_START = 0;
+
 /**
  * @param raw   parseAiSurveyDraft 的結果
  * @param opts.maxQuestions 上限（依使用者要求；預設 20）
@@ -135,6 +153,27 @@ export function normalizeOneQuestion(
   const title2 = q.title?.trim();
   if (!title2) {
     return { question: null, notes: ['略過一題：題目文字為空'] };
+  }
+
+  // 學術量表 → 固定錨點的 rating（0~5）
+  if (q.type === 'scale_agreement' || q.type === 'scale_frequency') {
+    const preset = SCALE_PRESETS[q.type];
+    return {
+      question: {
+        type: 'rating',
+        title: title2,
+        description: q.description?.trim() || undefined,
+        sortOrder,
+        isRequired: q.isRequired ?? true,
+        config: {
+          maxRating: SCALE_MAX_RATING,
+          scaleStart: SCALE_START,
+          minLabel: preset.minLabel,
+          maxLabel: preset.maxLabel,
+        },
+      },
+      notes,
+    };
   }
 
   let type = q.type as GenQuestionType | 'matrix';
@@ -205,11 +244,23 @@ export function normalizeOneQuestion(
   }
 
   if (type === 'rating') {
-    const rawMax = (q.config as { maxRating?: unknown } | undefined)?.maxRating;
-    let maxRating = typeof rawMax === 'number' ? Math.round(rawMax) : DEFAULT_MAX_RATING;
+    const rawCfg = q.config as
+      | { maxRating?: unknown; minLabel?: unknown; maxLabel?: unknown; scaleStart?: unknown }
+      | undefined;
+    let maxRating =
+      typeof rawCfg?.maxRating === 'number' ? Math.round(rawCfg.maxRating) : DEFAULT_MAX_RATING;
     if (!Number.isFinite(maxRating) || maxRating < 3 || maxRating > 10) {
       maxRating = DEFAULT_MAX_RATING;
     }
+    const config: Record<string, unknown> = { maxRating };
+    // 保留 AI 提供的錨點標籤 / 起始分（讓 rating 也能當量表用）
+    if (typeof rawCfg?.minLabel === 'string' && rawCfg.minLabel.trim()) {
+      config.minLabel = rawCfg.minLabel.trim().slice(0, 40);
+    }
+    if (typeof rawCfg?.maxLabel === 'string' && rawCfg.maxLabel.trim()) {
+      config.maxLabel = rawCfg.maxLabel.trim().slice(0, 40);
+    }
+    if (rawCfg?.scaleStart === 0) config.scaleStart = 0;
     return {
       question: {
         type: 'rating',
@@ -217,7 +268,7 @@ export function normalizeOneQuestion(
         description: q.description?.trim() || undefined,
         sortOrder,
         isRequired: q.isRequired ?? true,
-        config: { maxRating },
+        config,
       },
       notes,
     };

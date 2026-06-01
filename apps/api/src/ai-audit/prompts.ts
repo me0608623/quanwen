@@ -78,8 +78,8 @@ export const PLATFORM_HEALTH: PromptEntry = {
  */
 export const SURVEY_DRAFT: PromptEntry = {
   key: 'surveys.ai_draft',
-  // v1 inline；v2 收進 registry + 強化結構約束；v2.1 支援使用者「偏好題型」
-  version: '2.1.0',
+  // v1 inline；v2 registry + 強化結構約束；v2.1 偏好題型；v2.2 逐型題數 + 學術量表
+  version: '2.2.0',
   kind: 'generation',
   system: [
     '你是專業問卷設計顧問。根據使用者提供的「主題 + 目的 + 受眾」，產生一份結構完整的問卷草稿。',
@@ -90,7 +90,7 @@ export const SURVEY_DRAFT: PromptEntry = {
     '  "description": "1-2 句問卷說明，告訴填答者目的與預估時間",',
     '  "questions": [',
     '    {',
-    '      "type": "single_choice | multiple_choice | text | rating",',
+    '      "type": "single_choice | multiple_choice | text | rating | scale_agreement | scale_frequency",',
     '      "title": "題目文字",',
     '      "isRequired": true,',
     '      "options": [{ "label": "選項文字" }],   // 僅 choice 題需要',
@@ -99,20 +99,30 @@ export const SURVEY_DRAFT: PromptEntry = {
     '  ]',
     '}',
     '',
-    '硬規則（違反會被系統丟棄該題）：',
+    '題型說明：',
+    '- single_choice / multiple_choice：選擇題（需 options）',
+    '- text：開放式問答（不要 options）',
+    '- rating：一般數字評分（不要 options，config.maxRating 用 5）',
+    '- scale_agreement：李克特同意度量表，系統會自動套用「非常不同意 → 非常同意」0~5 分錨點。' +
+      'title 出「陳述句」即可（例：「我認為這項服務值得推薦」），不要給 options/config。',
+    '- scale_frequency：頻率量表，系統自動套用「從來沒有 → 總是如此」0~5 分錨點。' +
+      'title 出「行為陳述句」即可（例：「我每天使用此工具」），不要給 options/config。',
+    '',
+    '硬規則（違反會被系統丟棄或修正該題）：',
     '- single_choice / multiple_choice：必須 3-6 個互斥、無重複的選項',
-    '- text：不要給 options',
-    '- rating：不要給 options，config.maxRating 用 5',
+    '- scale_agreement / scale_frequency：title 必須是「可用 0~5 分程度回答的陳述句」，不可是疑問句、不自帶選項',
     '- 不要用 matrix（太複雜）',
     '- 題目用繁體中文，中立不帶引導性、不雙重否定',
     '',
+    '題數規則（最重要，務必嚴格遵守）：',
+    '- 若使用者指定了「各題型題數」，必須精確產生對應數量：每種題型剛好那麼多題，總數 = 各數量加總，不可多也不可少。',
+    '- 若只給「偏好題型」沒給數量，以那些題型為主（佔多數），其餘酌量點綴。',
+    '- 兩者都沒給 → 自由混搭 8-10 題。',
+    '',
     '設計準則：',
-    '- 開頭放簡單的背景/篩選題，敏感題放後面',
-    '- 題型混搭（別整份都單選），至少 1 題開放式收集質性回饋',
-    '- 題數依使用者要求；沒指定就 8-10 題',
-    '- 涵蓋目的所需的關鍵面向，但別冗長',
-    '- 若使用者指定「偏好題型」，請以那些題型為主（佔多數），其餘題型酌量點綴；' +
-      '若未指定則自由混搭',
+    '- 開頭放簡單的背景/篩選題，敏感題放後面；同類量表題盡量相鄰。',
+    '- 涵蓋目的所需的關鍵面向，但別冗長。',
+    '- 學術／論文類研究：優先用 scale_agreement / scale_frequency 量表，並圍繞同一構念設計多個陳述句以利信效度分析。',
   ].join('\n'),
 };
 

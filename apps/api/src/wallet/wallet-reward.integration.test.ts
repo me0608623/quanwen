@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Phase Y: issueReward + 全系統 journal invariant 整合測試
  *
  * 流程：填答提交 → 平台呼叫 walletService.issueReward → 三筆 transaction（reward_out/in/fee）
@@ -105,6 +105,8 @@ describe('WalletService.issueReward (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
+        base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
         target_count INTEGER NOT NULL DEFAULT 100,
         completed_count INTEGER NOT NULL DEFAULT 0,
@@ -181,7 +183,7 @@ describe('WalletService.issueReward (integration)', () => {
 
     const surveyorAfter = await cashOf(SURVEYOR_ID);
     const respondentAfter = await cashOf(RESPONDENT_ID);
-    expect(surveyorAfter).toBe(surveyorBefore - 110); // 100 + 10 fee
+    expect(surveyorAfter).toBe(surveyorBefore - 115); // 100 + 15 fee
     expect(respondentAfter).toBe(respondentBefore + 100);
 
     const txns = await txnsByResponse(responseId);
@@ -287,13 +289,13 @@ describe('WalletService.issueReward (integration)', () => {
     const txns = await txnsByResponse(responseId);
     const feeTxn = txns.find((t) => t.type === 'platform_fee');
     expect(feeTxn).toBeTruthy();
-    expect(feeTxn!.amount).toBe(20); // 10% of 200
+    expect(feeTxn!.amount).toBe(30); // 15% of 200
 
     const entries = await db
       .select()
       .from(schema.journalEntries)
       .where(eq(schema.journalEntries.transactionId, feeTxn!.id));
     const platformRev = entries.find((e) => e.accountName === 'platform_revenue');
-    expect(platformRev?.creditAmount).toBe(20);
+    expect(platformRev?.creditAmount).toBe(30);
   });
 });

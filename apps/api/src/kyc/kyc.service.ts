@@ -3,6 +3,7 @@ import {
   Inject,
   Logger,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   ConflictException,
   forwardRef,
@@ -167,6 +168,9 @@ export class KycService {
 
   async approve(kycId: string, adminId: string, adminNote?: string) {
     const row = await this.assertPending(kycId);
+    if (row.userId === adminId) {
+      throw new ForbiddenException('管理員不可核准自己的 KYC 申請');
+    }
     const now = new Date();
     await this.db
       .update(kycVerifications)
@@ -194,6 +198,9 @@ export class KycService {
       throw new BadRequestException('駁回需附說明（至少 5 字）');
     }
     const row = await this.assertPending(kycId);
+    if (row.userId === adminId) {
+      throw new ForbiddenException('管理員不可駁回自己的 KYC 申請');
+    }
     const now = new Date();
     await this.db
       .update(kycVerifications)
