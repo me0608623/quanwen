@@ -430,7 +430,7 @@ export class ExportService {
       lines.push('');
       lines.push(`### ${q.title}`);
       lines.push('');
-      lines.push(`類型：\`${q.type}\`　回應數：${q.responseCount}`);
+      lines.push(`類型：\`${q.type}\` 回應數：${q.responseCount}`);
       if (q.optionCounts.length > 0) {
         lines.push('');
         lines.push('| 選項 | 計數 |');

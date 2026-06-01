@@ -161,7 +161,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
 
     await service.streamResponsesCsv(SURVEY_ID, SURVEYOR_ID, out);
 
-    const csv = Buffer.concat(chunks).toString('utf-8').replace(/^﻿/, '');
+    const csv = Buffer.concat(chunks).toString('utf-8');
     const lines = csv.trim().split('\n');
 
     // Header + 2 data rows
@@ -183,7 +183,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
       minQualityScore: 70,
     });
 
-    const csv = Buffer.concat(chunks).toString('utf-8').replace(/^﻿/, '');
+    const csv = Buffer.concat(chunks).toString('utf-8');
     const lines = csv.trim().split('\n');
     expect(lines).toHaveLength(2); // header + 1 clean row
   });
