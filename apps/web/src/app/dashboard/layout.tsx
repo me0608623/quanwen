@@ -4,15 +4,16 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 const DASHBOARD_NAV = [
-  { href: '/dashboard',         label: '我的問卷' },
+  { href: '/dashboard', label: '我的問卷' },
+  { href: '/dashboard/shop', label: '商店' },
   { href: '/dashboard/profile', label: '個人資料' },
 ];
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
 
-  // Hide the sub-nav on deep survey pages (editor, fill-preview, etc.)
-  const showNav = pathname === '/dashboard' || pathname === '/dashboard/profile';
+  const showNav =
+    pathname === '/dashboard' || pathname === '/dashboard/profile' || pathname === '/dashboard/shop';
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
