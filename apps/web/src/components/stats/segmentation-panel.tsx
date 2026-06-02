@@ -143,7 +143,7 @@ function SegmentBarChart({
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
           <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 11 }} />
           <YAxis type="category" dataKey="question" tick={{ fontSize: 11 }} width={80} />
-          <Tooltip formatter={(v: number) => v.toFixed(2)} />
+          <Tooltip formatter={(v: any) => typeof v === 'number' ? v.toFixed(2) : String(v)} />
           <Legend />
           {segLabels.map((label, i) => (
             <Bar

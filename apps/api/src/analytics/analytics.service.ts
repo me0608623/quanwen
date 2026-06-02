@@ -12,7 +12,7 @@ import { surveys, surveyQuestions, questionOptions, surveyResponses, responseAns
  * 3. NPS 淨推薦值（將評分題轉為 NPS 計算）
  */
 
-interface DescriptiveStats {
+export interface DescriptiveStats {
   mean: number | null;
   median: number | null;
   mode: number | null;
@@ -22,13 +22,13 @@ interface DescriptiveStats {
   count: number;
 }
 
-interface CrossTabCell {
+export interface CrossTabCell {
   rowLabel: string;
   colLabel: string;
   count: number;
 }
 
-interface CrossTabResult {
+export interface CrossTabResult {
   questionA: { id: string; title: string };
   questionB: { id: string; title: string };
   rows: string[];
@@ -37,7 +37,7 @@ interface CrossTabResult {
   cramersV: number | null;
 }
 
-interface NpsResult {
+export interface NpsResult {
   questionId: string;
   title: string;
   promoters: number;   // 9-10
