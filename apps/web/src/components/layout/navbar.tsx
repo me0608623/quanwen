@@ -36,6 +36,7 @@ const USER_TABS = [
   { href: '/tasks',     label: '填問卷', matches: ['/tasks', '/earnings', '/shop'] },
   { href: '/mutual',    label: '互惠',   matches: ['/mutual'] },
   { href: '/spin',      label: '🎡 轉盤', matches: ['/spin'] },
+  { href: '/dashboard/shop', label: '🛍️ 商店', matches: ['/dashboard/shop'] },
 ] as const;
 
 // admin 專屬 nav

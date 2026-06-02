@@ -2,11 +2,10 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutList, Store, UserCircle2 } from 'lucide-react';
+import { LayoutList, UserCircle2 } from 'lucide-react';
 
 const DASHBOARD_NAV = [
   { href: '/dashboard', label: '我的問卷', icon: LayoutList },
-  { href: '/dashboard/shop', label: '商店', icon: Store },
   { href: '/dashboard/profile', label: '個人資料', icon: UserCircle2 },
 ];
 
