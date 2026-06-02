@@ -38,5 +38,6 @@ COPY --from=builder --chown=nestjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
 WORKDIR /app/apps/api
 USER nestjs
-EXPOSE 3001
+# Render injects PORT env var; app reads process.env.PORT (fallback 3001)
+EXPOSE ${PORT:-3001}
 CMD ["node", "dist/main.js"]
