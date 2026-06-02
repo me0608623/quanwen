@@ -5,7 +5,7 @@ services:
     plan: free
     rootDir: .
     dockerfilePath: ./apps/api/Dockerfile
-    healthCheckPath: /health
+    healthCheckPath: /api/v1/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
