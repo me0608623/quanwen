@@ -1,12 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
 import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, type ReportType } from '@/hooks/use-surveys';
+import { useDescriptiveStats, useCrossTab, useNps } from '@/hooks/use-analytics';
 import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
+import { TrendLineChart } from '@/components/stats/trend-chart';
+import { CrossTabPanel, CrossTabSection } from '@/components/stats/cross-tab-panel';
+import { NpsGauge, NpsSection } from '@/components/stats/nps-gauge';
+import { CorrelationSection } from '@/components/stats/correlation-panel';
+import { SegmentationSection } from '@/components/stats/segmentation-panel';
 
 interface OptionCount { optionId: string; label: string; count: number }
 interface QuestionStat {
@@ -45,41 +51,28 @@ function useSurveyStats(id: string) {
   });
 }
 
-// ─── 趨勢圖（純 CSS bar chart）──────────────────────────────────────────────
+// ─── 趨勢圖（recharts AreaChart）──────────────────────────────────────────────
 
 function TrendChart({ surveyId }: { surveyId: string }) {
-  const { data: trend = [] } = useSurveyTrend(surveyId);
-  const max = Math.max(...trend.map((t) => t.count), 1);
+  const { data: trend = [], isLoading } = useSurveyTrend(surveyId);
 
-  // 只顯示後 14 天（太多看不清）
-  const visible = trend.slice(-14);
+  if (isLoading) {
+    return (
+      <section className="rounded-lg border border-border p-5">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+          近 14 天填答趨勢
+        </h2>
+        <div className="h-24 animate-pulse rounded bg-muted" />
+      </section>
+    );
+  }
 
   return (
     <section className="rounded-lg border border-border p-5">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
         近 14 天填答趨勢
       </h2>
-      <div className="flex items-end gap-1 h-24">
-        {visible.map((pt) => {
-          const pct = Math.round((pt.count / max) * 100);
-          return (
-            <div key={pt.date} className="flex-1 flex flex-col items-center gap-0.5 group">
-              <div
-                className="w-full rounded-t bg-primary/70 group-hover:bg-primary transition-all"
-                style={{ height: `${Math.max(pct, pt.count > 0 ? 4 : 0)}%` }}
-                title={`${pt.date}: ${pt.count} 份`}
-              />
-              {pt.count > 0 && (
-                <span className="text-[9px] text-muted-foreground tabular-nums">{pt.count}</span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="flex justify-between mt-1 text-[9px] text-muted-foreground">
-        <span>{visible[0]?.date.slice(5)}</span>
-        <span>{visible[visible.length - 1]?.date.slice(5)}</span>
-      </div>
+      <TrendLineChart data={trend} />
     </section>
   );
 }
@@ -341,6 +334,18 @@ export default function SurveyStatsPage() {
 
       {/* 趨勢圖 */}
       <TrendChart surveyId={id} />
+
+      {/* 交叉分析 */}
+      <CrossTabSection questionStats={stats.questionStats} surveyId={id} />
+
+      {/* NPS 淨推薦值 */}
+      <NpsSection questionStats={stats.questionStats} surveyId={id} />
+
+      {/* 相關性分析 */}
+      <CorrelationSection questionStats={stats.questionStats} surveyId={id} />
+
+      {/* 分群分析 */}
+      <SegmentationSection surveyId={id} />
 
       {/* 受訪者清單（匿名化 token） */}
       <RespondentsPanel surveyId={id} totalResponses={stats.totalResponses} />

@@ -14,6 +14,9 @@ import {
   LabelList,
 } from 'recharts';
 import type {
+  PieLabelRenderProps,
+} from 'recharts';
+import type {
   Formatter,
   NameType,
   ValueType,
@@ -137,6 +140,71 @@ export function QualityDonut({
             verticalAlign="middle"
             align="right"
             layout="vertical"
+            iconSize={10}
+            wrapperStyle={{ fontSize: 12 }}
+          />
+        </PieChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+/** 單選題的選項分佈 — PieChart with percentage labels */
+export function OptionPieChart({ data, totalAnswers }: { data: OptionDatum[]; totalAnswers: number }) {
+  if (data.length === 0) return null;
+
+  const dataWithPct = data.map((d, i) => ({
+    name: d.label,
+    value: d.count,
+    pct: totalAnswers > 0 ? Math.round((d.count / totalAnswers) * 100) : 0,
+    fill: PALETTE[i % PALETTE.length],
+  }));
+
+  const renderLabel = (props: PieLabelRenderProps) => {
+    const cx = Number(props.cx ?? 0);
+    const cy = Number(props.cy ?? 0);
+    const midAngle = Number(props.midAngle ?? 0);
+    const innerRadius = Number(props.innerRadius ?? 0);
+    const outerRadius = Number(props.outerRadius ?? 0);
+    const percent = Number(props.percent ?? 0);
+
+    const RADIAN = Math.PI / 180;
+    const radius = innerRadius + (outerRadius - innerRadius) * 0.5;
+    const x = cx + radius * Math.cos(-midAngle * RADIAN);
+    const y = cy + radius * Math.sin(-midAngle * RADIAN);
+    return (
+      <text x={x} y={y} fill="#fff" textAnchor="middle" dominantBaseline="central" fontSize={12} fontWeight={600}>
+        {`${(percent * 100).toFixed(0)}%`}
+      </text>
+    );
+  };
+
+  return (
+    <div style={{ width: '100%', height: 300 }}>
+      <ResponsiveContainer height={300}>
+        <PieChart>
+          <Pie
+            data={dataWithPct}
+            cx="50%"
+            cy="50%"
+            outerRadius={100}
+            dataKey="value"
+            nameKey="name"
+            labelLine={false}
+            label={renderLabel}
+          >
+            {dataWithPct.map((d, i) => (
+              <Cell key={i} fill={d.fill} />
+            ))}
+          </Pie>
+          <Tooltip
+            contentStyle={{ fontSize: 12, borderRadius: 6, border: '1px solid #e2e8f0' }}
+            formatter={((value: ValueType, _name: NameType, ctx: { payload?: { pct?: number } }) => {
+              const pct = ctx?.payload?.pct ?? 0;
+              return [`${value} 票 (${pct}%)`, '票數'];
+            }) as Formatter<ValueType, NameType>}
+          />
+          <Legend
             iconSize={10}
             wrapperStyle={{ fontSize: 12 }}
           />
