@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, type ReportType } from '@/hooks/use-surveys';
+import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, type ReportType } from '@/hooks/use-surveys';
 import { useDescriptiveStats, useCrossTab, useNps } from '@/hooks/use-analytics';
 import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
@@ -504,6 +504,7 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
   const [reportType, setReportType] = useState<ReportType>('simple');
   const queryClient = useQueryClient();
   const { data, isLoading, isFetching, error, refetch } = useSurveyAiInsights(surveyId, enabled, reportType);
+  const { data: usage } = useAiUsage();
 
   const handleGenerate = () => {
     if (!enabled) {
@@ -547,6 +548,14 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
           {busy ? '分析中…' : enabled ? '重新生成' : '生成報告'}
         </button>
       </div>
+
+      {usage && (
+        <p className="relative mb-3 text-[11px] text-slate-500">
+          {usage.tier.toUpperCase()} 方案 · 今日 AI 分析剩餘{' '}
+          {Number.isFinite(usage.remaining.analyzeResponses) ? usage.remaining.analyzeResponses : '∞'}/
+          {Number.isFinite(usage.limits.analyzeResponses) ? usage.limits.analyzeResponses : '∞'} 次
+        </p>
+      )}
 
       {/* 簡單 / 詳細 報告切換 */}
       <div className="relative mb-3 inline-flex rounded-lg border border-[#126b8a]/20 bg-white/60 p-0.5 text-xs">

@@ -11,27 +11,21 @@ export class AiUsageService {
   constructor(@Inject(DB) private readonly db: AppDb) {}
 
   private readonly TIER_LIMITS = {
-    free: { optimize_survey: 3, generate_questions: 3, analyze_responses: 3 },
-    vip: { optimize_survey: 50, generate_questions: 50, analyze_responses: 50 },
-    vvip: { optimize_survey: Infinity, generate_questions: Infinity, analyze_responses: Infinity },
+    free: 3,
+    vip: 50,
+    vvip: Infinity,
   };
 
-  private getUsageCount(
-    usage: {
-      optimizeSurveyCount: number;
-      generateQuestionsCount: number;
-      analyzeResponsesCount: number;
-    },
-    featureType: AI_FEATURE_TYPE,
-  ) {
-    switch (featureType) {
-      case 'optimize_survey':
-        return usage.optimizeSurveyCount;
-      case 'generate_questions':
-        return usage.generateQuestionsCount;
-      case 'analyze_responses':
-        return usage.analyzeResponsesCount;
-    }
+  private getTotalUsed(usage: {
+    optimizeSurveyCount: number;
+    generateQuestionsCount: number;
+    analyzeResponsesCount: number;
+  }) {
+    return (
+      usage.optimizeSurveyCount +
+      usage.generateQuestionsCount +
+      usage.analyzeResponsesCount
+    );
   }
 
   async getTodayUsage(userId: string) {
@@ -56,19 +50,21 @@ export class AiUsageService {
     }
 
     const userTier = userResult[0].tier as 'free' | 'vip' | 'vvip';
-    const limits = this.TIER_LIMITS[userTier];
+    const limit = this.TIER_LIMITS[userTier];
     const usage = usageResult[0] || {
       optimizeSurveyCount: 0,
       generateQuestionsCount: 0,
       analyzeResponsesCount: 0,
     };
+    const totalUsed = this.getTotalUsed(usage);
+    const remaining = limit === Infinity ? Infinity : Math.max(0, limit - totalUsed);
 
     return {
       tier: userTier,
       limits: {
-        optimizeSurvey: limits.optimize_survey,
-        generateQuestions: limits.generate_questions,
-        analyzeResponses: limits.analyze_responses,
+        optimizeSurvey: limit,
+        generateQuestions: limit,
+        analyzeResponses: limit,
       },
       used: {
         optimizeSurvey: usage.optimizeSurveyCount,
@@ -76,19 +72,12 @@ export class AiUsageService {
         analyzeResponses: usage.analyzeResponsesCount,
       },
       remaining: {
-        optimizeSurvey:
-          limits.optimize_survey === Infinity
-            ? Infinity
-            : Math.max(0, limits.optimize_survey - usage.optimizeSurveyCount),
-        generateQuestions:
-          limits.generate_questions === Infinity
-            ? Infinity
-            : Math.max(0, limits.generate_questions - usage.generateQuestionsCount),
-        analyzeResponses:
-          limits.analyze_responses === Infinity
-            ? Infinity
-            : Math.max(0, limits.analyze_responses - usage.analyzeResponsesCount),
+        optimizeSurvey: remaining,
+        generateQuestions: remaining,
+        analyzeResponses: remaining,
       },
+      totalUsed,
+      totalLimit: limit,
     };
   }
 
@@ -100,20 +89,14 @@ export class AiUsageService {
         allowed: true,
         tier: usage.tier,
         limit: Infinity,
-        used: 0,
+        used: usage.totalUsed,
         remaining: Infinity,
+        featureType,
       };
     }
 
-    const limit = this.TIER_LIMITS[usage.tier][featureType];
-    const used = this.getUsageCount(
-      {
-        optimizeSurveyCount: usage.used.optimizeSurvey,
-        generateQuestionsCount: usage.used.generateQuestions,
-        analyzeResponsesCount: usage.used.analyzeResponses,
-      },
-      featureType,
-    );
+    const limit = this.TIER_LIMITS[usage.tier];
+    const used = usage.totalUsed;
 
     return {
       allowed: used < limit,
@@ -121,6 +104,7 @@ export class AiUsageService {
       limit,
       used,
       remaining: limit === Infinity ? Infinity : Math.max(0, limit - used),
+      featureType,
     };
   }
 

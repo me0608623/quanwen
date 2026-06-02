@@ -1,4 +1,4 @@
-import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './db';
@@ -20,19 +20,16 @@ import { SpinModule } from './spin/spin.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AiModule } from './ai/ai.module';
 import { ScheduleModule } from '@nestjs/schedule';
-import { AiQuotaMiddleware } from './common/middleware/ai-quota.middleware';
 
 @Module({
   imports: [
     DatabaseModule,
-    CommonModule, // @Global() — CryptoService available everywhere
-    RedisModule, // @Global() — 共用 Redis client（readiness + cron lock）
+    CommonModule,
+    RedisModule,
     ScheduleModule.forRoot(),
-    // P2: 限流計數改走 Redis（跨實例共享）。short/medium 限制值不變。
-    // storage 在 Redis 不可用時自動 fallback 為 in-memory（逐實例仍會擋，不會無限流）。
     ThrottlerModule.forRoot({
       throttlers: [
-        { name: 'short',  ttl: 1000,   limit: 10  },
+        { name: 'short', ttl: 1000, limit: 10 },
         { name: 'medium', ttl: 60_000, limit: 100 },
       ],
       storage: new RedisThrottlerStorage(process.env.REDIS_URL),
@@ -52,15 +49,6 @@ import { AiQuotaMiddleware } from './common/middleware/ai-quota.middleware';
     AnalyticsModule,
     AiModule,
   ],
-  providers: [
-    { provide: APP_GUARD, useClass: ThrottlerGuard },
-  ],
+  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
-export class AppModule implements NestModule {
-  configure(consumer: MiddlewareConsumer) {
-    // AI quota middleware for AI endpoints
-    consumer
-      .apply(AiQuotaMiddleware)
-      .forRoutes({ path: 'ai/*', method: RequestMethod.POST });
-  }
-}
+export class AppModule {}

@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import {
   useAiDraft,
+  useAiUsage,
   useRegenerateQuestion,
   AiDraftResult,
 } from '@/hooks/use-surveys';
@@ -54,6 +55,7 @@ export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
 
   const aiDraft = useAiDraft();
   const regenQ = useRegenerateQuestion();
+  const { data: usage } = useAiUsage();
 
   const toggleType = (t: GenType) =>
     setTypeCounts((prev) => {
@@ -143,6 +145,13 @@ export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
 
       {open && (
         <div className="mt-3 rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+          {usage && (
+            <p className="text-xs text-muted-foreground">
+              {usage.tier.toUpperCase()} 方案 · 今日 AI 出題剩餘{' '}
+              {Number.isFinite(usage.remaining.generateQuestions) ? usage.remaining.generateQuestions : '∞'}/
+              {Number.isFinite(usage.limits.generateQuestions) ? usage.limits.generateQuestions : '∞'} 次
+            </p>
+          )}
           {/* 輸入區 — draft 出來後收合，避免畫面太長 */}
           {!draft && (
             <>

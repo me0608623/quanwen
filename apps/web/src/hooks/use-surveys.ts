@@ -21,6 +21,37 @@ export interface SurveyAiInsights {
   generatedAt: string;
 }
 
+export interface AiUsageSnapshot {
+  tier: 'free' | 'vip' | 'vvip';
+  limits: {
+    optimizeSurvey: number;
+    generateQuestions: number;
+    analyzeResponses: number;
+  };
+  used: {
+    optimizeSurvey: number;
+    generateQuestions: number;
+    analyzeResponses: number;
+  };
+  remaining: {
+    optimizeSurvey: number;
+    generateQuestions: number;
+    analyzeResponses: number;
+  };
+}
+
+export function useAiUsage(enabled = true) {
+  return useQuery<AiUsageSnapshot>({
+    queryKey: ['user', 'ai-usage'],
+    queryFn: async () => {
+      const { data } = await api.get<AiUsageSnapshot>('/user/usage');
+      return data;
+    },
+    enabled,
+    staleTime: 30_000,
+  });
+}
+
 /**
  * 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）
  * @param reportType simple = 精簡摘要；detailed = 詳細報告（逐題 + 交叉 + 方法）
@@ -33,8 +64,10 @@ export function useSurveyAiInsights(
   return useQuery<SurveyAiInsights>({
     queryKey: ['surveys', surveyId, 'ai-insights', reportType],
     queryFn: async () => {
-      const { data } = await api.get<SurveyAiInsights>(
-        `/surveys/${surveyId}/ai-insights?type=${reportType}`,
+      const { data } = await api.post<SurveyAiInsights>(
+        '/ai/analyze-responses',
+        { surveyId, reportType },
+        { timeout: 120_000 },
       );
       return data;
     },
@@ -252,6 +285,8 @@ export function useDeleteSurvey() {
 }
 
 export function useAiDraft() {
+  const queryClient = useQueryClient();
+
   return useMutation({
     mutationFn: async (dto: {
       topic: string;
@@ -274,7 +309,7 @@ export function useAiDraft() {
       avoidTitles?: string[];
     }) => {
       const { data } = await api.post<AiDraftResult>(
-        '/surveys/ai-draft',
+        '/ai/generate-questions',
         {
           questionCount: 8,
           language: 'zh-TW',
@@ -283,6 +318,9 @@ export function useAiDraft() {
         { timeout: 120_000 }, // AI 生成較慢,給足時間;逾時轉成錯誤而非無限轉圈
       );
       return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['user', 'ai-usage'] });
     },
   });
 }
@@ -457,7 +495,11 @@ export function useSurveyAiImprove(surveyId: string, enabled = false) {
   return useQuery<SurveyImproveResult>({
     queryKey: ['surveys', surveyId, 'ai-improve'],
     queryFn: async () => {
-      const { data } = await api.get<SurveyImproveResult>(`/surveys/${surveyId}/ai-improve`);
+      const { data } = await api.post<SurveyImproveResult>(
+        '/ai/optimize-survey',
+        { surveyId },
+        { timeout: 120_000 },
+      );
       return data;
     },
     enabled: enabled && !!surveyId,

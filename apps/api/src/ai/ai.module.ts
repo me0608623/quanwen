@@ -1,13 +1,16 @@
 import { Module } from '@nestjs/common';
 import { DatabaseModule } from '../db';
 import { AiUsageService } from '../common/ai-usage.service';
-import { AiQuotaMiddleware } from '../common/middleware/ai-quota.middleware';
+import { AiQuotaGuard } from '../common/guards/ai-quota.guard';
 import { UserUsageController } from '../profile/user-usage.controller';
+import { AiController } from './ai.controller';
+import { SurveysModule } from '../surveys/surveys.module';
+import { ResponsesModule } from '../responses/responses.module';
 
 @Module({
-  imports: [DatabaseModule],
-  controllers: [UserUsageController],
-  providers: [AiUsageService, AiQuotaMiddleware],
-  exports: [AiUsageService, AiQuotaMiddleware],
+  imports: [DatabaseModule, SurveysModule, ResponsesModule],
+  controllers: [UserUsageController, AiController],
+  providers: [AiUsageService, AiQuotaGuard],
+  exports: [AiUsageService, AiQuotaGuard],
 })
 export class AiModule {}

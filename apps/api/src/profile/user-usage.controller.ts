@@ -4,7 +4,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AiUsageService } from '../common/ai-usage.service';
 
-@Controller('api/v1/user')
+@Controller('user')
 export class UserUsageController {
   constructor(private readonly aiUsageService: AiUsageService) {}
 

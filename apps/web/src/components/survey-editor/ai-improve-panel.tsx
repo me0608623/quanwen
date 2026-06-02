@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { useSurveyAiImprove } from '@/hooks/use-surveys';
+import { useAiUsage, useSurveyAiImprove } from '@/hooks/use-surveys';
 
 export function AiImprovePanel({ surveyId }: { surveyId: string }) {
   const [enabled, setEnabled] = useState(false);
   const { data, isLoading, isFetching, error, refetch } = useSurveyAiImprove(surveyId, enabled);
+  const { data: usage } = useAiUsage();
 
   return (
     <section className="relative overflow-hidden rounded-xl border border-[#126b8a]/30 bg-gradient-to-br from-[#0F2A5C]/[0.03] via-[#126b8a]/[0.05] to-[#8B5CF6]/[0.04] p-5">
@@ -31,6 +32,14 @@ export function AiImprovePanel({ surveyId }: { surveyId: string }) {
           {isLoading || isFetching ? '分析中…' : enabled ? '重新生成' : '取得建議'}
         </button>
       </div>
+
+      {usage && (
+        <p className="mb-3 text-[11px] text-slate-500">
+          {usage.tier.toUpperCase()} 方案 · 今日 AI 優化剩餘{' '}
+          {Number.isFinite(usage.remaining.optimizeSurvey) ? usage.remaining.optimizeSurvey : '∞'}/
+          {Number.isFinite(usage.limits.optimizeSurvey) ? usage.limits.optimizeSurvey : '∞'} 次
+        </p>
+      )}
 
       {!enabled && !data && (
         <p className="relative text-sm text-slate-600">
