@@ -5,6 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import { usePublicSurvey, useSubmitResponse } from '@/hooks/use-responses';
 import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
+import { DEFAULT_BACKGROUND, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
 import type { AnswerInput } from '@/hooks/use-responses';
 
 export default function SurveyFillPage() {
@@ -95,7 +96,14 @@ export default function SurveyFillPage() {
   }
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-10">
+    <main
+      className={`mx-auto max-w-xl px-4 py-10 ${fontFamilyClass(survey.theme?.fontFamily)}`}
+      style={
+        survey.theme?.backgroundColor && survey.theme.backgroundColor !== DEFAULT_BACKGROUND
+          ? { backgroundColor: survey.theme.backgroundColor }
+          : undefined
+      }
+    >
       {/* Header */}
       <button
         onClick={() => router.back()}

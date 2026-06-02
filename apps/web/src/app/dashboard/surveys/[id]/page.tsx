@@ -6,6 +6,7 @@ import { useParams, useRouter } from 'next/navigation';
 import {
   type AudienceCriteria,
   type SurveyQuestion,
+  type SurveyTheme,
   useBudgetCheck,
   useDeleteSurvey,
   usePublishSurvey,
@@ -16,11 +17,13 @@ import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { ImageUploader } from '@/components/survey-editor/image-uploader';
 import { QuestionBlockList } from '@/components/survey-editor/question-block-list';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { SurveyEditorShell } from '@/components/survey-editor/survey-editor-shell';
 import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-modal';
 import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
+import { SurveyStylePanel } from '@/components/survey-editor/survey-style-panel';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -56,6 +59,7 @@ export default function SurveyDetailPage() {
   const [questions, setQuestions] = useState<SurveyQuestion[]>([]);
   const [minReputation, setMinReputation] = useState(0);
   const [audience, setAudience] = useState<AudienceCriteria>({});
+  const [theme, setTheme] = useState<SurveyTheme>({});
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
@@ -63,17 +67,22 @@ export default function SurveyDetailPage() {
 
   useEffect(() => {
     if (!survey) return;
+    if (survey.status === 'published' || survey.status === 'closed') {
+      router.replace(`/dashboard/surveys/${survey.id}/stats`);
+      return;
+    }
     if (dirty && initialized) return; // don't overwrite unsaved edits
     setTitle(survey.title);
     setDescription(survey.description ?? '');
     setQuestions(survey.questions);
     setMinReputation(Number(survey.audienceCriteria?.minReputationScore ?? 0));
     setAudience(survey.audienceCriteria ?? {});
+    setTheme(survey.theme ?? {});
     setInitialized(true);
-  }, [survey]);
+  }, [dirty, initialized, router, survey]);
 
   const canEdit = survey?.status === 'draft' || survey?.status === 'rejected';
-  const livePreviewDraft = useDebouncedValue({ title, description, questions }, 350);
+  const livePreviewDraft = useDebouncedValue({ title, description, questions, theme }, 350);
 
   const markDirty = () => setDirty(true);
 
@@ -89,7 +98,7 @@ export default function SurveyDetailPage() {
     };
 
     try {
-      await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria });
+      await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria, theme });
       setDirty(false);
     } catch (err) {
       showAxiosError(err, '儲存草稿失敗，請稍後再試。');
@@ -161,6 +170,9 @@ export default function SurveyDetailPage() {
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入問卷中…</div>;
   if (!survey) return <div className="p-10 text-sm text-destructive">找不到問卷。</div>;
+  if (survey.status === 'published' || survey.status === 'closed') {
+    return <div className="p-10 text-sm text-muted-foreground">正在開啟問卷分析工作台…</div>;
+  }
 
   // ─── Sidebar: Questions tab content ────────────────────────────
   const questionsSidebar = (
@@ -172,6 +184,18 @@ export default function SurveyDetailPage() {
       onAdd={addQuestion}
       selectedIndex={selectedQuestionIndex ?? undefined}
       onSelect={setSelectedQuestionIndex}
+    />
+  );
+
+  // ─── Sidebar: Styling tab content ──────────────────────────────
+  const stylingSidebar = (
+    <SurveyStylePanel
+      value={theme}
+      onChange={(next) => {
+        setTheme(next);
+        markDirty();
+      }}
+      disabled={!canEdit}
     />
   );
 
@@ -378,6 +402,7 @@ export default function SurveyDetailPage() {
         onPublish={handlePublish}
         onBack={() => router.push('/dashboard')}
         questionsSidebar={questionsSidebar}
+        stylingSidebar={stylingSidebar}
         settingsSidebar={settingsSidebar}
         previewOpen={showPreview}
         onPreviewToggle={() => setShowPreview((prev) => !prev)}
@@ -386,6 +411,7 @@ export default function SurveyDetailPage() {
             title={livePreviewDraft.title}
             description={livePreviewDraft.description}
             questions={livePreviewDraft.questions}
+            theme={livePreviewDraft.theme}
           />
         }
       >
@@ -397,6 +423,7 @@ export default function SurveyDetailPage() {
         title={livePreviewDraft.title}
         description={livePreviewDraft.description}
         questions={livePreviewDraft.questions}
+        theme={livePreviewDraft.theme}
         open={showPreview}
         onClose={() => setShowPreview(false)}
       />

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { SurveyQuestion } from '@/hooks/use-surveys';
+import { ImageUploader } from './image-uploader';
 
 type DisplayQuestionType =
   | 'single_choice'
@@ -238,6 +239,14 @@ export function QuestionEditor({
             placeholder="題目說明（選填）"
             rows={2}
             className="w-full rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          />
+
+          {/* QUA-279: Question image */}
+          <ImageUploader
+            value={question.imageUrl}
+            onChange={(url) => updateField('imageUrl', url)}
+            compact
+            label="題目圖片（選填）"
           />
 
           {isChoiceType && (

@@ -136,6 +136,8 @@ export class ResponsesService {
         audienceCriteria: surveys.audienceCriteria,
         isAnonymous: surveys.isAnonymous,
         publishedAt: surveys.publishedAt,
+        // QUA-279: 封面圖片（任務列表卡片背景用）
+        coverImageUrl: surveys.coverImageUrl,
         questionCount: sql<number>`coalesce(${questionCountSq.cnt}, 0)`,
       })
       .from(surveys)
@@ -233,6 +235,7 @@ export class ResponsesService {
       description: survey.description,
       rewardPoints: survey.rewardPoints,
       isAnonymous: survey.isAnonymous,
+      theme: survey.theme,
       alreadySubmitted,
       randomizationSeed: previewSeed,
       questions: questions.map((q) => {

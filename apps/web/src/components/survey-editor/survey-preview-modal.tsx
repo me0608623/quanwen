@@ -1,17 +1,18 @@
 'use client';
 
-import type { SurveyQuestion } from '@/hooks/use-surveys';
+import type { SurveyQuestion, SurveyTheme } from '@/hooks/use-surveys';
 import { SurveyPreviewPlayer } from './survey-preview-player';
 
 interface Props {
   title: string;
   description?: string;
   questions: SurveyQuestion[];
+  theme?: SurveyTheme;
   open: boolean;
   onClose: () => void;
 }
 
-export function SurveyPreviewModal({ title, description, questions, open, onClose }: Props) {
+export function SurveyPreviewModal({ title, description, questions, theme, open, onClose }: Props) {
   if (!open) return null;
 
   return (
@@ -26,7 +27,7 @@ export function SurveyPreviewModal({ title, description, questions, open, onClos
             關閉
           </button>
         </div>
-        <SurveyPreviewPlayer title={title} description={description} questions={questions} />
+        <SurveyPreviewPlayer title={title} description={description} questions={questions} theme={theme} />
       </div>
     </div>
   );

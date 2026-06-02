@@ -23,6 +23,8 @@ interface SurveyJsQuestion {
   type: string;
   isRequired: boolean;
   description?: string;
+  // QUA-279: question image
+  imageLink?: string;
   choices?: SurveyJsChoice[];
   rateValues?: { value: number; text: string }[];
   rateMax?: number;
@@ -150,6 +152,8 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
     type: 'text', // fallback
     isRequired: q.isRequired,
     description: q.description || undefined,
+    // QUA-279: question image — SurveyJS renders image above the question
+    imageLink: q.imageUrl || undefined,
   };
 
   switch (q.type) {

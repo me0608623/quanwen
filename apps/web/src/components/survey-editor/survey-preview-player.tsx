@@ -1,19 +1,23 @@
 'use client';
 
 import { useState } from 'react';
-import type { SurveyQuestion } from '@/hooks/use-surveys';
+import type { SurveyQuestion, SurveyTheme } from '@/hooks/use-surveys';
 import { evaluateSkipLogic } from '@/lib/skip-logic';
+import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import { RatingScale, type RatingScaleConfig } from './rating-scale';
+import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, fontFamilyClass } from './survey-style-panel';
 
 interface Props {
   title: string;
   description?: string;
+  coverImageUrl?: string;
   questions: SurveyQuestion[];
+  theme?: SurveyTheme;
 }
 
 type PreviewAnswer = { selectedOptionIds?: string[]; ratingValue?: number; textAnswer?: string };
 
-export function SurveyPreviewPlayer({ title, description, questions }: Props) {
+export function SurveyPreviewPlayer({ title, description, coverImageUrl, questions, theme }: Props) {
   const [currentIdx, setCurrentIdx] = useState(0);
   const [answers, setAnswers] = useState<Record<number, PreviewAnswer>>({});
   const [completed, setCompleted] = useState(false);
@@ -43,6 +47,8 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
   }
 
   const q = questions[currentIdx];
+  const questionImageUrl = resolveAssetUrl((q.config?.imageUrl as string | undefined) ?? undefined);
+  const resolvedCoverImageUrl = resolveAssetUrl(coverImageUrl);
   const isNumeric = q.type === 'text' && q.config?.inputType === 'numeric';
   const isDropdown = q.type === 'single_choice' && q.config?.renderAs === 'dropdown';
   const a = answers[currentIdx] ?? {};
@@ -57,19 +63,34 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
           true);
 
   return (
-    <div className="space-y-3 rounded-lg border border-slate-200 bg-white p-4">
+    <div
+      className={`space-y-3 rounded-lg border border-slate-200 p-4 ${fontFamilyClass(theme?.fontFamily)}`}
+      style={{ backgroundColor: theme?.backgroundColor ?? DEFAULT_BACKGROUND }}
+    >
       <div>
+        {resolvedCoverImageUrl && (
+          <img src={resolvedCoverImageUrl} alt={title || '問卷封面'} className="mb-3 h-36 w-full rounded-lg object-cover" />
+        )}
         <p className="text-[10px] uppercase tracking-wide text-slate-500">受試者預覽</p>
         <h3 className="text-sm font-semibold text-slate-900">{title || '未命名問卷'}</h3>
         {description && <p className="mt-1 text-xs text-slate-600">{description}</p>}
       </div>
 
       <div className="h-1 rounded bg-slate-100">
-        <div className="h-1 rounded bg-[#126b8a]" style={{ width: `${((currentIdx + 1) / questions.length) * 100}%` }} />
+        <div
+          className="h-1 rounded"
+          style={{
+            backgroundColor: theme?.accentColor ?? DEFAULT_ACCENT,
+            width: `${((currentIdx + 1) / questions.length) * 100}%`,
+          }}
+        />
       </div>
       <p className="text-[10px] text-slate-400">Q{currentIdx + 1} / {questions.length}</p>
 
       <p className="text-sm font-medium text-slate-900">{q.title || '未命名題目'}</p>
+      {questionImageUrl && (
+        <img src={questionImageUrl} alt={q.title || '題目圖片'} className="w-full rounded-lg border border-slate-200 object-cover" />
+      )}
 
       {q.type === 'text' && (
         <textarea
@@ -147,7 +168,8 @@ export function SurveyPreviewPlayer({ title, description, questions }: Props) {
             if (decision.nextIndex === -1) setCompleted(true);
             else setCurrentIdx(decision.nextIndex);
           }}
-          className="rounded bg-[#126b8a] px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+          className="rounded px-3 py-1 text-xs font-semibold text-white disabled:opacity-50"
+          style={{ backgroundColor: theme?.accentColor ?? DEFAULT_ACCENT }}
         >
           {currentIdx === questions.length - 1 ? '完成' : '下一步'}
         </button>

@@ -12,8 +12,18 @@ export const SurveyQuestionSchema = z.object({
   description: z.string().max(500).optional(),
   sortOrder: z.number().int().min(0).default(0),
   isRequired: z.boolean().default(true),
+  // QUA-279: 題目圖片 URL（上傳後回傳的路徑）
+  imageUrl: z.string().max(500).optional(),
   config: z.record(z.string(), z.unknown()).optional(),
   options: z.array(QuestionOptionSchema).max(20).optional(),
+});
+
+// 樣式主題：問卷外觀設定，套用到填答頁與預覽。顏色限 #RGB / #RRGGBB
+const HEX_COLOR = z.string().regex(/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/, '顏色需為 #RRGGBB 格式');
+export const SurveyThemeSchema = z.object({
+  accentColor: HEX_COLOR.optional(),
+  backgroundColor: HEX_COLOR.optional(),
+  fontFamily: z.enum(['sans', 'serif', 'rounded']).optional(),
 });
 
 export const SURVEY_CATEGORIES = [
@@ -55,6 +65,10 @@ export const CreateSurveySchema = z.object({
   isAnonymous: z.boolean().default(true),
   // QUA-204: 問券層級題目順序隨機化 (none=不隨機, all=全部隨機, exceptLast=保留最後一題)
   questionShuffleMode: z.enum(['none', 'all', 'exceptLast']).optional(),
+  // QUA-279: 問卷封面圖片（顯示在任務列表卡片背景）
+  coverImageUrl: z.string().max(500).optional(),
+  // 樣式主題：填答頁/預覽外觀
+  theme: SurveyThemeSchema.optional(),
   audienceCriteria: AudienceCriteriaSchema.optional(),
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
   // QUA-196: Skip Logic / Conditional Branching rules (uses LogicRuleSchema for full validation)

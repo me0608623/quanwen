@@ -101,6 +101,12 @@ export const surveys = pgTable(
     // QUA-204: 問券層級題目順序隨機化 ('none' | 'all' | 'exceptLast')
     questionShuffleMode: varchar('question_shuffle_mode', { length: 16 }).notNull().default('none'),
 
+    // QUA-279: 問卷封面圖片（顯示在任務列表卡片背景）
+    coverImageUrl: text('cover_image_url'),
+
+    // 樣式主題（JSON）：accentColor / backgroundColor / fontFamily，套用到填答頁與預覽
+    theme: jsonb('theme'),
+
     // 是否允許匿名填答
     isAnonymous: boolean('is_anonymous').notNull().default(true),
 
@@ -137,6 +143,8 @@ export const surveyQuestions = pgTable(
     description: text('description'),
     sortOrder: integer('sort_order').notNull().default(0),
     isRequired: boolean('is_required').notNull().default(true),
+    // QUA-279: 題目圖片
+    imageUrl: text('image_url'),
     // 題型設定（rating 用 max_rating；matrix 用 row/col 設定）
     config: jsonb('config'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

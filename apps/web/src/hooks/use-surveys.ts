@@ -94,6 +94,8 @@ export interface SurveyQuestion {
   isRequired: boolean;
   config?: Record<string, unknown>;
   options?: QuestionOption[];
+  // QUA-279: 題目圖片
+  imageUrl?: string;
 }
 
 export interface AudienceCriteria {
@@ -163,10 +165,17 @@ export const DEADLINE_TIER_OPTIONS: Array<{
   { value: 'critical', label: '超急 (24小時)', days: 1,  multiplier: 1.75, hint: '+75% 獎勵，未達標全額退款' },
 ];
 
+export interface SurveyTheme {
+  accentColor?: string;
+  backgroundColor?: string;
+  fontFamily?: 'sans' | 'serif' | 'rounded';
+}
+
 export interface Survey {
   id: string;
   title: string;
   description?: string;
+  theme?: SurveyTheme | null;
   status: 'draft' | 'pending_review' | 'published' | 'paused' | 'closed' | 'rejected';
   type?: 'standard' | 'mutual';
   category?: SurveyCategory | null;
@@ -182,6 +191,8 @@ export interface Survey {
   aiScore?: number;
   aiRejectReason?: string;
   audienceCriteria?: AudienceCriteria | null;
+  // QUA-279: 封面圖片
+  coverImageUrl?: string;
   // QUA-201: Scheduled publish and auto-close
   scheduledPublishAt?: string | null;
   autoCloseAt?: string | null;

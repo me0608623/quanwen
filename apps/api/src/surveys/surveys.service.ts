@@ -88,6 +88,10 @@ export class SurveysService {
           audienceCriteria: dto.audienceCriteria,
           // QUA-204: Store survey-level question shuffle mode
           questionShuffleMode: dto.questionShuffleMode ?? 'none',
+          // QUA-279: 封面圖片
+          coverImageUrl: dto.coverImageUrl,
+          // 樣式主題
+          theme: dto.theme,
         })
         .returning();
 
@@ -209,6 +213,9 @@ export class SurveysService {
     if (surveyFields.audienceCriteria !== undefined) updateData.audienceCriteria = surveyFields.audienceCriteria;
     // QUA-204: Allow updating question shuffle mode
     if (surveyFields.questionShuffleMode !== undefined) updateData.questionShuffleMode = surveyFields.questionShuffleMode;
+    // QUA-279: Allow updating cover image
+    if (surveyFields.coverImageUrl !== undefined) updateData.coverImageUrl = surveyFields.coverImageUrl;
+    if (surveyFields.theme !== undefined) updateData.theme = surveyFields.theme;
 
     // Wrap survey update + question replacement in a single transaction:
     // if replaceQuestions fails mid-loop (partial inserts), the survey
@@ -1006,6 +1013,8 @@ export class SurveysService {
           description: qDto.description,
           sortOrder: qDto.sortOrder ?? 0,
           isRequired: qDto.isRequired ?? true,
+          // QUA-279: 題目圖片
+          imageUrl: qDto.imageUrl,
           config: qDto.config,
         })
         .returning({ id: surveyQuestions.id });

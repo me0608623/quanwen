@@ -2,6 +2,7 @@
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import type { SurveyTheme } from '@/hooks/use-surveys';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,8 @@ export interface AvailableSurvey {
   expiresAt?: string;
   isAnonymous: boolean;
   publishedAt?: string;
+  // QUA-279: 封面圖片
+  coverImageUrl?: string;
 }
 
 export interface PublicQuestion {
@@ -27,6 +30,8 @@ export interface PublicQuestion {
   isRequired: boolean;
   config?: Record<string, unknown>;
   options: { id: string; label: string; sortOrder: number }[];
+  // QUA-279: 題目圖片
+  imageUrl?: string;
 }
 
 export interface PublicSurvey {
@@ -35,6 +40,7 @@ export interface PublicSurvey {
   description?: string;
   rewardPoints: number;
   isAnonymous: boolean;
+  theme?: SurveyTheme | null;
   alreadySubmitted: boolean;
   questions: PublicQuestion[];
 }
