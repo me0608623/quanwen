@@ -250,6 +250,7 @@ export class ResponsesService {
           sortOrder: q.sortOrder,
           isRequired: q.isRequired,
           config: q.config,
+          imageUrl: q.imageUrl,
           options: shuffledOpts,
         };
       }),

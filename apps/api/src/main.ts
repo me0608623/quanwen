@@ -207,8 +207,15 @@ async function bootstrap() {
   }));
 
   // 上傳檔案靜態服務:UploadService 落地在 <cwd>/uploads,對外以 /uploads/* 取用
+  // CORP 設 cross-origin,讓前端(不同 origin)能以 <img> 載入;否則被 helmet 的 same-origin 擋下
   // eslint-disable-next-line @typescript-eslint/no-var-requires
-  expressApp.use('/uploads', require('express').static(resolve(process.cwd(), 'uploads')));
+  const expressStatic = require('express').static;
+  expressApp.use(
+    '/uploads',
+    expressStatic(resolve(process.cwd(), 'uploads'), {
+      setHeaders: (res: Response) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+    }),
+  );
 
   // CORS
   const allowedOrigins = Array.from(new Set([

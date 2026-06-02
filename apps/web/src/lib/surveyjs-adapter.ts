@@ -9,6 +9,7 @@
 
 import type { PublicQuestion } from '@/hooks/use-responses';
 import type { SkipLogicRule } from '@/hooks/use-surveys';
+import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 
 // ─── SurveyJS JSON types (minimal, for type safety) ────────────────────────
 
@@ -153,7 +154,7 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
     isRequired: q.isRequired,
     description: q.description || undefined,
     // QUA-279: question image — SurveyJS renders image above the question
-    imageLink: q.imageUrl || undefined,
+    imageLink: resolveAssetUrl(q.imageUrl) || undefined,
   };
 
   switch (q.type) {

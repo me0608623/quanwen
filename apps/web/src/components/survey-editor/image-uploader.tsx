@@ -2,6 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
+import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 
 interface ImageUploaderProps {
   /** Current image URL (from server) */
@@ -66,7 +67,7 @@ export function ImageUploader({ value, onChange, compact = false, label = '圖�
         {value ? (
           <div className="relative group rounded-md overflow-hidden border border-border">
             <img
-              src={value}
+              src={resolveAssetUrl(value)}
               alt="已上傳圖片"
               className="w-full h-24 object-cover"
             />
@@ -115,7 +116,7 @@ export function ImageUploader({ value, onChange, compact = false, label = '圖�
       {value ? (
         <div className="relative group rounded-lg overflow-hidden border border-border">
           <img
-            src={value}
+            src={resolveAssetUrl(value)}
             alt="封面圖片"
             className="w-full h-40 object-cover"
           />

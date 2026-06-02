@@ -47,7 +47,7 @@ export function SurveyPreviewPlayer({ title, description, coverImageUrl, questio
   }
 
   const q = questions[currentIdx];
-  const questionImageUrl = resolveAssetUrl((q.config?.imageUrl as string | undefined) ?? undefined);
+  const questionImageUrl = resolveAssetUrl(q.imageUrl ?? (q.config?.imageUrl as string | undefined) ?? undefined);
   const resolvedCoverImageUrl = resolveAssetUrl(coverImageUrl);
   const isNumeric = q.type === 'text' && q.config?.inputType === 'numeric';
   const isDropdown = q.type === 'single_choice' && q.config?.renderAs === 'dropdown';
