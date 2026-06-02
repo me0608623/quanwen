@@ -25,6 +25,10 @@ import { SurveyImportService } from './template-io/survey-import.service';
 import { ExcelTemplateService } from './template-io/excel-template.service';
 import { ExcelImportService } from './template-io/excel-import.service';
 import { GoogleFormsImportService } from './template-io/google-forms.service';
+import { CsvImportService } from './template-io/csv-import.service';
+import { GoogleSheetsImportService } from './template-io/google-sheets-import.service';
+import { PdfImportService } from './template-io/pdf-import.service';
+import { SurveyCakeImportService } from './template-io/surveycake-import.service';
 import { GoogleFormsImportSchema, GoogleFormsImportDto } from './template-io/google-forms.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { WalletService } from '../wallet/wallet.service';
@@ -49,6 +53,10 @@ export class SurveysController {
     private readonly excelTemplate: ExcelTemplateService,
     private readonly excelImport: ExcelImportService,
     private readonly googleFormsImport: GoogleFormsImportService,
+    private readonly csvImport: CsvImportService,
+    private readonly googleSheetsImport: GoogleSheetsImportService,
+    private readonly pdfImport: PdfImportService,
+    private readonly surveycakeImport: SurveyCakeImportService,
   ) {}
 
   /** GET /surveys/assistant — surveyor 專屬 AI 助手「下一步建議」*/
@@ -256,6 +264,103 @@ export class SurveysController {
   ) {
     const user = req.user as AuthenticatedUser;
     const result = await this.googleFormsImport.importFromGoogleForms(user.id, dto);
+    return { success: true, data: result };
+  }
+
+  // ─── Phase 2: CSV / Google Sheets 匯入 ─────────────────────────────────────
+
+  /**
+   * POST /surveys/import/csv
+   * 上傳 CSV 檔案（Google Sheets 匯出或手動建立）→ 解析為 v1 → 落 DB。
+   * CSV 欄位與 Excel 模板 Questions sheet 同結構。
+   */
+  @Post('import/csv')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 5 * 1024 * 1024 } }),
+  )
+  async importCsv(
+    @Req() req: Request,
+    @UploadedFile() file: { buffer?: Buffer; originalname?: string; mimetype?: string; size?: number } | undefined,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('缺少 file 欄位 (multipart/form-data)');
+    }
+    const user = req.user as AuthenticatedUser;
+    const result = await this.csvImport.importFromCsv(user.id, file.buffer);
+    return { success: true, data: result };
+  }
+
+  /**
+   * POST /surveys/import/google-sheets
+   * 從 Google Sheets 公開連結匯入。Body:
+   *   { "url": "https://docs.google.com/spreadsheets/d/{ID}/edit", "gid": "0" }
+   * 試算表需設為「知道連結的人都能查看」或「發布到網路」。
+   */
+  @Post('import/google-sheets')
+  @HttpCode(HttpStatus.CREATED)
+  async importGoogleSheets(
+    @Req() req: Request,
+    @Body() body: { url?: string; gid?: string },
+  ) {
+    if (!body?.url) {
+      throw new BadRequestException('缺少 url 欄位');
+    }
+    const user = req.user as AuthenticatedUser;
+    const result = await this.googleSheetsImport.importFromGoogleSheets(user.id, {
+      url: body.url,
+      gid: body.gid,
+    });
+    return { success: true, data: result };
+  }
+
+  // ─── Phase 3: PDF / SurveyCake 匯入 ────────────────────────────────────────
+
+  /**
+   * POST /surveys/import/pdf
+   * 上傳 PDF 檔案 → 解析文字結構 → 產生問卷題目 → 落 DB (status=draft)。
+   * 支援表格式、純文字、帶選項符號的問卷 PDF。
+   * 掃描圖片式 PDF 無法解析（需含可選取文字）。
+   */
+  @Post('import/pdf')
+  @HttpCode(HttpStatus.CREATED)
+  @UseInterceptors(
+    FileInterceptor('file', { limits: { fileSize: 10 * 1024 * 1024 } }),
+  )
+  async importPdf(
+    @Req() req: Request,
+    @UploadedFile() file: { buffer?: Buffer; originalname?: string; mimetype?: string; size?: number } | undefined,
+  ) {
+    if (!file?.buffer) {
+      throw new BadRequestException('缺少 file 欄位 (multipart/form-data)');
+    }
+    const user = req.user as AuthenticatedUser;
+    const result = await this.pdfImport.importFromPdf(user.id, file.buffer);
+    return { success: true, data: result };
+  }
+
+  /**
+   * POST /surveys/import/surveycake
+   * 從 SurveyCake 匯入問卷。Body 二擇一：
+   *   - { "json": { ... } }   — 直接貼上 SurveyCake 匯出的 JSON
+   *   - { "url": "https://www.surveycake.com/s/..." } — 從公開連結匯入
+   */
+  @Post('import/surveycake')
+  @HttpCode(HttpStatus.CREATED)
+  async importSurveyCake(
+    @Req() req: Request,
+    @Body() body: { json?: Record<string, unknown>; url?: string },
+  ) {
+    if (!body?.json && !body?.url) {
+      throw new BadRequestException('必須提供 json 或 url 其中之一');
+    }
+    if (body.json && body.url) {
+      throw new BadRequestException('json 與 url 不可同時提供');
+    }
+    const user = req.user as AuthenticatedUser;
+    const result = body.url
+      ? await this.surveycakeImport.importFromUrl(user.id, body.url)
+      : await this.surveycakeImport.importFromJson(user.id, body.json);
     return { success: true, data: result };
   }
 

@@ -151,12 +151,12 @@ describe('Template IO (integration)', () => {
   // ─── 3. 跨環境 tagId 失效 → 丟棄 + warning ────────────────────────────────
 
   it('3. import: requiredTagIds 找不到的 UUID 被丟棄並產生 warning', async () => {
-    const validTagId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+    const validTagId = '11111111-1111-4111-8111-111111111111';
     await client.exec(`
       INSERT INTO interest_tags (id, name, category, sort_order)
       VALUES ('${validTagId}', 'tag-valid', 'tech', 0);
     `);
-    const fakeTagId = 'ffffffff-ffff-ffff-ffff-ffffffffffff';
+    const fakeTagId = '22222222-2222-4222-8222-222222222222';
 
     const json: QuanWenSurveyV1 = {
       $schema: V1_SCHEMA_TAG,

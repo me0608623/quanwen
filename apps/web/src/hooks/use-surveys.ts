@@ -149,6 +149,10 @@ export interface Survey {
   aiScore?: number;
   aiRejectReason?: string;
   audienceCriteria?: AudienceCriteria | null;
+  // QUA-201: Scheduled publish and auto-close
+  scheduledPublishAt?: string | null;
+  autoCloseAt?: string | null;
+  autoCloseAfterN?: number | null;
   createdAt: string;
   updatedAt: string;
   publishedAt?: string;
@@ -527,5 +531,130 @@ export function usePreReview(surveyId: string, enabled = false) {
     enabled: enabled && !!surveyId,
     staleTime: 5 * 60 * 1000,
     retry: 0,
+  });
+}
+
+// ─── Survey Import (QUA-236 / QUA-239) ──────────────────────────────────────
+
+export interface ImportResult {
+  id: string;
+  status: string;
+  questionsCount: number;
+  warnings: string[];
+}
+
+export interface GoogleFormsImportResult extends ImportResult {
+  skippedFromSource: { type: string; title: string }[];
+}
+
+export function useImportJson() {
+  const qc = useQueryClient();
+  return useMutation<ImportResult, Error, Record<string, unknown>>({
+    mutationFn: async (surveyJson) => {
+      const { data } = await api.post<ImportResult>('/surveys/import', surveyJson);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportXlsx() {
+  const qc = useQueryClient();
+  return useMutation<ImportResult, Error, File>({
+    mutationFn: async (file) => {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post<ImportResult>('/surveys/import/xlsx', form, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportGoogleForms() {
+  const qc = useQueryClient();
+  return useMutation<GoogleFormsImportResult, Error, { url?: string; html?: string }>({
+    mutationFn: async (payload) => {
+      const { data } = await api.post<GoogleFormsImportResult>('/surveys/import/google-forms', payload);
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportCsv() {
+  const qc = useQueryClient();
+  return useMutation<ImportResult, Error, File>({
+    mutationFn: async (file) => {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>(
+        '/surveys/import/csv',
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportPdf() {
+  const qc = useQueryClient();
+  return useMutation<ImportResult, Error, File>({
+    mutationFn: async (file) => {
+      const form = new FormData();
+      form.append('file', file);
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>(
+        '/surveys/import/pdf',
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportGoogleSheets() {
+  const qc = useQueryClient();
+  return useMutation<ImportResult, Error, { url: string; gid?: string }>({
+    mutationFn: async (payload) => {
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>(
+        '/surveys/import/google-sheets',
+        payload,
+      );
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useImportSurveyCake() {
+  const qc = useQueryClient();
+  return useMutation<
+    ImportResult,
+    Error,
+    { json?: Record<string, unknown>; url?: string }
+  >({
+    mutationFn: async (payload) => {
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>(
+        '/surveys/import/surveycake',
+        payload,
+      );
+      return data.data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
+  });
+}
+
+export function useDownloadXlsxTemplate() {
+  return useMutation<Blob, Error, void>({
+    mutationFn: async () => {
+      const { data } = await api.get('/surveys/template/xlsx', { responseType: 'blob' });
+      return data;
+    },
   });
 }

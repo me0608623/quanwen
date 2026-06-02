@@ -12,7 +12,7 @@ export const SurveyQuestionSchema = z.object({
   description: z.string().max(500).optional(),
   sortOrder: z.number().int().min(0).default(0),
   isRequired: z.boolean().default(true),
-  config: z.record(z.unknown()).optional(),
+  config: z.record(z.string(), z.unknown()).optional(),
   options: z.array(QuestionOptionSchema).max(20).optional(),
 });
 
@@ -59,6 +59,10 @@ export const CreateSurveySchema = z.object({
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
   // QUA-196: Skip Logic / Conditional Branching rules (uses LogicRuleSchema for full validation)
   logicRules: z.array(LogicRuleSchema).max(200).optional(),
+  // QUA-201: Scheduled publish and auto-close
+  scheduledPublishAt: z.string().datetime().optional(),
+  autoCloseAt: z.string().datetime().optional(),
+  autoCloseAfterN: z.number().int().min(1).max(100000).optional(),
 });
 
 export type CreateSurveyDto = z.infer<typeof CreateSurveySchema>;

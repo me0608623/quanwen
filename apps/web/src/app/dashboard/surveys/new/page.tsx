@@ -168,7 +168,18 @@ export default function NewSurveyPage() {
       </section>
 
       {/* AI Draft */}
-      <AiDraftPanel onApply={applyAiDraft} />
+      <div className="flex gap-3">
+        <div className="flex-1">
+          <AiDraftPanel onApply={applyAiDraft} />
+        </div>
+        <button
+          type="button"
+          onClick={() => router.push('/dashboard/surveys/import')}
+          className="inline-flex h-10 items-center gap-1.5 self-start rounded-md border border-input bg-background px-4 text-sm font-medium hover:bg-accent transition-colors"
+        >
+          📥 匯入表單
+        </button>
+      </div>
 
       {/* Basic info */}
       <section className="space-y-3 rounded-lg border border-border p-4">
