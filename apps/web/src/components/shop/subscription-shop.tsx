@@ -8,6 +8,7 @@ import {
   useSubscription,
   type SubscriptionPlan,
 } from '@/hooks/use-pricing';
+import { cn } from '@/lib/utils';
 
 const PLAN_ACCENT: Record<SubscriptionPlan, string> = {
   free: 'border-slate-200 bg-white',
@@ -32,6 +33,10 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
 
   const currentPlan = data?.currentPlan ?? 'free';
   const usageText = useMemo(() => data?.usage.display ?? '0/3', [data?.usage.display]);
+  const currentPlanDetail = useMemo(
+    () => data?.plans.find((plan) => plan.id === currentPlan),
+    [currentPlan, data?.plans],
+  );
 
   const handleSubscribe = async (plan: Exclude<SubscriptionPlan, 'free'>) => {
     try {
@@ -61,7 +66,7 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
   }
 
   return (
-    <div className={['space-y-6', className].filter(Boolean).join(' ')}>
+    <div className={cn('space-y-6', className)}>
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-r from-slate-900 to-slate-800 p-6 text-white">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
@@ -77,6 +82,30 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
             <p className="mt-1 text-2xl font-bold">{data.wallet.pointsBalance.toLocaleString()} 點</p>
           </div>
         </div>
+      </section>
+
+      <section className="grid gap-4 md:grid-cols-3">
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">目前方案</p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-950">{currentPlanDetail?.name ?? currentPlan.toUpperCase()}</h2>
+          <p className="mt-2 text-sm text-slate-600">{currentPlanDetail?.badge ?? '目前使用中'}</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">今日 AI 使用量</p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-950">{usageText}</h2>
+          <p className="mt-2 text-sm text-slate-600">包含問卷優化、題目生成與結果分析。</p>
+        </article>
+
+        <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">VIP 積分兌換</p>
+          <h2 className="mt-2 text-2xl font-bold text-slate-950">
+            {data.redemption.costPoints} 點 / {data.redemption.durationDays} 天
+          </h2>
+          <p className="mt-2 text-sm text-slate-600">
+            {data.redemption.affordable ? '你現在就能直接換。' : '積分還不夠，先去賺點數。'}
+          </p>
+        </article>
       </section>
 
       <section className="grid gap-4 lg:grid-cols-3">
