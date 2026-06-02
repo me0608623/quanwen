@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
 import { useMemo } from 'react';
+import { ShopCatalog } from '@/components/shop/shop-catalog';
 import {
   useRedeemSubscription,
   useSubscribePlan,
@@ -126,7 +126,7 @@ export default function DashboardShopPage() {
         })}
       </section>
 
-      <section className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+      <section className="grid gap-4 xl:grid-cols-[0.9fr_1.1fr] xl:items-start">
         <article className="rounded-2xl border border-amber-200 bg-amber-50 p-5">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-amber-700">積分兌換 VIP</p>
           <h2 className="mt-2 text-xl font-bold text-amber-950">
@@ -151,17 +151,14 @@ export default function DashboardShopPage() {
         </article>
 
         <article className="rounded-2xl border border-slate-200 bg-white p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">更多商店功能</p>
-          <h2 className="mt-2 text-xl font-bold text-slate-900">積分商城</h2>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">禮券 / 商品兌換</p>
+          <h2 className="mt-2 text-xl font-bold text-slate-900">同頁整合積分商城</h2>
           <p className="mt-2 text-sm text-slate-600">
-            禮券兌換還在原本的商城頁，不拆掉重練，省得你我都浪費生命。
+            既然都叫商店了，就別再把人踢去另一頁。禮券兌換直接放這裡，少走冤枉路。
           </p>
-          <Link
-            href="/shop"
-            className="mt-5 inline-flex rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-          >
-            前往積分商城
-          </Link>
+          <div className="mt-5">
+            <ShopCatalog compact showHeader={false} showMyRedemptionsLink={false} />
+          </div>
         </article>
       </section>
     </main>
