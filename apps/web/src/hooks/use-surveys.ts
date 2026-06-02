@@ -593,8 +593,8 @@ export function useImportJson() {
   const qc = useQueryClient();
   return useMutation<ImportResult, Error, Record<string, unknown>>({
     mutationFn: async (surveyJson) => {
-      const { data } = await api.post<ImportResult>('/surveys/import', surveyJson);
-      return data;
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>('/surveys/import', surveyJson);
+      return data.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
   });
@@ -606,10 +606,10 @@ export function useImportXlsx() {
     mutationFn: async (file) => {
       const form = new FormData();
       form.append('file', file);
-      const { data } = await api.post<ImportResult>('/surveys/import/xlsx', form, {
+      const { data } = await api.post<{ success: boolean; data: ImportResult }>('/surveys/import/xlsx', form, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
-      return data;
+      return data.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
   });
@@ -619,8 +619,11 @@ export function useImportGoogleForms() {
   const qc = useQueryClient();
   return useMutation<GoogleFormsImportResult, Error, { url?: string; html?: string }>({
     mutationFn: async (payload) => {
-      const { data } = await api.post<GoogleFormsImportResult>('/surveys/import/google-forms', payload);
-      return data;
+      const { data } = await api.post<{ success: boolean; data: GoogleFormsImportResult }>(
+        '/surveys/import/google-forms',
+        payload,
+      );
+      return data.data;
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ['surveys'] }),
   });
