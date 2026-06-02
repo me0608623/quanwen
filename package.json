@@ -27,12 +27,6 @@
       "esbuild",
       "sharp",
       "unrs-resolver"
-    ],
-    "overrides": {
-      "lodash": ">=4.18.0",
-      "js-yaml": ">=4.1.1",
-      "uuid": ">=11.1.1",
-      "postcss": ">=8.5.10"
-    }
+    ]
   }
 }
