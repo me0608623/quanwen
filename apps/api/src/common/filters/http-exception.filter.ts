@@ -8,6 +8,8 @@ import {
 } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
+type RequestWithContext = Request & { requestId?: string };
+
 @Catch()
 export class GlobalExceptionFilter implements ExceptionFilter {
   private readonly logger = new Logger(GlobalExceptionFilter.name);
@@ -15,7 +17,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
-    const request = ctx.getRequest<Request>();
+    const request = ctx.getRequest<RequestWithContext>();
 
     const status =
       exception instanceof HttpException
@@ -28,12 +30,25 @@ export class GlobalExceptionFilter implements ExceptionFilter {
         : '伺服器發生錯誤，請稍後再試';
 
     if (status >= 500) {
-      this.logger.error(`${request.method} ${request.url}`, exception instanceof Error ? exception.stack : String(exception));
+      this.logger.error(
+        JSON.stringify({
+          level: 'error',
+          msg: 'http_exception',
+          requestId: request.requestId ?? null,
+          method: request.method,
+          path: request.url,
+          statusCode: status,
+          error: exception instanceof Error ? exception.message : String(exception),
+          stack: exception instanceof Error ? exception.stack : undefined,
+          timestamp: new Date().toISOString(),
+        }),
+      );
     }
 
     response.status(status).json({
       success: false,
       statusCode: status,
+      requestId: request.requestId,
       timestamp: new Date().toISOString(),
       path: request.url,
       ...(typeof message === 'object' ? message : { message }),

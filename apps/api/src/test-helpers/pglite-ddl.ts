@@ -17,17 +17,41 @@
 export const USERS_DDL = `
   CREATE TYPE user_role AS ENUM ('surveyor','respondent','admin');
   CREATE TYPE user_status AS ENUM ('active','suspended','pending_verify');
+  CREATE TYPE user_tier AS ENUM ('free','vip','vvip');
   CREATE TABLE users (
-    id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    email         VARCHAR(255) NOT NULL UNIQUE,
-    password_hash VARCHAR(255),
-    role          user_role NOT NULL,
-    status        user_status NOT NULL DEFAULT 'active',
-    display_name  VARCHAR(100) NOT NULL,
-    email_verified BOOLEAN NOT NULL DEFAULT false,
-    created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    id                             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    email                          VARCHAR(255) NOT NULL UNIQUE,
+    password_hash                  VARCHAR(255),
+    role                           user_role NOT NULL,
+    tier                           user_tier NOT NULL DEFAULT 'free',
+    status                         user_status NOT NULL DEFAULT 'active',
+    display_name                   VARCHAR(100) NOT NULL,
+    avatar_url                     TEXT,
+    email_verified                 BOOLEAN NOT NULL DEFAULT false,
+    password_reset_token           VARCHAR(128),
+    password_reset_expires_at      TIMESTAMPTZ,
+    email_verification_token       VARCHAR(128),
+    email_verification_expires_at  TIMESTAMPTZ,
+    role_selected_at               TIMESTAMPTZ,
+    email_opt_out                  BOOLEAN NOT NULL DEFAULT false,
+    created_at                     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    deleted_at                     TIMESTAMPTZ
   );
+`;
+
+export const DAILY_USAGE_DDL = `
+  CREATE TABLE daily_usage (
+    id                        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                   UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    usage_date                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    optimize_survey_count     INTEGER NOT NULL DEFAULT 0,
+    generate_questions_count  INTEGER NOT NULL DEFAULT 0,
+    analyze_responses_count   INTEGER NOT NULL DEFAULT 0,
+    created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX daily_usage_user_date_idx ON daily_usage(user_id, usage_date);
 `;
 
 export const SURVEYS_DDL = `
@@ -109,6 +133,10 @@ export const RESPONSES_DDL = `
     fingerprint_id         TEXT,
     UNIQUE (survey_id, respondent_id)
   );
+  CREATE INDEX survey_responses_survey_idx ON survey_responses(survey_id);
+  CREATE INDEX survey_responses_respondent_idx ON survey_responses(respondent_id);
+  CREATE INDEX survey_responses_survey_status_submitted_idx ON survey_responses(survey_id, status, submitted_at);
+  CREATE INDEX idx_responses_fingerprint ON survey_responses(survey_id, fingerprint_id);
 
   CREATE TABLE response_answers (
     id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -120,6 +148,9 @@ export const RESPONSES_DDL = `
     rating_value        INTEGER,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
   );
+  CREATE INDEX response_answers_response_idx ON response_answers(response_id);
+  CREATE INDEX response_answers_question_idx ON response_answers(question_id);
+  CREATE INDEX response_answers_survey_question_idx ON response_answers(survey_id, question_id);
 `;
 
 /** Respondent profiles, interest tags, and respondent-tag junction */
@@ -220,4 +251,4 @@ export const LOGIC_RULES_DDL = `
 
 /** All tables in dependency order — use this in integration tests instead of inlining DDL. */
 export const FULL_SCHEMA_DDL =
-  USERS_DDL + SURVEYS_DDL + RESPONSES_DDL + PROFILES_DDL + MUTUAL_DDL + LOGIC_RULES_DDL;
+  USERS_DDL + DAILY_USAGE_DDL + SURVEYS_DDL + RESPONSES_DDL + PROFILES_DDL + MUTUAL_DDL + LOGIC_RULES_DDL;

@@ -10,9 +10,18 @@ export default defineConfig({
     include: ['src/**/*.test.ts'],
     coverage: {
       provider: 'v8',
-      reporter: ['text', 'lcov'],
+      reporter: ['text', 'lcov', 'json'],
       include: ['src/**/*.ts'],
       exclude: ['src/**/*.test.ts', 'src/db/seed.ts', 'src/main.ts'],
+      // 設定 80% 覆蓋率閾值
+      thresholds: {
+        lines: 80,
+        functions: 80,
+        branches: 75,
+        statements: 80,
+      },
+      // 暫時不強制要求所有文件都達標，避免阻擋開發
+      perFile: false,
     },
   },
 });

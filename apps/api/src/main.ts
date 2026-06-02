@@ -5,6 +5,9 @@ import { resolve } from 'path';
 config({ path: resolve(__dirname, '../../../.env') });
 
 import { z } from 'zod';
+import { randomUUID } from 'crypto';
+import type { NextFunction, Request, Response } from 'express';
+import { parseAllowedOrigins, isValidOriginList } from './deployment/web-origins';
 
 // Treat placeholder values from .env.example as "not set"
 const isPlaceholder = (v: string | undefined) =>
@@ -15,7 +18,14 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must be at least 32 characters'),
   NODE_ENV: z.enum(['development', 'test', 'production']).optional().default('development'),
   PORT: z.string().regex(/^\d+$/).optional(),
-  WEB_URL: z.union([z.string().url(), z.literal('')]).optional(),
+  WEB_URL: z.string().optional().refine(
+    (value) => !value || isValidOriginList(value),
+    'WEB_URL must be a valid URL or a comma/space separated list of valid URLs',
+  ),
+  CORS_ORIGINS: z.string().optional().refine(
+    (value) => !value || isValidOriginList(value),
+    'CORS_ORIGINS must be a valid comma/space separated list of URLs',
+  ),
 
   // P2/P3/P4: Redis（限流共享 storage + cron 分散式鎖 + readiness）。
   // 未設 → throttler 降級 in-memory、cron 直接執行、readiness 回報 redis down。
@@ -73,9 +83,7 @@ const isProd = process.env.NODE_ENV === 'production';
 const prodRequired: Array<[string, string]> = [
   ['PII_ENCRYPTION_KEY', 'PII 加密金鑰必設，否則身分證 / 銀行帳號無法安全儲存'],
   ['WEB_URL', 'CORS 需要 WEB_URL；prod 缺會 fallback localhost'],
-  ['ECPAY_MERCHANT_ID', '金流不能工作；綠界 webhook 也無法驗簽'],
-  ['ECPAY_HASH_KEY', '同上'],
-  ['ECPAY_HASH_IV', '同上'],
+  // ECPay cancelled per pivot — made optional
 ];
 const prodRecommended: Array<[string, string]> = [
   ['PII_KDF_SALT', '建議設一個隨機 16-byte hex 加強 scrypt KDF'],
@@ -114,9 +122,7 @@ console.log('🔐 OAuth providers:',
 if (process.env.NODE_ENV === 'production' && !process.env.SMTP_HOST) {
   console.warn('⚠️  SMTP_HOST 未設定，忘記密碼郵件功能將無法使用');
 }
-if (process.env.NODE_ENV === 'production' && !process.env.ECPAY_MERCHANT_ID) {
-  console.warn('⚠️  ECPAY_MERCHANT_ID 未設定，ECPay 儲值功能將無法使用');
-}
+// ECPay cancelled per pivot — no warning needed
 
 import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -160,6 +166,37 @@ async function bootstrap() {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   expressApp.use(require('express').urlencoded({ extended: true }));
 
+  type RequestWithContext = Request & { requestId?: string };
+
+  expressApp.use((req: RequestWithContext, res: Response, next: NextFunction) => {
+    const requestIdHeader = req.headers['x-request-id'];
+    const requestId =
+      typeof requestIdHeader === 'string' && requestIdHeader.trim() !== ''
+        ? requestIdHeader
+        : randomUUID();
+
+    req.requestId = requestId;
+    res.setHeader('x-request-id', requestId);
+
+    const startedAt = Date.now();
+    res.on('finish', () => {
+      console.log(JSON.stringify({
+        level: 'info',
+        msg: 'http_request',
+        requestId,
+        method: req.method,
+        path: req.originalUrl ?? req.url,
+        statusCode: res.statusCode,
+        durationMs: Date.now() - startedAt,
+        ip: req.ip,
+        userAgent: req.headers['user-agent'] ?? null,
+        timestamp: new Date().toISOString(),
+      }));
+    });
+
+    next();
+  });
+
   // Phase K.1: Helmet 安全 headers（X-Frame-Options/HSTS/X-Content-Type-Options 等）
   // contentSecurityPolicy 在 dev 關掉以免擋 Swagger/Next.js dev assets；prod 開啟
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -170,13 +207,27 @@ async function bootstrap() {
   }));
 
   // CORS
+  const allowedOrigins = Array.from(new Set([
+    ...parseAllowedOrigins(process.env.WEB_URL),
+    ...(process.env.CORS_ORIGINS ? parseAllowedOrigins(process.env.CORS_ORIGINS) : []),
+  ]));
   app.enableCors({
-    origin: process.env.WEB_URL ?? 'http://localhost:3000',
+    origin(origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+        return;
+      }
+
+      callback(new Error(`CORS blocked for origin: ${origin}`), false);
+    },
     credentials: true,
   });
+  console.log(`🌐 CORS allowlist: ${allowedOrigins.join(', ')}`);
 
   // API prefix
-  app.setGlobalPrefix('api/v1');
+  app.setGlobalPrefix('api/v1', {
+    exclude: ['health', 'ready'],
+  });
 
   // Swagger (開發環境，opt-in 避免某些 controller 參數元資料缺失導致掃描失敗)
   if (process.env.NODE_ENV !== 'production' && process.env.ENABLE_SWAGGER === '1') {

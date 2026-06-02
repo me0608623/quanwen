@@ -38,8 +38,8 @@ describe('CsvImportService', () => {
     expect(v1.survey.title).toBe('(CSV 匯入) 未命名問卷');
     expect(v1.survey.questions[0].title).toBe('最愛語言, 可複選嗎？');
     expect(v1.survey.questions[0].options).toEqual([
-      { id: 0, text: 'TypeScript' },
-      { id: 1, text: 'Python' },
+      { label: 'TypeScript', sortOrder: 0 },
+      { label: 'Python', sortOrder: 1 },
     ]);
     expect(v1.survey.questions[1].config).toEqual({ multiline: true });
   });

@@ -86,6 +86,19 @@ webhook 路徑：`POST {API_URL}/api/v1/wallet/ecpay/callback`，**不需要 JWT
 
 ---
 
+## 2b. Fresh Postgres schema bootstrap（現在真的需要）
+
+目前 production PostgreSQL 還沒全面切到 versioned migrations。
+所以新建一顆空 DB 後，先用一次 bootstrap 把 schema 推進去，不然 API 雖然可能啟動，業務路由照樣會爆。
+
+```bash
+cd /home/aa/projects/quanwen
+export DATABASE_URL=postgresql://<user>:<password>@<host>:5432/quanwen
+bash scripts/bootstrap-render-postgres.sh
+```
+
+這招只建議用在「全新空庫」。長期正解還是補齊 migration pipeline，別把過橋方案當豪宅。
+
 ## 3. 部署流程（單機 Docker Compose）
 
 ```bash
@@ -108,13 +121,13 @@ curl http://localhost:3001/api/v1/health
 # → {"status":"ok","uptime":N,"env":"production"}
 
 # readiness（能收流量嗎；查 DB SELECT 1 + Redis ping，strict）
-curl -i http://localhost:3001/api/v1/health/ready
+curl -i http://localhost:3001/ready
 # 全部 up → 200 {"status":"ok","checks":{"db":{"status":"up",...},"redis":{"status":"up",...}}}
 # DB 或 Redis 任一 down → 503（LB / K8s 應據此把該實例移出輪詢）
 ```
 
 > **探針怎麼接**：LB / orchestrator 的 **liveness** 指向 `/health`（失敗才重啟），
-> **readiness** 指向 `/health/ready`（失敗只是暫時不送流量，不重啟）。
+> **readiness** 指向 `/ready`（失敗只是暫時不送流量，不重啟）。
 > Docker Compose 的 container healthcheck 維持用 `/health`（liveness），
 > 避免 DB/Redis 短暫抖動就觸發容器重啟迴圈。
 
@@ -128,7 +141,7 @@ curl -i http://localhost:3001/api/v1/health/ready
 |------|------------|------------|
 | **限流**（Throttler） | 逐實例 in-memory（各算各的，會告警 error log） | `qw:throttle:` 前綴跨實例共享計數 |
 | **Cron**（互惠配對 / 超時） | 每台都跑（單實例 OK；多台會重複執行） | `qw:lock:mutual-*` 分散式鎖，只有一台執行 |
-| **Readiness** | `/health/ready` 回 503（strict） | 200 |
+| **Readiness** | `/ready` 回 503（strict） | 200 |
 
 - `REDIS_URL` 為唯一開關（已在 `docker-compose.full.yml` 的 api 設為 `redis://redis:6379`）。
 - Redis 掛掉時:限流**降級為逐實例**(仍會擋、不會變無限流)、cron**暫停執行**(避免重複)、readiness 轉 503(LB 自動把實例移出)。皆有 log,不會 silent fail。

@@ -4,6 +4,7 @@ import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { LoadingScreen } from "@/components/marketing/animation/loading-screen";
 import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
 import { HeroBackdrop } from "@/components/marketing/animation/hero-backdrop";
+import { HeroIntro } from "@/components/marketing/animation/hero-intro";
 
 const aiLayers = [
   {
@@ -27,29 +28,39 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[var(--q-canvas)] text-[var(--q-body)]">
       <LoadingScreen />
+      <HeroIntro />
       <ScrollReveal />
       <MarketingNav />
 
-      <section className="relative isolate overflow-hidden mx-auto max-w-6xl px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24">
+      <section
+        data-hero-root
+        className="relative isolate mx-auto max-w-6xl overflow-hidden px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24"
+      >
         <HeroBackdrop />
         <div className="relative z-10 grid items-center gap-10 lg:grid-cols-2">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--q-muted)]">
+            <p
+              data-hero-badge
+              className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--q-muted)]"
+            >
               AI 把關的雙邊問卷平台
             </p>
-            <h1 className="mt-4 font-serif text-4xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl lg:text-6xl">
+            <h1
+              data-hero-title
+              className="mt-4 font-serif text-4xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl lg:text-6xl"
+            >
               發問卷找對的人，
               <br />
               填問卷賺回報。
             </h1>
-            <p className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--q-body-strong)]">
+            <p data-hero-copy className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--q-body-strong)]">
               付費發案、精準媒合受眾；填問卷的人賺現金、7-11／全家禮券或積分。
               沒預算？也能用互惠交換互填拿樣本。AI 全程把關品質、還能幫你生成問卷草稿。
             </p>
-            <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--q-muted)]">
+            <p data-hero-copy className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--q-muted)]">
               券問是台灣首個「AI 把關 + 雙邊自助」的問卷媒合平台 —— 付費取樣、互惠交換、賺積分換現金，一個帳號全包。
             </p>
-            <div className="mt-8 flex flex-wrap gap-3">
+            <div data-hero-cta className="mt-8 flex flex-wrap gap-3">
               <Link
                 href="/auth/register"
                 className="q-btn-anim rounded-md bg-[var(--q-primary)] px-5 py-3 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)]"
@@ -65,7 +76,10 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="rounded-xl bg-[var(--q-surface-dark)] p-6 text-[var(--q-on-dark)] sm:p-8">
+          <div
+            data-hero-panel
+            className="rounded-xl bg-[var(--q-surface-dark)] p-6 text-[var(--q-on-dark)] sm:p-8"
+          >
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-on-dark-soft)]">
               一個帳號 · 四種使用方式
             </p>
@@ -78,6 +92,7 @@ export default function HomePage() {
               ].map((m) => (
                 <div
                   key={m.title}
+                  data-hero-panel-item
                   className="flex items-center gap-3 rounded-lg border border-white/10 bg-[var(--q-surface-dark-soft)] px-4 py-3"
                 >
                   <span className="text-xl">{m.icon}</span>

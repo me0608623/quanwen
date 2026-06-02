@@ -1,5 +1,10 @@
 # 券問 QuanWen — 開發者手冊
 
+[![API Coverage](https://img.shields.io/badge/API%20Coverage-43.19%25-yellow)](https://github.com/your-org/quanwen/actions/workflows/ci.yml)
+[![Web Coverage](https://img.shields.io/badge/Web%20Coverage-6.14%25-red)](https://github.com/your-org/quanwen/actions/workflows/ci.yml)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.4-blue)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+
 > **給 AI / 新成員的第一句話**：先讀這份 README，再讀
 > `C:\Users\User\Documents\問券\CLAUDE.md`（產品規格、法規紅線、功能優先序）。
 > 兩份文件讀完才算完整掌握背景。
@@ -179,7 +184,33 @@ pnpm --filter web dev    # http://localhost:3000
 
 ---
 
-## 5. 環境變數說明
+## 5. 免費上線部署（Vercel + Render）
+
+要把東西真的丟上公網，不要靠想像力，直接看這三個檔：
+
+- `docs/FREE_DEPLOYMENT_VERCEL_RENDER.md`：完整免費部署 runbook
+- `docs/vercel-web.env.example`：Vercel web env 範本
+- `docs/render-api.env.example`：Render API env 範本
+
+Repo 也已附上平台設定檔：
+
+- `vercel.json`：Vercel install/build 設定
+- `render.yaml`：Render Blueprint 設定
+- `.env.production.example`：整合版 production env 範本
+
+推薦順序只有一個，別亂來：
+
+1. 先建 Render PostgreSQL
+2. 用 `bash scripts/bootstrap-render-postgres.sh` 對空庫做一次 schema bootstrap
+3. 再建 Render Redis
+4. 部署 Render API，確認 `/health` 與 `/ready` 都正常
+5. 最後部署 Vercel web
+6. 回頭更新 OAuth / ECPay callback URL
+
+補一句實話：目前 production Postgres 還沒全面切到 versioned migrations，
+所以這個 bootstrap script 是過橋方案，不是終局設計。
+
+## 6. 環境變數說明
 
 | 變數 | 必填 | 說明 |
 |------|------|------|
@@ -194,7 +225,8 @@ pnpm --filter web dev    # http://localhost:3000
 | `ZAI_BASE_URL` | 選填 | 預設 `https://api.z.ai/api/paas/v4` |
 | `ZAI_MODEL` | 選填 | 預設 `glm-5.1` |
 | `WEB_URL` | CORS | 預設 `http://localhost:3000` |
-| `API_URL` | 前端 | 前端 axios baseURL，預設 `http://localhost:3001/api/v1` |
+| `API_URL` | API 自身 / callback | 後端對外 base URL，例如 `https://your-api.onrender.com` |
+| `NEXT_PUBLIC_API_URL` | 前端 | 前端 axios baseURL，預設 `http://localhost:3001/api/v1` |
 | `PORT` | 選填 | API port，預設 `3001` |
 
 ---

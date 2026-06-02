@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
-import * as ExcelJS from 'exceljs';
+import { read, utils } from 'xlsx';
 import { V1_SCHEMA_TAG, type QuanWenSurveyV1 } from './quanwen-survey-v1.schema';
 import { SurveyImportService, type ImportResult } from './survey-import.service';
 
@@ -35,6 +35,8 @@ const VALID_QUESTION_TYPES = [
   'single_choice', 'multiple_choice', 'text', 'rating', 'matrix',
 ] as const;
 
+type SheetRows = unknown[][];
+
 @Injectable()
 export class ExcelImportService {
   private readonly logger = new Logger(ExcelImportService.name);
@@ -57,19 +59,22 @@ export class ExcelImportService {
       }
       throw err;
     }
-    // 走既有 JSON importer(Zod 二次驗證 + tagId 過濾 + create)
+    this.logger.log(`parsed xlsx import: ${v1.survey.questions.length} questions`);
     return this.importer.importFromJson(userId, v1);
   }
 
-  /** 公開供測試:純 parse,不落 DB */
   async parseToV1(buffer: Buffer): Promise<QuanWenSurveyV1> {
-    const wb = new ExcelJS.Workbook();
-    await wb.xlsx.load(buffer as unknown as ArrayBuffer);
+    const workbook = read(buffer, {
+      type: 'buffer',
+      cellDates: false,
+      raw: false,
+      dense: true,
+    });
 
     const issues: ParseIssue[] = [];
-    const survey = this.parseSurveySheet(wb, issues);
-    const questions = this.parseQuestionsSheet(wb, issues);
-    const audience = this.parseAudienceSheet(wb, issues);
+    const survey = this.parseSurveySheet(this.getSheetRows(workbook, 'Survey'), issues);
+    const questions = this.parseQuestionsSheet(this.getSheetRows(workbook, 'Questions'), issues);
+    const audience = this.parseAudienceSheet(this.getSheetRows(workbook, 'Audience'), issues);
 
     if (issues.length > 0) throw new ExcelParseError(issues);
 
@@ -85,23 +90,31 @@ export class ExcelImportService {
     };
   }
 
-  // ─── Survey sheet ────────────────────────────────────────────────────────
+  private getSheetRows(workbook: ReturnType<typeof read>, sheetName: string): SheetRows | undefined {
+    const sheet = workbook.Sheets[sheetName];
+    if (!sheet) return undefined;
+    return utils.sheet_to_json(sheet, {
+      header: 1,
+      raw: false,
+      defval: '',
+      blankrows: false,
+    }) as SheetRows;
+  }
 
   private parseSurveySheet(
-    wb: ExcelJS.Workbook,
+    rows: SheetRows | undefined,
     issues: ParseIssue[],
   ): QuanWenSurveyV1['survey'] {
-    const sheet = wb.getWorksheet('Survey');
-    if (!sheet) {
+    if (!rows || rows.length === 0) {
       issues.push({ sheet: 'Survey', message: '缺少 Survey sheet' });
       return this.emptySurvey();
     }
-    const headerRow = sheet.getRow(1);
-    const dataRow = sheet.getRow(2);
+
+    const headerRow = rows[0] ?? [];
+    const dataRow = rows[1] ?? [];
     const get = (key: string): unknown => {
       const idx = this.findHeaderIndex(headerRow, key);
-      if (idx < 0) return undefined;
-      return this.cellValue(dataRow.getCell(idx));
+      return idx < 0 ? undefined : dataRow[idx];
     };
 
     const title = String(get('title') ?? '').trim();
@@ -135,90 +148,82 @@ export class ExcelImportService {
       aiReviewEnabled: this.bool(get('aiReviewEnabled'), true),
       externalUrl: this.optString(get('externalUrl')),
       expiresAt: this.optString(get('expiresAt')),
-      // audienceCriteria / questions 由其他 sheet 補
       audienceCriteria: undefined,
       questions: [],
     };
   }
 
-  // ─── Questions sheet ─────────────────────────────────────────────────────
-
   private parseQuestionsSheet(
-    wb: ExcelJS.Workbook,
+    rows: SheetRows | undefined,
     issues: ParseIssue[],
   ): QuanWenSurveyV1['survey']['questions'] {
-    const sheet = wb.getWorksheet('Questions');
-    if (!sheet) {
+    if (!rows || rows.length === 0) {
       issues.push({ sheet: 'Questions', message: '缺少 Questions sheet' });
       return [];
     }
-    const headerRow = sheet.getRow(1);
+
+    const headerRow = rows[0] ?? [];
     const result: QuanWenSurveyV1['survey']['questions'] = [];
 
-    const lastRow = sheet.actualRowCount;
-    for (let r = 2; r <= lastRow; r++) {
-      const row = sheet.getRow(r);
-      // 全空白列跳過
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r] ?? [];
+      const excelRowNumber = r + 1;
       if (this.isRowEmpty(row, headerRow)) continue;
 
-      const typeRaw = String(this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'type'))) ?? '').trim();
-      const title = String(this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'title'))) ?? '').trim();
+      const typeRaw = String(this.getCell(row, headerRow, 'type') ?? '').trim();
+      const title = String(this.getCell(row, headerRow, 'title') ?? '').trim();
 
       if (!title) {
-        issues.push({ sheet: 'Questions', row: r, column: 'title', message: '題目 title 必填' });
+        issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'title', message: '題目 title 必填' });
         continue;
       }
       if (!VALID_QUESTION_TYPES.includes(typeRaw as typeof VALID_QUESTION_TYPES[number])) {
         issues.push({
           sheet: 'Questions',
-          row: r,
+          row: excelRowNumber,
           column: 'type',
           message: `題型「${typeRaw || '(空)'}」不支援;可選 ${VALID_QUESTION_TYPES.join('/')}`,
         });
         continue;
       }
 
-      const sortOrder = this.int(this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'sortOrder'))), result.length);
-      const description = this.optString(this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'description'))));
-      const isRequired = this.bool(this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'isRequired'))), true);
+      const sortOrder = this.int(this.getCell(row, headerRow, 'sortOrder'), result.length);
+      const description = this.optString(this.getCell(row, headerRow, 'description'));
+      const isRequired = this.bool(this.getCell(row, headerRow, 'isRequired'), true);
 
-      // config_json
       let config: Record<string, unknown> = {};
-      const configRaw = this.cellValue(row.getCell(this.findHeaderIndex(headerRow, 'config_json')));
+      const configRaw = this.getCell(row, headerRow, 'config_json');
       if (configRaw !== undefined && configRaw !== null && String(configRaw).trim() !== '') {
         try {
           const parsed = JSON.parse(String(configRaw));
           if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
             config = parsed as Record<string, unknown>;
           } else {
-            issues.push({ sheet: 'Questions', row: r, column: 'config_json', message: 'config_json 必須是 JSON 物件' });
+            issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'config_json', message: 'config_json 必須是 JSON 物件' });
           }
         } catch {
-          issues.push({ sheet: 'Questions', row: r, column: 'config_json', message: 'config_json 不是合法 JSON' });
+          issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'config_json', message: 'config_json 不是合法 JSON' });
         }
       }
 
-      // options
       const options: Array<{ label: string; sortOrder: number }> = [];
       for (let i = 1; i <= 20; i++) {
-        const cellVal = this.cellValue(row.getCell(this.findHeaderIndex(headerRow, `option_${i}`)));
-        const label = cellVal === undefined || cellVal === null ? '' : String(cellVal).trim();
+        const label = this.optString(this.getCell(row, headerRow, `option_${i}`));
         if (label) options.push({ label, sortOrder: options.length });
       }
 
       if ((typeRaw === 'single_choice' || typeRaw === 'multiple_choice') && options.length < 2) {
-        issues.push({ sheet: 'Questions', row: r, column: 'option_*', message: 'choice 題至少需 2 個選項' });
+        issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'option_*', message: 'choice 題至少需 2 個選項' });
         continue;
       }
       if (typeRaw === 'rating' && config.max === undefined) {
-        issues.push({ sheet: 'Questions', row: r, column: 'config_json', message: 'rating 題的 config 必須含 max' });
+        issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'config_json', message: 'rating 題的 config 必須含 max' });
         continue;
       }
       if (typeRaw === 'matrix') {
-        const rows = (config as { rows?: unknown }).rows;
-        const cols = (config as { cols?: unknown }).cols;
-        if (!Array.isArray(rows) || rows.length === 0 || !Array.isArray(cols) || cols.length === 0) {
-          issues.push({ sheet: 'Questions', row: r, column: 'config_json', message: 'matrix 題的 config 必須含非空 rows[] 與 cols[]' });
+        const configWithAxes = config as { rows?: unknown; cols?: unknown };
+        if (!Array.isArray(configWithAxes.rows) || configWithAxes.rows.length === 0 || !Array.isArray(configWithAxes.cols) || configWithAxes.cols.length === 0) {
+          issues.push({ sheet: 'Questions', row: excelRowNumber, column: 'config_json', message: 'matrix 題的 config 必須含非空 rows[] 與 cols[]' });
           continue;
         }
       }
@@ -238,34 +243,29 @@ export class ExcelImportService {
       issues.push({ sheet: 'Questions', message: `題目超過上限 50 題(實際 ${result.length})` });
     }
 
-    // 依 sortOrder 重新排序,並把 sortOrder 重編為連續整數
     return [...result]
       .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0))
       .map((q, i) => ({ ...q, sortOrder: i }));
   }
 
-  // ─── Audience sheet ──────────────────────────────────────────────────────
-
   private parseAudienceSheet(
-    wb: ExcelJS.Workbook,
+    rows: SheetRows | undefined,
     issues: ParseIssue[],
   ): QuanWenSurveyV1['survey']['audienceCriteria'] {
-    const sheet = wb.getWorksheet('Audience');
-    if (!sheet) return undefined; // 受眾 sheet 是可選的(空 = 不限)
+    if (!rows || rows.length === 0) return undefined;
 
     const kv = new Map<string, string>();
-    const lastRow = sheet.actualRowCount;
-    for (let r = 2; r <= lastRow; r++) {
-      const row = sheet.getRow(r);
-      const k = String(this.cellValue(row.getCell(1)) ?? '').trim();
-      const v = String(this.cellValue(row.getCell(2)) ?? '').trim();
+    for (let r = 1; r < rows.length; r++) {
+      const row = rows[r] ?? [];
+      const k = String(row[0] ?? '').trim();
+      const v = String(row[1] ?? '').trim();
       if (k) kv.set(k, v);
     }
 
     const csv = (key: string): string[] | undefined => {
-      const v = kv.get(key);
-      if (!v) return undefined;
-      const arr = v.split(',').map((s) => s.trim()).filter(Boolean);
+      const value = kv.get(key);
+      if (!value) return undefined;
+      const arr = value.split(',').map((s) => s.trim()).filter(Boolean);
       return arr.length > 0 ? arr : undefined;
     };
 
@@ -298,35 +298,17 @@ export class ExcelImportService {
       requiredTagIds: csv('requiredTagIds'),
       tagMatchMode,
     };
-    // 全空 → 回 undefined(等於不限)
-    const hasAny = Object.values(out).some((v) => v !== undefined);
-    return hasAny ? out : undefined;
+
+    return Object.values(out).some((value) => value !== undefined) ? out : undefined;
   }
 
-  // ─── helpers ─────────────────────────────────────────────────────────────
-
-  private findHeaderIndex(headerRow: ExcelJS.Row, name: string): number {
-    let found = -1;
-    headerRow.eachCell({ includeEmpty: false }, (cell, colNumber) => {
-      if (String(cell.value ?? '').trim() === name && found < 0) found = colNumber;
-    });
-    return found;
+  private findHeaderIndex(headerRow: unknown[], name: string): number {
+    return headerRow.findIndex((cell) => String(cell ?? '').trim() === name);
   }
 
-  private cellValue(cell: ExcelJS.Cell | undefined): unknown {
-    if (!cell) return undefined;
-    const v = cell.value;
-    if (v === null || v === undefined) return undefined;
-    // exceljs 對含公式的 cell 回 { result, formula }
-    if (typeof v === 'object' && 'result' in (v as object)) {
-      return (v as { result: unknown }).result;
-    }
-    // 富文本 → 串接 plain text
-    if (typeof v === 'object' && 'richText' in (v as object)) {
-      const rt = (v as { richText: Array<{ text: string }> }).richText;
-      return rt.map((p) => p.text).join('');
-    }
-    return v;
+  private getCell(row: unknown[], headerRow: unknown[], headerName: string): unknown {
+    const idx = this.findHeaderIndex(headerRow, headerName);
+    return idx < 0 ? undefined : row[idx];
   }
 
   private optString(v: unknown): string | undefined {
@@ -350,15 +332,12 @@ export class ExcelImportService {
     return Number.isFinite(n) ? Math.trunc(n) : fallback;
   }
 
-  private isRowEmpty(row: ExcelJS.Row, headerRow: ExcelJS.Row): boolean {
-    let nonEmpty = false;
-    headerRow.eachCell({ includeEmpty: false }, (_h, colNumber) => {
-      const v = this.cellValue(row.getCell(colNumber));
-      if (v !== undefined && v !== null && String(v).trim() !== '') {
-        nonEmpty = true;
-      }
-    });
-    return !nonEmpty;
+  private isRowEmpty(row: unknown[], headerRow: unknown[]): boolean {
+    for (let i = 0; i < headerRow.length; i++) {
+      if (String(headerRow[i] ?? '').trim() === '') continue;
+      if (String(row[i] ?? '').trim() !== '') return false;
+    }
+    return true;
   }
 
   private emptySurvey(): QuanWenSurveyV1['survey'] {

@@ -1,0 +1,279 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from '../app.module';
+import { DB } from '../db/database.module';
+import { users, wallets, profiles } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+describe('Wallet Controller Integration Tests', () => {
+  let app: INestApplication;
+  let db: ReturnType<typeof import('../db/database.module')['AppDb']>;
+  let jwtToken: string;
+  let testUserId: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+
+    db = app.get(DB);
+
+    // Create test user
+    const registerResponse = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'wallet-test@example.com',
+        password: 'TestPass123',
+        displayName: 'Wallet Test User',
+      });
+
+    jwtToken = registerResponse.body.token;
+    testUserId = registerResponse.body.user.id;
+  }, 15000);
+
+  afterAll(async () => {
+    // Clean up test data
+    if (testUserId && db) {
+      await db.delete(profiles).where(eq(profiles.userId, testUserId));
+      await db.delete(wallets).where(eq(wallets.userId, testUserId));
+      await db.delete(users).where(eq(users.id, testUserId));
+    }
+    if (app) {
+      await app.close();
+    }
+  });
+
+  describe('GET /wallet', () => {
+    it('should get wallet info', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('cashBalance');
+      expect(response.body).toHaveProperty('pointsBalance');
+      expect(response.body).toHaveProperty('lockedCash');
+      expect(response.body.userId).toBe(testUserId);
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet')
+        .expect(401);
+    });
+  });
+
+  describe('GET /wallet/balance', () => {
+    it('should get balance summary', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/balance')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('cashBalance');
+      expect(response.body).toHaveProperty('pointsBalance');
+      expect(response.body).toHaveProperty('lockedCash');
+      expect(typeof response.body.cashBalance).toBe('number');
+      expect(typeof response.body.pointsBalance).toBe('number');
+      expect(typeof response.body.lockedCash).toBe('number');
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet/balance')
+        .expect(401);
+    });
+  });
+
+  describe('GET /wallet/transactions', () => {
+    it('should get transactions with default limit', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/transactions')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBeLessThanOrEqual(50);
+    });
+
+    it('should get transactions with custom limit', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/transactions?limit=10')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBeLessThanOrEqual(10);
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet/transactions')
+        .expect(401);
+    });
+  });
+
+  describe('GET /wallet/earnings-summary', () => {
+    it('should get earnings summary', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/earnings-summary')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('totalEarnings');
+      expect(response.body).toHaveProperty('totalWithdrawals');
+      expect(response.body).toHaveProperty('pendingWithdrawals');
+      expect(response.body).toHaveProperty('netBalance');
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet/earnings-summary')
+        .expect(401);
+    });
+  });
+
+  describe('POST /wallet/deposit (mock)', () => {
+    it('should mock deposit in non-production environment', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/wallet/deposit')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: 500,
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message');
+      expect(response.body.message).toContain('已儲值');
+    });
+
+    it('should reject deposit with invalid amount', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/deposit')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: -100, // Invalid
+        })
+        .expect(400);
+    });
+
+    it('should reject deposit without authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/deposit')
+        .send({
+          amount: 500,
+        })
+        .expect(401);
+    });
+  });
+
+  describe('POST /wallet/withdraw', () => {
+    it('should request withdrawal', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/wallet/withdraw')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: 100,
+          bankCode: '004',
+          bankAccount: '1234567890123456',
+          accountName: 'Test User',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message');
+      expect(response.body).toHaveProperty('transactionId');
+      expect(response.body.message).toContain('提領申請已送出');
+    });
+
+    it('should reject withdrawal with insufficient balance', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/withdraw')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: 999999, // Way more than balance
+          bankCode: '004',
+          bankAccount: '1234567890123456',
+          accountName: 'Test User',
+        })
+        .expect(400);
+    });
+
+    it('should reject withdrawal with invalid amount', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/withdraw')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: 0, // Invalid
+          bankCode: '004',
+          bankAccount: '1234567890123456',
+          accountName: 'Test User',
+        })
+        .expect(400);
+    });
+
+    it('should reject withdrawal without bank info', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/withdraw')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          amount: 100,
+        })
+        .expect(400);
+    });
+
+    it('should reject withdrawal without authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/wallet/withdraw')
+        .send({
+          amount: 100,
+          bankCode: '004',
+          bankAccount: '1234567890123456',
+          accountName: 'Test User',
+        })
+        .expect(401);
+    });
+  });
+
+  describe('GET /wallet/points', () => {
+    it('should get points summary', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/points')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('balance');
+      expect(response.body).toHaveProperty('earned');
+      expect(response.body).toHaveProperty('redeemed');
+      expect(typeof response.body.balance).toBe('number');
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet/points')
+        .expect(401);
+    });
+  });
+
+  describe('GET /wallet/points/transactions', () => {
+    it('should get points transactions', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/wallet/points/transactions')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/wallet/points/transactions')
+        .expect(401);
+    });
+  });
+});

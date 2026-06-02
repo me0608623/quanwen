@@ -4,7 +4,7 @@ import { DB } from '../../db';
 import type { AppDb } from '../../db';
 import { interestTags } from '../../db/schema';
 import { SurveysService } from '../surveys.service';
-import type { CreateSurveyDto } from '../dto/create-survey.dto';
+import { CreateSurveySchema, type CreateSurveyDto } from '../dto/create-survey.dto';
 import { parseV1 } from './quanwen-survey-v1.schema';
 
 /**
@@ -39,8 +39,10 @@ export class SurveyImportService {
   ) {}
 
   async importFromJson(userId: string, raw: unknown): Promise<ImportResult> {
+    const normalizedInput = this.normalizeImportPayload(raw);
+
     // 1. Zod 解析
-    const parsed = parseV1(raw);
+    const parsed = parseV1(normalizedInput);
     if (!parsed.ok) {
       throw new BadRequestException({
         error: {
@@ -102,6 +104,38 @@ export class SurveyImportService {
       status: created.status,
       questionsCount: created.questions.length,
       warnings,
+    };
+  }
+
+  private normalizeImportPayload(raw: unknown) {
+    const parsed = parseV1(raw);
+    if (parsed.ok) {
+      return parsed.data;
+    }
+
+    const directCreate = CreateSurveySchema.safeParse(raw);
+    if (!directCreate.success) {
+      return raw;
+    }
+
+    return {
+      $schema: 'quanwen.survey.v1' as const,
+      exportedAt: new Date().toISOString(),
+      platform: { name: 'quanwen', version: 'direct-import' },
+      survey: {
+        title: directCreate.data.title,
+        description: directCreate.data.description ?? null,
+        type: directCreate.data.type,
+        category: directCreate.data.category ?? null,
+        isAnonymous: directCreate.data.isAnonymous,
+        rewardPoints: directCreate.data.rewardPoints,
+        targetCount: directCreate.data.targetCount,
+        aiReviewEnabled: directCreate.data.aiReviewEnabled,
+        externalUrl: directCreate.data.externalUrl ?? null,
+        expiresAt: directCreate.data.expiresAt ?? null,
+        audienceCriteria: directCreate.data.audienceCriteria ?? null,
+        questions: directCreate.data.questions ?? [],
+      },
     };
   }
 }

@@ -25,6 +25,7 @@ import { SurveyExportService } from './survey-export.service';
 import { SurveyImportService } from './survey-import.service';
 import { ExcelTemplateService } from './excel-template.service';
 import { ExcelImportService } from './excel-import.service';
+import { CsvImportService } from './csv-import.service';
 import { parseV1, V1_SCHEMA_TAG, type QuanWenSurveyV1 } from './quanwen-survey-v1.schema';
 
 const USER1 = '11111111-1111-1111-1111-111111111111';
@@ -38,6 +39,7 @@ describe('Template IO (integration)', () => {
   let importer: SurveyImportService;
   let excelTpl: ExcelTemplateService;
   let excelImp: ExcelImportService;
+  let csvImport: CsvImportService;
 
   beforeAll(async () => {
     client = new PGlite();
@@ -63,6 +65,7 @@ describe('Template IO (integration)', () => {
     exporter = new SurveyExportService(surveys);
     importer = new SurveyImportService(db, surveys);
     excelTpl = new ExcelTemplateService();
+    csvImport = new CsvImportService(importer);
     excelImp = new ExcelImportService(importer);
   });
 
@@ -279,5 +282,23 @@ describe('Template IO (integration)', () => {
     };
     const r = parseV1(base);
     expect(r.ok).toBe(true);
+  });
+
+  it('9. CSV questions-only → importer 正常建立問卷', async () => {
+    const csv = [
+      'sortOrder,type,title,description,isRequired,config_json,option_1,option_2',
+      '0,single_choice,最愛語言,,true,,TypeScript,Python',
+      '1,text,想補充什麼？,,false,"{""multiline"":true}"',
+    ].join('\n');
+
+    const result = await csvImport.importFromCsv(USER1, Buffer.from(csv, 'utf-8'));
+    expect(result.questionsCount).toBe(2);
+
+    const created = await surveys.findOneDetailed(result.id, USER1);
+    expect(created.title).toBe('(CSV 匯入) 未命名問卷');
+    expect(created.questions[0].options).toEqual([
+      expect.objectContaining({ label: 'TypeScript', sortOrder: 0 }),
+      expect.objectContaining({ label: 'Python', sortOrder: 1 }),
+    ]);
   });
 });

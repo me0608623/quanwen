@@ -15,11 +15,11 @@ interface DepCheck {
  *
  * - GET /health        → liveness：無 JWT、無 DB/Redis 依賴，永遠輕量回 200。
  *                        給 process 還活著的判斷（重啟用）。
- * - GET /health/ready  → readiness：檢查 DB(SELECT 1) + Redis(ping)。
+ * - GET /ready         → readiness：檢查 DB(SELECT 1) + Redis(ping)。
  *                        任一 down → 503。給 LB / K8s 判斷「能否收流量」。
  *                        策略為 strict：Redis ping 失敗（含未設定 / ioredis 未裝）→ 503。
  */
-@Controller('health')
+@Controller()
 export class HealthController {
   private readonly startedAt = new Date();
 
@@ -28,7 +28,7 @@ export class HealthController {
     private readonly redis: RedisService,
   ) {}
 
-  @Get()
+  @Get('health')
   check() {
     return {
       status: 'ok',

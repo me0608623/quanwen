@@ -1,3 +1,5 @@
+/// <reference types="node" />
+
 /**
  * Phase O.3: Next.js instrumentation hook
  *
@@ -8,15 +10,22 @@
  * Skeleton — 需要 `pnpm i @sentry/nextjs` 才會實際 require 成功；缺套件時 silent skip
  * 避免 dev 環境炸掉。
  */
+async function loadOptionalSentry() {
+  const dynamicImport = new Function('specifier', 'return import(specifier)') as (
+    specifier: string,
+  ) => Promise<{ init: (options: Record<string, unknown>) => void }>;
+
+  return dynamicImport('@sentry/nextjs');
+}
+
 export async function register() {
   const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN ?? process.env.SENTRY_DSN;
   if (!dsn) return;
 
   try {
+    const Sentry = await loadOptionalSentry();
+
     if (process.env.NEXT_RUNTIME === 'nodejs') {
-      // server-side
-      // @ts-expect-error 套件需要 pnpm install @sentry/nextjs 才會解析
-      const Sentry = await import('@sentry/nextjs');
       Sentry.init({
         dsn,
         environment: process.env.NODE_ENV ?? 'development',
@@ -26,15 +35,14 @@ export async function register() {
       });
       console.log('✅ Sentry server-side 已啟用');
     }
+
     if (process.env.NEXT_RUNTIME === 'edge') {
-      // @ts-expect-error 套件需要 pnpm install @sentry/nextjs 才會解析
-      const Sentry = await import('@sentry/nextjs');
       Sentry.init({
         dsn,
         tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0.1),
       });
     }
   } catch {
-    console.warn('⚠️ NEXT_PUBLIC_SENTRY_DSN 已設定但 @sentry/nextjs 未安裝，跳過');
+    console.warn('⚠️ SENTRY_DSN 已設定但 @sentry/nextjs 未安裝，跳過');
   }
 }

@@ -61,6 +61,31 @@ describe('PGlite DDL schema guard', () => {
     expect(result.rows.length).toBe(1);
   });
 
+  it('response_status enum includes pending_review', async () => {
+    const result = await client.query<{ enumlabel: string }>(
+      `SELECT enumlabel
+       FROM pg_enum e
+       JOIN pg_type t ON t.oid = e.enumtypid
+       WHERE t.typname = 'response_status'
+       ORDER BY e.enumsortorder`,
+    );
+    expect(result.rows.map((row) => row.enumlabel)).toContain('pending_review');
+  });
+
+  it('hot-path indexes exist for responses export queries', async () => {
+    const result = await client.query<{ indexname: string }>(
+      `SELECT indexname FROM pg_indexes WHERE schemaname = 'public'
+       AND indexname IN (
+         'survey_responses_survey_status_submitted_idx',
+         'response_answers_survey_question_idx'
+       )`,
+    );
+    expect(result.rows.map((row) => row.indexname).sort()).toEqual([
+      'response_answers_survey_question_idx',
+      'survey_responses_survey_status_submitted_idx',
+    ]);
+  });
+
   it('Drizzle can select from survey_responses without column errors', async () => {
     // This exercises the ORM mapping — if any column in the schema is missing
     // from the DDL, Drizzle will fail with "column does not exist"

@@ -1,0 +1,88 @@
+services:
+  - type: web
+    name: quanwen-api
+    runtime: docker
+    plan: free
+    rootDir: .
+    dockerfilePath: ./apps/api/Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: WEB_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: API_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: PII_ENCRYPTION_KEY
+        sync: false
+      - key: PII_KDF_SALT
+        sync: false
+      - key: ENABLE_SWAGGER
+        value: 0
+      - key: ZAI_API_KEY
+        sync: false
+      - key: ZAI_BASE_URL
+        value: https://api.z.ai/api/paas/v4
+      - key: ZAI_MODEL
+        value: glm-5.1
+      - key: SENTRY_DSN
+        sync: false
+      - key: SENTRY_TRACES_SAMPLE_RATE
+        value: 0.1
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASS
+        sync: false
+      - key: MAIL_FROM
+        value: QuanWen <noreply@quanwen.tw>
+      - key: LANGFUSE_PUBLIC_KEY
+        sync: false
+      - key: LANGFUSE_SECRET_KEY
+        sync: false
+      - key: LANGFUSE_HOST
+        value: https://cloud.langfuse.com
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_CALLBACK_URL
+        sync: false
+      - key: LINE_CHANNEL_ID
+        sync: false
+      - key: LINE_CHANNEL_SECRET
+        sync: false
+      - key: LINE_CALLBACK_URL
+        sync: false
+      - key: APPLE_CLIENT_ID
+        sync: false
+      - key: APPLE_TEAM_ID
+        sync: false
+      - key: APPLE_KEY_ID
+        sync: false
+      - key: APPLE_PRIVATE_KEY
+        sync: false
+      - key: APPLE_CALLBACK_URL
+        sync: false
+      - key: ECPAY_MERCHANT_ID
+        sync: false
+      - key: ECPAY_HASH_KEY
+        sync: false
+      - key: ECPAY_HASH_IV
+        sync: false
+      - key: ECPAY_PAYMENT_URL
+        value: https://payment.ecpay.com.tw/Cashier/AioCheckOut/V5

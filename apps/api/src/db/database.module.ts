@@ -165,27 +165,31 @@ export { DB_TOKEN as DB };
 
           // Sprint 4: survey_responses + response_answers
           await client.exec(`
-            CREATE TYPE response_status AS ENUM ('in_progress','submitted','rewarded','rejected');
+            CREATE TYPE response_status AS ENUM ('in_progress','submitted','pending_review','rewarded','rejected');
 
             CREATE TYPE response_sentiment AS ENUM ('positive','neutral','negative');
-      CREATE TABLE survey_responses (
-              id                   UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
-              survey_id            UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
-              respondent_id        UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-              status               response_status NOT NULL DEFAULT 'in_progress',
-        sentiment           response_sentiment,
-              started_at           TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
-              submitted_at         TIMESTAMPTZ,
+            CREATE TABLE survey_responses (
+              id                    UUID            PRIMARY KEY DEFAULT gen_random_uuid(),
+              survey_id             UUID            NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              respondent_id         UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              status                response_status NOT NULL DEFAULT 'in_progress',
+              sentiment             response_sentiment,
+              started_at            TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
+              submitted_at          TIMESTAMPTZ,
               fill_duration_seconds INTEGER,
-              anti_cheat_score     INTEGER,
-              suspicious_flags     JSONB,
-              quality_score        INTEGER,
-              quality_breakdown    JSONB,
-              behavior_log         JSONB,
-              randomization_seed   TEXT,
-              fingerprint_id       TEXT,
+              anti_cheat_score      INTEGER,
+              suspicious_flags      JSONB,
+              quality_score         INTEGER,
+              quality_breakdown     JSONB,
+              behavior_log          JSONB,
+              randomization_seed    TEXT,
+              fingerprint_id        TEXT,
               UNIQUE (survey_id, respondent_id)
             );
+            CREATE INDEX survey_responses_survey_idx ON survey_responses(survey_id);
+            CREATE INDEX survey_responses_respondent_idx ON survey_responses(respondent_id);
+            CREATE INDEX survey_responses_survey_status_submitted_idx ON survey_responses(survey_id, status, submitted_at);
+            CREATE INDEX idx_responses_fingerprint ON survey_responses(survey_id, fingerprint_id);
 
             CREATE TABLE response_answers (
               id                  UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -197,6 +201,9 @@ export { DB_TOKEN as DB };
               rating_value        INTEGER,
               created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
             );
+            CREATE INDEX response_answers_response_idx ON response_answers(response_id);
+            CREATE INDEX response_answers_question_idx ON response_answers(question_id);
+            CREATE INDEX response_answers_survey_question_idx ON response_answers(survey_id, question_id);
           `);
 
           // Sprint 6: notifications
@@ -976,11 +983,14 @@ export { DB_TOKEN as DB };
         }
 
         // 真實 PostgreSQL
+        const poolMax = Number(process.env.DB_POOL_MAX ?? 10);
+        const poolIdleTimeoutMs = Number(process.env.DB_POOL_IDLE_TIMEOUT_MS ?? 30_000);
+        const poolConnectionTimeoutMs = Number(process.env.DB_POOL_CONNECTION_TIMEOUT_MS ?? 2_000);
         const pool = new Pool({
           connectionString: process.env.DATABASE_URL,
-          max: 10,
-          idleTimeoutMillis: 30_000,
-          connectionTimeoutMillis: 2_000,
+          max: Number.isFinite(poolMax) && poolMax > 0 ? poolMax : 10,
+          idleTimeoutMillis: Number.isFinite(poolIdleTimeoutMs) && poolIdleTimeoutMs >= 0 ? poolIdleTimeoutMs : 30_000,
+          connectionTimeoutMillis: Number.isFinite(poolConnectionTimeoutMs) && poolConnectionTimeoutMs >= 0 ? poolConnectionTimeoutMs : 2_000,
         });
         return drizzle(pool, { schema });
       },

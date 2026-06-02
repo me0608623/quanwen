@@ -1,0 +1,280 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from '../app.module';
+import { DB } from '../db/database.module';
+import { users, wallets, profiles, surveys } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+describe('Surveys Controller Integration Tests', () => {
+  let app: INestApplication;
+  let db: ReturnType<typeof import('../db/database.module')['AppDb']>;
+  let jwtToken: string;
+  let testUserId: string;
+  let testSurveyId: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+
+    db = app.get(DB);
+
+    // Create test user
+    const registerResponse = await request(app.getHttpServer())
+      .post('/auth/register')
+      .send({
+        email: 'survey-test@example.com',
+        password: 'TestPass123',
+        displayName: 'Survey Test User',
+      });
+
+    jwtToken = registerResponse.body.token;
+    testUserId = registerResponse.body.user.id;
+  }, 15000);
+
+  afterAll(async () => {
+    // Clean up test data
+    if (testUserId && db) {
+      await db.delete(surveys).where(eq(surveys.createdBy, testUserId));
+      await db.delete(profiles).where(eq(profiles.userId, testUserId));
+      await db.delete(wallets).where(eq(wallets.userId, testUserId));
+      await db.delete(users).where(eq(users.id, testUserId));
+    }
+    if (app) {
+      await app.close();
+    }
+  });
+
+  describe('POST /surveys', () => {
+    it('should create a new survey', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/surveys')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          title: 'Test Survey',
+          description: 'This is a test survey',
+          questions: [
+            {
+              id: 'q1',
+              type: 'text',
+              title: 'What is your name?',
+              required: true,
+            },
+          ],
+        })
+        .expect(201);
+
+      expect(response.body).toHaveProperty('id');
+      expect(response.body).toHaveProperty('title', 'Test Survey');
+      expect(response.body).toHaveProperty('questions');
+      expect(response.body.questions).toHaveLength(1);
+
+      testSurveyId = response.body.id;
+    });
+
+    it('should reject survey creation without title', async () => {
+      await request(app.getHttpServer())
+        .post('/surveys')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          description: 'Survey without title',
+          questions: [],
+        })
+        .expect(400);
+    });
+
+    it('should reject survey creation without authentication', async () => {
+      await request(app.getHttpServer())
+        .post('/surveys')
+        .send({
+          title: 'Unauthorized Survey',
+          questions: [],
+        })
+        .expect(401);
+    });
+  });
+
+  describe('GET /surveys', () => {
+    it('should get all surveys for authenticated user', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/surveys')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toBeInstanceOf(Array);
+      expect(response.body.length).toBeGreaterThan(0);
+
+      const testSurvey = response.body.find((s: any) => s.id === testSurveyId);
+      expect(testSurvey).toBeDefined();
+      expect(testSurvey.title).toBe('Test Survey');
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/surveys')
+        .expect(401);
+    });
+  });
+
+  describe('GET /surveys/:id', () => {
+    it('should get survey by ID', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/surveys/${testSurveyId}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', testSurveyId);
+      expect(response.body).toHaveProperty('title', 'Test Survey');
+      expect(response.body).toHaveProperty('questions');
+    });
+
+    it('should reject access to non-existent survey', async () => {
+      await request(app.getHttpServer())
+        .get('/surveys/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(404);
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get(`/surveys/${testSurveyId}`)
+        .expect(401);
+    });
+  });
+
+  describe('PATCH /surveys/:id', () => {
+    it('should update survey', async () => {
+      const response = await request(app.getHttpServer())
+        .patch(`/surveys/${testSurveyId}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          title: 'Updated Test Survey',
+          description: 'Updated description',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', testSurveyId);
+      expect(response.body).toHaveProperty('title', 'Updated Test Survey');
+      expect(response.body).toHaveProperty('description', 'Updated description');
+    });
+
+    it('should reject update to non-existent survey', async () => {
+      await request(app.getHttpServer())
+        .patch('/surveys/00000000-0000-0000-0000-000000000000')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          title: 'Non-existent',
+        })
+        .expect(404);
+    });
+
+    it('should reject update without authentication', async () => {
+      await request(app.getHttpServer())
+        .patch(`/surveys/${testSurveyId}`)
+        .send({
+          title: 'Unauthorized Update',
+        })
+        .expect(401);
+    });
+  });
+
+  describe('POST /surveys/:id/publish', () => {
+    it('should publish survey', async () => {
+      const response = await request(app.getHttpServer())
+        .post(`/surveys/${testSurveyId}/publish`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', testSurveyId);
+      expect(response.body).toHaveProperty('status', 'published');
+    });
+
+    it('should reject publish without authentication', async () => {
+      await request(app.getHttpServer())
+        .post(`/surveys/${testSurveyId}/publish`)
+        .expect(401);
+    });
+  });
+
+  describe('DELETE /surveys/:id', () => {
+    it('should delete survey', async () => {
+      // First create another survey to delete
+      const createResponse = await request(app.getHttpServer())
+        .post('/surveys')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          title: 'To Delete',
+          description: 'This survey will be deleted',
+          questions: [],
+        });
+
+      const surveyToDeleteId = createResponse.body.id;
+
+      await request(app.getHttpServer())
+        .delete(`/surveys/${surveyToDeleteId}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      // Verify it's deleted
+      await request(app.getHttpServer())
+        .get(`/surveys/${surveyToDeleteId}`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(404);
+    });
+
+    it('should reject delete without authentication', async () => {
+      await request(app.getHttpServer())
+        .delete(`/surveys/${testSurveyId}`)
+        .expect(401);
+    });
+  });
+
+  describe('GET /surveys/:id/budget-check', () => {
+    it('should return budget check result', async () => {
+      const response = await request(app.getHttpServer())
+        .get(`/surveys/${testSurveyId}/budget-check`)
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('canAfford');
+      expect(response.body).toHaveProperty('balance');
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get(`/surveys/${testSurveyId}/budget-check`)
+        .expect(401);
+    });
+  });
+
+  describe('POST /surveys/pricing-advice', () => {
+    it('should return pricing advice', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/surveys/pricing-advice')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          estimatedMinutes: 5,
+          questionCount: 10,
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('recommendedReward');
+      expect(response.body).toHaveProperty('reasoning');
+    });
+
+    it('should reject invalid input', async () => {
+      await request(app.getHttpServer())
+        .post('/surveys/pricing-advice')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          estimatedMinutes: -1, // Invalid
+        })
+        .expect(400);
+    });
+  });
+});

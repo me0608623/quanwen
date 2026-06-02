@@ -1,0 +1,320 @@
+import { Test, TestingModule } from '@nestjs/testing';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
+import * as request from 'supertest';
+import { AppModule } from '../app.module';
+import { DB } from '../db/database.module';
+import { users, wallets, profiles } from '../db/schema';
+import { eq } from 'drizzle-orm';
+
+describe('Auth Controller Integration Tests', () => {
+  let app: INestApplication;
+  let db: ReturnType<typeof import('../db/database.module')['AppDb']>;
+  let jwtToken: string;
+  let testUserId: string;
+
+  beforeAll(async () => {
+    const moduleFixture: TestingModule = await Test.createTestingModule({
+      imports: [AppModule],
+    }).compile();
+
+    app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(new ValidationPipe({ whitelist: true, transform: true }));
+    await app.init();
+
+    db = app.get(DB);
+  }, 15000);
+
+  afterAll(async () => {
+    // Clean up test data
+    if (testUserId && db) {
+      await db.delete(profiles).where(eq(profiles.userId, testUserId));
+      await db.delete(wallets).where(eq(wallets.userId, testUserId));
+      await db.delete(users).where(eq(users.id, testUserId));
+    }
+    if (app) {
+      await app.close();
+    }
+  });
+
+  describe('POST /auth/register', () => {
+    it('should register a new user with valid data', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'test-auth@example.com',
+          password: 'TestPass123',
+          displayName: 'Test User',
+        })
+        .expect(201);
+
+      expect(response.body).toHaveProperty('user');
+      expect(response.body.user).toHaveProperty('id');
+      expect(response.body.user).toHaveProperty('email', 'test-auth@example.com');
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('isNewUser', true);
+
+      jwtToken = response.body.token;
+      testUserId = response.body.user.id;
+    });
+
+    it('should reject registration with weak password', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'weak@example.com',
+          password: 'weak', // Too short
+          displayName: 'Weak User',
+        })
+        .expect(400);
+    });
+
+    it('should reject registration with password without uppercase', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'noupper@example.com',
+          password: 'testpass123', // No uppercase
+          displayName: 'No Upper User',
+        })
+        .expect(400);
+    });
+
+    it('should reject registration with password without number', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'nonumber@example.com',
+          password: 'TestPassword', // No number
+          displayName: 'No Number User',
+        })
+        .expect(400);
+    });
+
+    it('should reject duplicate email registration', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          email: 'test-auth@example.com', // Already registered
+          password: 'AnotherPass123',
+          displayName: 'Duplicate User',
+        })
+        .expect(409);
+    });
+  });
+
+  describe('POST /auth/login', () => {
+    it('should login with valid credentials', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'test-auth@example.com',
+          password: 'TestPass123',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('user');
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('isNewUser', false);
+    });
+
+    it('should reject login with invalid email', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'nonexistent@example.com',
+          password: 'TestPass123',
+        })
+        .expect(401);
+    });
+
+    it('should reject login with invalid password', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'test-auth@example.com',
+          password: 'WrongPassword123',
+        })
+        .expect(401);
+    });
+  });
+
+  describe('GET /auth/me', () => {
+    it('should return current user info with valid token', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('id', testUserId);
+      expect(response.body).toHaveProperty('email', 'test-auth@example.com');
+    });
+
+    it('should reject request without token', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .expect(401);
+    });
+
+    it('should reject request with invalid token', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/me')
+        .set('Authorization', 'Bearer invalid-token')
+        .expect(401);
+    });
+  });
+
+  describe('POST /auth/refresh', () => {
+    it('should refresh token with valid JWT', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('token');
+      expect(response.body).toHaveProperty('user');
+
+      // Update jwtToken for subsequent tests
+      jwtToken = response.body.token;
+    });
+
+    it('should reject refresh without token', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/refresh')
+        .expect(401);
+    });
+  });
+
+  describe('POST /auth/security/change-password', () => {
+    it('should change password with valid current password', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/security/change-password')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          currentPassword: 'TestPass123',
+          newPassword: 'NewPassword456',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message');
+
+      // Verify new password works
+      const loginResponse = await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'test-auth@example.com',
+          password: 'NewPassword456',
+        });
+
+      expect(loginResponse.status).toBe(200);
+    });
+
+    it('should reject password change with wrong current password', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/security/change-password')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          currentPassword: 'WrongPassword',
+          newPassword: 'AnotherNew789',
+        })
+        .expect(401);
+    });
+
+    it('should reject password change with weak new password', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/security/change-password')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          currentPassword: 'NewPassword456',
+          newPassword: 'weak',
+        })
+        .expect(400);
+    });
+  });
+
+  describe('POST /auth/profile', () => {
+    it('should update display name', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/profile')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          displayName: 'Updated Name',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('displayName', 'Updated Name');
+    });
+
+    it('should reject empty display name', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/profile')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          displayName: '',
+        })
+        .expect(400);
+    });
+
+    it('should reject overly long display name', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/profile')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .send({
+          displayName: 'A'.repeat(101),
+        })
+        .expect(400);
+    });
+  });
+
+  describe('POST /auth/forgot-password', () => {
+    it('should return success for existing email (no enumeration)', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({
+          email: 'test-auth@example.com',
+        })
+        .expect(200);
+
+      expect(response.body).toHaveProperty('message');
+    });
+
+    it('should return success for non-existing email (no enumeration)', async () => {
+      const response = await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({
+          email: 'nonexistent@example.com',
+        })
+        .expect(200);
+
+      // Should return same success message to prevent email enumeration
+      expect(response.body).toHaveProperty('message');
+    });
+
+    it('should reject invalid email format', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/forgot-password')
+        .send({
+          email: 'invalid-email',
+        })
+        .expect(400);
+    });
+  });
+
+  describe('GET /auth/security', () => {
+    it('should return security info', async () => {
+      const response = await request(app.getHttpServer())
+        .get('/auth/security')
+        .set('Authorization', `Bearer ${jwtToken}`)
+        .expect(200);
+
+      expect(response.body).toHaveProperty('hasPassword');
+      expect(response.body).toHaveProperty('linkedProviders');
+      expect(response.body.linkedProviders).toBeInstanceOf(Array);
+    });
+
+    it('should reject request without authentication', async () => {
+      await request(app.getHttpServer())
+        .get('/auth/security')
+        .expect(401);
+    });
+  });
+});

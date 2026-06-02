@@ -150,6 +150,7 @@ export class ExportService {
     const options_ = qIds.length > 0
       ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
       : [];
+    const optionLabelById = this.buildOptionLabelById(options_);
 
     let responses = await this.db
       .select()
@@ -169,6 +170,7 @@ export class ExportService {
     const answers = respIds.length > 0
       ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, respIds))
       : [];
+    const answerByResponseQuestion = this.buildAnswerByResponseQuestion(answers);
 
     // Header row
     const headers = [
@@ -197,13 +199,13 @@ export class ExportService {
         r.fillDurationSeconds ?? '',
       ];
       for (const q of questions) {
-        const a = answers.find((x) => x.responseId === r.id && x.questionId === q.id);
+        const a = answerByResponseQuestion.get(this.answerKey(r.id, q.id));
         if (!a) { row.push(''); continue; }
         if (q.type === 'text') row.push(a.textAnswer ?? '');
         else if (q.type === 'rating') row.push(a.ratingValue ?? '');
         else if (q.type === 'single_choice' || q.type === 'multiple_choice') {
           const ids = Array.isArray(a.selectedOptionIds) ? a.selectedOptionIds as string[] : [];
-          const labels = ids.map((id) => options_.find((o) => o.id === id)?.label ?? id);
+          const labels = ids.map((id) => optionLabelById.get(id) ?? id);
           row.push(labels.join('; '));
         }
         else if (q.type === 'matrix') row.push(a.textAnswer ?? '');  // raw JSON
@@ -258,15 +260,22 @@ export class ExportService {
       .where(and(eq(surveyResponses.surveyId, surveyId), inArray(surveyResponses.status, ['submitted', 'rewarded'])));
     const respIds = responses.map((r) => r.id);
     const answers = respIds.length > 0 ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, respIds)) : [];
+    const answersByQuestion = this.groupAnswersByQuestion(answers);
+    const optionsByQuestion = this.groupOptionsByQuestion(opts);
 
     const audited = responses.filter((r) => r.qualityScore != null);
     const avgQuality = audited.length > 0 ? Math.round(audited.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / audited.length) : null;
 
     const questionStats = questions.map((q) => {
-      const qAnswers = answers.filter((a) => a.questionId === q.id);
-      const qOptions = opts.filter((o) => o.questionId === q.id);
+      const qAnswers = answersByQuestion.get(q.id) ?? [];
+      const qOptions = optionsByQuestion.get(q.id) ?? [];
       const optionCounts = qOptions.map((o) => {
-        const count = qAnswers.filter((a) => Array.isArray(a.selectedOptionIds) && (a.selectedOptionIds as string[]).includes(o.id)).length;
+        let count = 0;
+        for (const answer of qAnswers) {
+          if (Array.isArray(answer.selectedOptionIds) && (answer.selectedOptionIds as string[]).includes(o.id)) {
+            count += 1;
+          }
+        }
         return { id: o.id, label: o.label, count };
       });
       const ratingValues = qAnswers.filter((a) => a.ratingValue != null).map((a) => a.ratingValue!);
@@ -290,6 +299,50 @@ export class ExportService {
       avgQuality,
       questionStats,
     };
+  }
+
+  private answerKey(responseId: string, questionId: string): string {
+    return `${responseId}:${questionId}`;
+  }
+
+  private buildAnswerByResponseQuestion(
+    answers: Array<typeof responseAnswers.$inferSelect>,
+  ): Map<string, typeof responseAnswers.$inferSelect> {
+    const map = new Map<string, typeof responseAnswers.$inferSelect>();
+    for (const answer of answers) {
+      map.set(this.answerKey(answer.responseId, answer.questionId), answer);
+    }
+    return map;
+  }
+
+  private buildOptionLabelById(
+    options: Array<typeof questionOptions.$inferSelect>,
+  ): Map<string, string> {
+    return new Map(options.map((option) => [option.id, option.label]));
+  }
+
+  private groupAnswersByQuestion(
+    answers: Array<typeof responseAnswers.$inferSelect>,
+  ): Map<string, Array<typeof responseAnswers.$inferSelect>> {
+    const grouped = new Map<string, Array<typeof responseAnswers.$inferSelect>>();
+    for (const answer of answers) {
+      const bucket = grouped.get(answer.questionId);
+      if (bucket) bucket.push(answer);
+      else grouped.set(answer.questionId, [answer]);
+    }
+    return grouped;
+  }
+
+  private groupOptionsByQuestion(
+    options: Array<typeof questionOptions.$inferSelect>,
+  ): Map<string, Array<typeof questionOptions.$inferSelect>> {
+    const grouped = new Map<string, Array<typeof questionOptions.$inferSelect>>();
+    for (const option of options) {
+      const bucket = grouped.get(option.questionId);
+      if (bucket) bucket.push(option);
+      else grouped.set(option.questionId, [option]);
+    }
+    return grouped;
   }
 
   /**

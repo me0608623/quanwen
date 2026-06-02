@@ -64,6 +64,7 @@ export const surveyResponses = pgTable(
   (t) => ({
     surveyIdx: index('survey_responses_survey_idx').on(t.surveyId),
     respondentIdx: index('survey_responses_respondent_idx').on(t.respondentId),
+    surveyStatusSubmittedIdx: index('survey_responses_survey_status_submitted_idx').on(t.surveyId, t.status, t.submittedAt),
     surveyFingerprintIdx: index('idx_responses_fingerprint').on(t.surveyId, t.fingerprintId),
     // 同一受試者對同一問卷只能有一筆（unique constraint）
     uniqRespondentSurvey: unique('survey_responses_unique').on(t.surveyId, t.respondentId),

@@ -1,4 +1,5 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
+import { parse as parseCsvSync } from 'csv-parse/sync';
 import { SurveyImportService, type ImportResult } from './survey-import.service';
 
 /**
@@ -164,7 +165,7 @@ export class CsvImportService {
       const options = optionIndices
         .map(i => row[i]?.trim())
         .filter(Boolean)
-        .map((text, i) => ({ id: i, text: text! }));
+        .map((label, i) => ({ label: label!, sortOrder: i }));
 
       questions.push({
         sortOrder,
@@ -182,37 +183,13 @@ export class CsvImportService {
 
   // ── RFC 4180 CSV parser ──
   private parseCsv(text: string): string[][] {
-    const rows: string[][] = [];
-    let row: string[] = [];
-    let cell = '';
-    let inQuotes = false;
+    const records = parseCsvSync(text.replace(/^\uFEFF/, ''), {
+      bom: true,
+      relax_column_count: true,
+      skip_empty_lines: true,
+      trim: true,
+    }) as string[][];
 
-    for (let i = 0; i < text.length; i++) {
-      const ch = text[i];
-      const next = text[i + 1];
-
-      if (inQuotes) {
-        if (ch === '"' && next === '"') { cell += '"'; i++; }
-        else if (ch === '"') { inQuotes = false; }
-        else { cell += ch; }
-      } else {
-        if (ch === '"') { inQuotes = true; }
-        else if (ch === ',') { row.push(cell.trim()); cell = ''; }
-        else if (ch === '\r' && next === '\n') {
-          row.push(cell.trim());
-          if (row.some(c => c)) rows.push(row);
-          row = []; cell = ''; i++;
-        } else if (ch === '\n' || ch === '\r') {
-          row.push(cell.trim());
-          if (row.some(c => c)) rows.push(row);
-          row = []; cell = '';
-        } else { cell += ch; }
-      }
-    }
-
-    row.push(cell.trim());
-    if (row.some(c => c)) rows.push(row);
-
-    return rows;
+    return records.filter((row) => row.some((cell) => cell?.trim()));
   }
 }

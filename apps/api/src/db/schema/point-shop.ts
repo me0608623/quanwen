@@ -70,6 +70,7 @@ export const pointRedemptions = pgTable(
   },
   (t) => ({
     userIdx: index('point_redemptions_user_idx').on(t.userId),
+    userCreatedIdx: index('point_redemptions_user_created_idx').on(t.userId, t.createdAt),
     statusIdx: index('point_redemptions_status_idx').on(t.status),
   }),
 );
