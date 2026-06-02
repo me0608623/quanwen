@@ -31,3 +31,7 @@ playwright-report
 **/playwright-report
 test-results
 **/test-results
+
+# TypeScript incremental build cache — 會讓 Docker 內 nest build 跳過編譯
+*.tsbuildinfo
+**/*.tsbuildinfo

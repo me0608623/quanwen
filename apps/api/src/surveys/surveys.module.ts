@@ -22,9 +22,10 @@ import { PdfImportService } from './template-io/pdf-import.service';
 import { SurveyCakeImportService } from './template-io/surveycake-import.service';
 import { AiAuditModule } from '../ai-audit/ai-audit.module';
 import { WalletModule } from '../wallet/wallet.module';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
-  imports: [AiAuditModule, WalletModule],
+  imports: [AiAuditModule, WalletModule, NotificationsModule],
   controllers: [SurveysController],
   providers: [
     SurveysService,
