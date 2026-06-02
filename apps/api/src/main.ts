@@ -206,6 +206,10 @@ async function bootstrap() {
     crossOriginEmbedderPolicy: false, // 避免擋外部 OAuth iframe
   }));
 
+  // 上傳檔案靜態服務:UploadService 落地在 <cwd>/uploads,對外以 /uploads/* 取用
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  expressApp.use('/uploads', require('express').static(resolve(process.cwd(), 'uploads')));
+
   // CORS
   const allowedOrigins = Array.from(new Set([
     ...parseAllowedOrigins(process.env.WEB_URL),

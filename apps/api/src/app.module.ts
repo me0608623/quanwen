@@ -19,6 +19,7 @@ import { MutualModule } from './mutual/mutual.module';
 import { SpinModule } from './spin/spin.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AiModule } from './ai/ai.module';
+import { UploadModule } from './common/upload/upload.module';
 import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
@@ -48,6 +49,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     SpinModule,
     AnalyticsModule,
     AiModule,
+    UploadModule,
   ],
   providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
 })
