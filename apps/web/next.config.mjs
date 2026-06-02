@@ -9,10 +9,8 @@ const nextConfig = {
   // pnpm monorepo 必須同時設 outputFileTracingRoot 指向 workspace root，
   // 否則 standalone 會漏掉 workspace 依賴 / server.js 路徑錯位。
   output: 'standalone',
-  experimental: {
-    // ../../ = quanwen/（pnpm-workspace.yaml 所在的 monorepo root）
-    outputFileTracingRoot: path.join(__dirname, '../../'),
-  },
+  // Next.js 15: outputFileTracingRoot moved from experimental to top-level
+  outputFileTracingRoot: path.join(__dirname, '../../'),
   // lint 由獨立的 CI job（pnpm lint / next lint）負責;build 不重複 lint，
   // 避免「加了 eslint config 後 next build 開始 lint」把原本綠的 build job 弄紅。
   eslint: { ignoreDuringBuilds: true },

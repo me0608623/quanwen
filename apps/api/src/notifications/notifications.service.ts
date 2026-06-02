@@ -255,4 +255,37 @@ export class NotificationsService {
       .set({ isRead: true })
       .where(and(eq(notifications.userId, userId), eq(notifications.isRead, false)));
   }
+
+  // ─── QUA-201: Auto-close notification ────────────────────────────────────
+
+  async sendSurveyAutoCloseNotification(
+    surveyorId: string,
+    surveyId: string,
+    title: string,
+    reason: string,
+  ): Promise<void> {
+    await this.create({
+      userId: surveyorId,
+      type: 'system',
+      title: '問卷已自動截止',
+      body: `您的問卷「${title}」已自動截止，原因：${reason}`,
+      metadata: { surveyId, reason },
+    });
+
+    // Also attempt email
+    const [user] = await this.db
+      .select({ email: users.email, displayName: users.displayName, emailVerified: users.emailVerified, emailOptOut: users.emailOptOut })
+      .from(users)
+      .where(eq(users.id, surveyorId))
+      .limit(1);
+
+    if (user?.emailVerified && !user?.emailOptOut) {
+      await this.mail.sendNotificationEmail(
+        user.email,
+        user.displayName,
+        '問卷已自動截止',
+        `您的問卷「${title}」已自動截止，原因：${reason}`,
+      );
+    }
+  }
 }

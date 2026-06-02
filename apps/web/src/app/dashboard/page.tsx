@@ -42,12 +42,20 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-bold">我的問卷</h1>
           <p className="text-sm text-muted-foreground mt-1">管理你發布的問卷、追蹤回收進度</p>
         </div>
-        <Link
-          href="/dashboard/surveys/new"
-          className="rounded-[10px] bg-[#126b8a] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#0f5d78]"
-        >
-          + 新增問卷
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/dashboard/surveys/import"
+            className="rounded-[10px] border border-[#126b8a]/40 px-4 py-2.5 text-sm font-semibold text-[#126b8a] transition-all hover:bg-[#126b8a]/5"
+          >
+            匯入問卷
+          </Link>
+          <Link
+            href="/dashboard/surveys/new"
+            className="rounded-[10px] bg-[#126b8a] px-5 py-2.5 text-sm font-bold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-[#0f5d78]"
+          >
+            + 新增問卷
+          </Link>
+        </div>
       </div>
 
       {/* AI 助手 */}
@@ -74,12 +82,20 @@ export default function DashboardPage() {
             </svg>
           </div>
           <p className="text-muted-foreground mb-4">還沒有任何問卷</p>
-          <Link
-            href="/dashboard/surveys/new"
-            className="rounded-md bg-[#126b8a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
-          >
-            建立第一份問卷
-          </Link>
+          <div className="flex items-center justify-center gap-3">
+            <Link
+              href="/dashboard/surveys/new"
+              className="rounded-md bg-[#126b8a] px-4 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
+            >
+              建立第一份問卷
+            </Link>
+            <Link
+              href="/dashboard/surveys/import"
+              className="rounded-md border border-[#126b8a]/40 px-4 py-2 text-sm font-semibold text-[#126b8a] hover:bg-[#126b8a]/5"
+            >
+              或匯入現有問卷
+            </Link>
+          </div>
         </div>
       )}
 

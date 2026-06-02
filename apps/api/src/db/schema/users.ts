@@ -17,6 +17,8 @@ export const authProviderEnum = pgEnum('auth_provider', ['email', 'google', 'lin
 
 export const userStatusEnum = pgEnum('user_status', ['active', 'suspended', 'pending_verify']);
 
+export const userTierEnum = pgEnum('user_tier', ['free', 'vip', 'vvip']);
+
 // ─── Users ────────────────────────────────────────────────────────────────────
 
 export const users = pgTable(
@@ -25,8 +27,9 @@ export const users = pgTable(
     id: uuid('id').primaryKey().defaultRandom(),
     email: varchar('email', { length: 255 }).notNull().unique(),
     passwordHash: varchar('password_hash', { length: 255 }),
-    role: userRoleEnum('role').notNull(),
-    status: userStatusEnum('status').notNull().default('active'),
+  role: userRoleEnum('role').notNull(),
+  tier: userTierEnum('tier').notNull().default('free'),
+  status: userStatusEnum('status').notNull().default('active'),
     displayName: varchar('display_name', { length: 100 }).notNull(),
     avatarUrl: text('avatar_url'),
     emailVerified: boolean('email_verified').notNull().default(false),

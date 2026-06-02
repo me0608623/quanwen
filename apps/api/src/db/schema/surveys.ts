@@ -104,6 +104,11 @@ export const surveys = pgTable(
     // 是否允許匿名填答
     isAnonymous: boolean('is_anonymous').notNull().default(true),
 
+    // QUA-201: Scheduled publish and auto-close
+    scheduledPublishAt: timestamp('scheduled_publish_at', { withTimezone: true }),
+    autoCloseAt: timestamp('auto_close_at', { withTimezone: true }),
+    autoCloseAfterN: integer('auto_close_after_n'),
+
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
     publishedAt: timestamp('published_at', { withTimezone: true }),

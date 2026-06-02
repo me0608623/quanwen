@@ -29,8 +29,14 @@ function decodeJwtRole(token: string): string | null {
   try {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
+    // Edge-compatible: replace URL-safe base64 chars then decode with atob
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
     const payload = JSON.parse(
-      Buffer.from(parts[1], 'base64url').toString('utf8'),
+      decodeURIComponent(
+        Array.from(atob(b64), (c) =>
+          '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2),
+        ).join(''),
+      ),
     ) as { role?: string };
     return payload.role ?? null;
   } catch {

@@ -63,7 +63,7 @@ const envResult = envSchema.safeParse(process.env);
 if (!envResult.success) {
   console.error('❌ 缺少必要的環境變數，請檢查 .env 設定：');
   for (const issue of envResult.error.issues) {
-    console.error(`  • ${issue.path[0]}: ${issue.message}`);
+    console.error(`  • ${String(issue.path[0])}: ${issue.message}`);
   }
   process.exit(1);
 }

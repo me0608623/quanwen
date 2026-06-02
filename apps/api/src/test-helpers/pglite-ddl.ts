@@ -59,6 +59,9 @@ export const SURVEYS_DDL = `
     ai_reject_reason      TEXT,
     question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
     is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
+    scheduled_publish_at  TIMESTAMPTZ,
+    auto_close_at         TIMESTAMPTZ,
+    auto_close_after_n    INTEGER,
     created_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     updated_at            TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
     published_at          TIMESTAMPTZ

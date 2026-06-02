@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule, RequestMethod } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './db';
@@ -17,7 +17,10 @@ import { KycModule } from './kyc/kyc.module';
 import { PointShopModule } from './point-shop/point-shop.module';
 import { MutualModule } from './mutual/mutual.module';
 import { SpinModule } from './spin/spin.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { AiModule } from './ai/ai.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { AiQuotaMiddleware } from './common/middleware/ai-quota.middleware';
 
 @Module({
   imports: [
@@ -46,9 +49,18 @@ import { ScheduleModule } from '@nestjs/schedule';
     PointShopModule,
     MutualModule,
     SpinModule,
+    AnalyticsModule,
+    AiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    // AI quota middleware for AI endpoints
+    consumer
+      .apply(AiQuotaMiddleware)
+      .forRoutes({ path: 'ai/*', method: RequestMethod.POST });
+  }
+}

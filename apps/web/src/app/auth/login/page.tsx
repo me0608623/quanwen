@@ -22,7 +22,7 @@ import { PasswordInput } from "../_components/password-input";
 const LoginSchema = z.object({
   email: z.string().min(1, "請輸入電子郵件"),
   password: z.string().min(1, "請輸入密碼"),
-  remember: z.boolean().default(false),
+  remember: z.boolean(),
 });
 
 type LoginInput = z.infer<typeof LoginSchema>;

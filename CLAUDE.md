@@ -164,19 +164,44 @@ Text-type answers (`text`, `matrix`) are passed through `redactPii()` before exp
 ## Key Rules
 
 ```
-❌ Store amounts as float      ✅ Integer NT$ only
-❌ String-concatenate SQL      ✅ Drizzle parameterised queries
-❌ Skip Zod on req.body        ✅ ZodValidationPipe is global — always define a DTO
-❌ Log tokens / secrets        ✅ logger.info + redact sensitive fields
-❌ Hardcode API keys            ✅ process.env, validated at startup
-❌ Call respondent wallet "儲值" ✅ "待領獎勵" / "我的收益"
-❌ Self-collect payments        ✅ ECPay (綠界) payment gateway only
-❌ Send PII to Z.ai             ✅ De-identify before any AI call
-❌ Platform fee = 10%           ✅ PLATFORM_FEE_RATE = 0.15 (15%)
-❌ Auto-link OAuth by email     ✅ Always create new user; explicit binding via /settings/accounts
-❌ Add schema without DDL sync  ✅ Update both schema/*.ts AND database.module.ts PGlite block
-❌ role guard for feature access ✅ Check profile.isOnboardingDone; all users have both profiles
+❌ Store amounts as float         ✅ Integer NT$ only
+❌ String-concatenate SQL         ✅ Drizzle parameterised queries
+❌ Skip Zod on req.body           ✅ ZodValidationPipe is global — always define a DTO
+❌ Log tokens / secrets           ✅ logger.info + redact sensitive fields
+❌ Hardcode API keys              ✅ process.env, validated at startup
+❌ Call respondent wallet "儲值"   ✅ "待領獎勵" / "我的收益"
+❌ Self-collect payments          ✅ ECPay (綠界) payment gateway only
+❌ Send PII to Z.ai               ✅ De-identify before any AI call
+❌ Platform fee = 10%             ✅ PLATFORM_FEE_RATE = 0.15 (15%)
+❌ Auto-link OAuth by email       ✅ Always create new user; explicit binding via /settings/accounts
+❌ Add schema without DDL sync    ✅ Update both schema/*.ts AND database.module.ts PGlite block
+❌ role guard for feature access  ✅ Check profile.isOnboardingDone; all users have both profiles
+❌ Store PII in plaintext          ✅ Use CryptoService.encrypt for ID numbers, bank accounts, phone, real names
+❌ Public endpoints by default     ✅ New endpoints require JWT; use @Public() decorator only for explicit public routes
+❌ Missing journal entry           ✅ All WalletService mutations create two journal_entries (debit + credit)
 ```
+
+## Pull Request Workflow
+
+Before creating a PR, verify the **紅線 checklist** (red lines):
+
+- [ ] **金流**: 所有金額用 integer NT$ 元，無 float
+- [ ] **金流**: 所有 transaction 雙向 journal entry（debit = credit）
+- [ ] **個資**: 身分證 / 銀行帳號 / 手機 / 真實姓名走 `CryptoService.encrypt` (AES-256-GCM)
+- [ ] **API**: 所有輸入用 Zod schema validate
+- [ ] **SQL**: 用 Drizzle parameterized query，沒拼字串
+- [ ] **Auth**: 新端點預設要 JWT；明確 `@Public()` 才公開
+
+**AI/LLM changes** (if modifying `ai-audit/prompts.ts` or `ai-audit/schemas.ts`):
+- [ ] 動到 prompt 文字 → 對應 `PromptEntry.version` 已 bump
+- [ ] 新增 prompt entry → `key` 用 `領域.用途` 格式
+- [ ] 動到 Zod schema → caller 端有對應 fallback
+
+**Test plan**:
+- [ ] `pnpm type-check` passes
+- [ ] `pnpm test` passes (Vitest)
+- [ ] For UI changes: run affected Playwright specs
+- [ ] Manual smoke test of affected flows
 
 ## Tailwind Setup Checklist
 
