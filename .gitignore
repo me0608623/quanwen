@@ -42,3 +42,7 @@ take-screenshot.mjs
 playwright-report/
 test-results/
 boot.log
+
+# Director mode configs
+.director-mode/
+.ecpay-skill/
