@@ -58,6 +58,40 @@ describe('AntiCheatService', () => {
       const r = svc.evaluate(answers, 1, 60);
       expect(r.flags.some((f) => f.includes('文字題'))).toBe(false);
     });
+
+    it('偵測重複字元 → +30', () => {
+      const answers = [text('q1', 'aaaaaaa'), text('q2', '12345678')];
+      const r = svc.evaluate(answers, 2, 60);
+      expect(r.score).toBeGreaterThanOrEqual(30);
+      expect(r.flags.some((f) => f.includes('重複字元'))).toBe(true);
+    });
+
+    it('偵測鍵盤連續按鍵 → +25', () => {
+      const answers = [text('q1', 'qwerty'), text('q2', 'asdfgh')];
+      const r = svc.evaluate(answers, 2, 60);
+      expect(r.score).toBeGreaterThanOrEqual(25);
+      expect(r.flags.some((f) => f.includes('鍵盤連續'))).toBe(true);
+    });
+
+    it('偵測亂碼 → +20', () => {
+      const answers = [text('q1', 'xkqzmplv')];
+      const r = svc.evaluate(answers, 1, 60);
+      expect(r.score).toBeGreaterThanOrEqual(20);
+      expect(r.flags.some((f) => f.includes('亂碼'))).toBe(true);
+    });
+
+    it('正常回答不被誤判為亂碼', () => {
+      const answers = [text('q1', '我覺得這個產品不錯')];
+      const r = svc.evaluate(answers, 1, 60);
+      expect(r.flags.some((f) => f.includes('亂碼'))).toBe(false);
+    });
+
+    it('特殊符號過多被偵測為亂碼', () => {
+      const answers = [text('q1', '!!!@@@###$$$')];
+      const r = svc.evaluate(answers, 1, 60);
+      expect(r.score).toBeGreaterThanOrEqual(20);
+      expect(r.flags.some((f) => f.includes('亂碼'))).toBe(true);
+    });
   });
 
   describe('選擇題全選同一選項', () => {
@@ -140,6 +174,20 @@ describe('AntiCheatService', () => {
       expect(r.score).toBe(0);
       expect(r.isSuspicious).toBe(false);
       expect(r.flags).toHaveLength(0);
+    });
+
+    it('多種可疑行為累積分數', () => {
+      const answers = [
+        text('q1', 'aaa'),      // 重複字元 +30
+        text('q2', 'qwerty'),   // 鍵盤連續 +25
+        text('q3', ''),         // 過短 +20 (被其他覆蓋)
+        choice('q4', 'a'),
+        choice('q5', 'a'),
+        choice('q6', 'a'),
+        choice('q7', 'a'),
+      ];
+      const r = svc.evaluate(answers, 7, 5);
+      expect(r.score).toBeGreaterThanOrEqual(30 + 25 + 15); // 重複 + 鍵盤 + 同一選項
     });
   });
 });

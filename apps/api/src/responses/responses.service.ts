@@ -116,6 +116,13 @@ export class ResponsesService {
       ? and(eq(surveys.status, 'published'), eq(surveys.type, 'standard'), eq(surveys.category, normalizedCategory))
       : and(eq(surveys.status, 'published'), eq(surveys.type, 'standard'));
 
+    // Subquery: count questions per survey (used for client-side duration/difficulty filters)
+    const questionCountSq = this.db
+      .select({ surveyId: surveyQuestions.surveyId, cnt: sql<number>`count(*)::int`.as('cnt') })
+      .from(surveyQuestions)
+      .groupBy(surveyQuestions.surveyId)
+      .as('qc');
+
     const allPublished = await this.db
       .select({
         id: surveys.id,
@@ -129,8 +136,10 @@ export class ResponsesService {
         audienceCriteria: surveys.audienceCriteria,
         isAnonymous: surveys.isAnonymous,
         publishedAt: surveys.publishedAt,
+        questionCount: sql<number>`coalesce(${questionCountSq.cnt}, 0)`,
       })
       .from(surveys)
+      .leftJoin(questionCountSq, sql`${surveys.id} = ${questionCountSq.surveyId}`)
       .where(whereClause)
       .orderBy(desc(surveys.rewardPoints), desc(surveys.publishedAt));
 
@@ -397,6 +406,7 @@ export class ResponsesService {
       dto.answers,
       surveyQRows.length,
       fillDurationSeconds,
+      dto.behaviorLog,
     );
 
     // 極度可疑（score >= 80）→ 直接標記 rejected，不計入配額
@@ -864,7 +874,13 @@ export class ResponsesService {
       if (q.type === 'rating') {
         const ratings = qAnswers.map((a) => a.ratingValue).filter((v): v is number => v !== null);
         const avg = ratings.length > 0 ? ratings.reduce((s, v) => s + v, 0) / ratings.length : null;
-        return { questionId: q.id, title: q.title, type: q.type, totalAnswers: ratings.length, averageRating: avg };
+        // Rating distribution buckets (1..maxValue)
+        const maxRating = ratings.length > 0 ? Math.max(...ratings) : 5;
+        const buckets: { value: number; count: number }[] = [];
+        for (let v = 1; v <= maxRating; v++) {
+          buckets.push({ value: v, count: ratings.filter((r) => r === v).length });
+        }
+        return { questionId: q.id, title: q.title, type: q.type, totalAnswers: ratings.length, averageRating: avg, ratingBuckets: buckets };
       }
 
       // text
