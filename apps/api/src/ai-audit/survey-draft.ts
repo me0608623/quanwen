@@ -47,7 +47,7 @@ const rawQuestionSchema = z
     description: z.string().max(500).optional().catch(undefined),
     isRequired: z.boolean().optional().catch(true),
     options: z.array(rawOptionSchema).max(30).optional().catch([]),
-    config: z.record(z.unknown()).optional().catch(undefined),
+    config: z.record(z.string(), z.unknown()).optional().catch(undefined),
   })
   .passthrough();
 
