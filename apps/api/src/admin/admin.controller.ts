@@ -9,6 +9,7 @@ import { MutualService } from '../mutual/mutual.service';
 import { PlatformHealthService } from './platform-health.service';
 import { WithdrawalRiskService } from './withdrawal-risk.service';
 import { AppealsService } from '../responses/appeals.service';
+import { ResponsesService } from '../responses/responses.service';
 import { ReconciliationService } from '../wallet/reconciliation.service';
 import { MultiAccountDetectorService } from './multi-account-detector.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -29,6 +30,12 @@ type ApproveAppealDto = z.infer<typeof ApproveAppealSchema>;
 const DismissAppealSchema = z.object({ adminNote: z.string().min(5).max(500) });
 type DismissAppealDto = z.infer<typeof DismissAppealSchema>;
 
+const VerifyLotterySchema = z.object({ adminNote: z.string().max(500).optional() });
+type VerifyLotteryDto = z.infer<typeof VerifyLotterySchema>;
+
+const InterveneLotterySchema = z.object({ adminNote: z.string().trim().min(5).max(500) });
+type InterveneLotteryDto = z.infer<typeof InterveneLotterySchema>;
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
@@ -38,6 +45,7 @@ export class AdminController {
     private readonly platformHealth: PlatformHealthService,
     private readonly withdrawalRisk: WithdrawalRiskService,
     private readonly appeals: AppealsService,
+    private readonly responses: ResponsesService,
     private readonly reconciliation: ReconciliationService,
     private readonly multiAccountDetector: MultiAccountDetectorService,
     private readonly mutualService: MutualService,
@@ -95,6 +103,36 @@ export class AdminController {
     return this.adminService.closeSurvey(id);
   }
 
+  /** GET /admin/lottery-obligations — 平台保證人檢視中獎履約紀錄 */
+  @Get('lottery-obligations')
+  getLotteryObligations() {
+    return this.adminService.getLotteryObligations();
+  }
+
+  /** POST /admin/lottery-obligations/:id/verify — 平台核驗建立者已履約 */
+  @Post('lottery-obligations/:id/verify')
+  @HttpCode(HttpStatus.OK)
+  verifyLotteryFulfillment(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(VerifyLotterySchema)) dto: VerifyLotteryDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.adminService.verifyLotteryFulfillment(id, user.id, dto.adminNote);
+  }
+
+  /** POST /admin/lottery-obligations/:id/intervene — 留存平台介入爭議處理紀錄 */
+  @Post('lottery-obligations/:id/intervene')
+  @HttpCode(HttpStatus.OK)
+  interveneLotteryIssue(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(InterveneLotterySchema)) dto: InterveneLotteryDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.adminService.interveneLotteryIssue(id, user.id, dto.adminNote);
+  }
+
   // ─── 填答管理 ────────────────────────────────────────────────────────────────
 
   /** GET /admin/responses/suspicious?minScore=60 */
@@ -110,6 +148,13 @@ export class AdminController {
     return this.adminService.rejectResponse(id);
   }
 
+  /** POST /admin/responses/:id/approve — 人工核准待審填答 */
+  @Post('responses/:id/approve')
+  @HttpCode(HttpStatus.OK)
+  approveResponse(@Param('id') id: string) {
+    return this.responses.approvePendingResponse(id);
+  }
+
   /** GET /admin/responses/:id/ai-analysis — AI 解讀此筆可疑填答 */
   @Get('responses/:id/ai-analysis')
   responseAiAnalysis(@Param('id') id: string) {
@@ -120,7 +165,7 @@ export class AdminController {
   @Post('responses/:id/re-audit')
   @HttpCode(HttpStatus.OK)
   async reAudit(@Param('id') id: string) {
-    return this.adminService.reAuditResponse(id);
+    return this.responses.retryQualityAudit(id);
   }
 
   // ─── 提領管理 ────────────────────────────────────────────────────────────────

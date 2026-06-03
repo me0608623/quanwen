@@ -276,6 +276,7 @@ export function QuestionEditor({
                 <select
                   value={(question.config?.shuffleOption as string) ?? 'none'}
                   onChange={(e) => patchConfig({ ...(question.config ?? {}), shuffleOption: e.target.value })}
+                  aria-label="選項排序方式"
                   className="rounded border border-input bg-background px-2 py-1 text-xs"
                 >
                   <option value="none">固定順序</option>
@@ -311,6 +312,7 @@ export function QuestionEditor({
                       else next.reverseOfIndex = Number(value);
                       patchConfig(next);
                     }}
+                    aria-label="反向計分對應題目"
                     className="rounded border border-input bg-background px-2 py-1 text-xs"
                   >
                     <option value="">無</option>
@@ -382,6 +384,7 @@ export function QuestionEditor({
                   <select
                     value={rule.selectedOptionId ?? ''}
                     onChange={(e) => updateRule(ruleIndex, { selectedOptionId: e.target.value, selectedRating: undefined })}
+                    aria-label="跳題條件:選項"
                     className="rounded border border-input bg-background px-2 py-1 text-xs"
                   >
                     {optionItems.map((item) => (
@@ -411,6 +414,7 @@ export function QuestionEditor({
                 <span className="text-xs text-muted-foreground">則跳至</span>
                 <select
                   value={rule.skipToEnd ? '__end__' : String(rule.skipToQuestionIndex ?? '')}
+                  aria-label="跳題目標:題目"
                   onChange={(e) => {
                     if (e.target.value === '__end__') {
                       updateRule(ruleIndex, { skipToEnd: true, skipToQuestionIndex: undefined });

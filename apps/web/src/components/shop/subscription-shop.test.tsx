@@ -64,12 +64,14 @@ describe('SubscriptionShop', () => {
   it('顯示目前方案、今日用量與 VIP 積分兌換資訊', () => {
     const html = renderToStaticMarkup(<SubscriptionShop />);
 
-    expect(html).toContain('VIP 訂閱與積分兌換');
+    expect(html).toContain('從問卷發想，到結果洞察');
     expect(html).toContain('目前方案');
     expect(html).toContain('今日 AI 使用量');
     expect(html).toContain('12/50');
     expect(html).toContain('500 點 / 7 天');
-    expect(html).toContain('你目前是');
+    expect(html).toContain('訂閱後可以做什麼？');
+    expect(html).toContain('AI 題目生成');
+    expect(html).toContain('AI 結果洞察');
   });
 
   it('把積分商城直接整合進同頁商店區塊', () => {
@@ -101,7 +103,7 @@ describe('SubscriptionShop', () => {
     const html = renderToStaticMarkup(<SubscriptionShop />);
 
     expect(html).toContain('積分還不夠，先去賺點數。');
-    expect(html).toContain('還差一點火力。');
+    expect(html).toContain('累積足夠積分後即可兌換。');
   });
 
   it('載入失敗時顯示錯誤訊息', () => {

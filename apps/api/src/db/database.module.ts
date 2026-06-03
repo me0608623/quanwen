@@ -127,6 +127,16 @@ export { DB_TOKEN as DB };
               description      TEXT,
               status           survey_status NOT NULL DEFAULT 'draft',
               reward_points    INTEGER      NOT NULL DEFAULT 0,
+              reward_mode      VARCHAR(16)  NOT NULL DEFAULT 'fixed',
+              lottery_prize        TEXT,
+              lottery_winner_count INTEGER,
+              lottery_draw_mode    VARCHAR(16),
+              lottery_draw_at      TIMESTAMPTZ,
+              lottery_drawn_at     TIMESTAMPTZ,
+              lottery_draw_seed    TEXT,
+              lottery_eligible_digest TEXT,
+              lottery_terms_accepted_at TIMESTAMPTZ,
+              lottery_obligation_notified_at TIMESTAMPTZ,
         deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
         base_reward_points  INTEGER     NOT NULL DEFAULT 0,
               reward_type      reward_type  NOT NULL DEFAULT 'cash',
@@ -137,6 +147,8 @@ export { DB_TOKEN as DB };
               ai_score         INTEGER,
               ai_reject_reason      TEXT,
               question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
+              cover_image_url       TEXT,
+              theme                 JSONB,
               is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
               created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
               updated_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
@@ -151,6 +163,7 @@ export { DB_TOKEN as DB };
               description TEXT,
               sort_order  INTEGER      NOT NULL DEFAULT 0,
               is_required BOOLEAN      NOT NULL DEFAULT true,
+              image_url   TEXT,
               config      JSONB,
               created_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW()
             );
@@ -204,6 +217,39 @@ export { DB_TOKEN as DB };
             CREATE INDEX response_answers_response_idx ON response_answers(response_id);
             CREATE INDEX response_answers_question_idx ON response_answers(question_id);
             CREATE INDEX response_answers_survey_question_idx ON response_answers(survey_id, question_id);
+
+            CREATE TABLE survey_lottery_results (
+              id            UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+              survey_id     UUID        NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              response_id   UUID        NOT NULL REFERENCES survey_responses(id) ON DELETE CASCADE,
+              respondent_id UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              is_winner     BOOLEAN     NOT NULL DEFAULT false,
+              prize         TEXT        NOT NULL,
+              fulfillment_status VARCHAR(24) NOT NULL DEFAULT 'not_applicable',
+              fulfillment_note TEXT,
+              fulfilled_at TIMESTAMPTZ,
+              fulfillment_notified_at TIMESTAMPTZ,
+              platform_verified_at TIMESTAMPTZ,
+              platform_verified_by UUID REFERENCES users(id) ON DELETE SET NULL,
+              platform_note TEXT,
+              platform_verified_notified_at TIMESTAMPTZ,
+              platform_intervened_at TIMESTAMPTZ,
+              platform_intervened_by UUID REFERENCES users(id) ON DELETE SET NULL,
+              platform_intervention_note TEXT,
+              platform_intervention_notified_at TIMESTAMPTZ,
+              last_reminder_at TIMESTAMPTZ,
+              draw_notified_at TIMESTAMPTZ,
+              recipient_status VARCHAR(24) NOT NULL DEFAULT 'awaiting_delivery',
+              recipient_confirmed_at TIMESTAMPTZ,
+              recipient_confirmed_notified_at TIMESTAMPTZ,
+              recipient_issue_note TEXT,
+              recipient_issue_reported_at TIMESTAMPTZ,
+              recipient_issue_notified_at TIMESTAMPTZ,
+              created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              UNIQUE (survey_id, respondent_id)
+            );
+            CREATE INDEX survey_lottery_results_survey_idx ON survey_lottery_results(survey_id);
+            CREATE INDEX survey_lottery_results_respondent_idx ON survey_lottery_results(respondent_id);
           `);
 
           // Sprint 6: notifications
@@ -264,6 +310,9 @@ export { DB_TOKEN as DB };
               completed_at        TIMESTAMPTZ,
               UNIQUE (external_provider, external_ref)
             );
+            CREATE UNIQUE INDEX transactions_related_response_type_unique
+              ON transactions (related_response_id, type)
+              WHERE related_response_id IS NOT NULL;
 
             CREATE TABLE journal_entries (
               id             UUID        PRIMARY KEY DEFAULT gen_random_uuid(),

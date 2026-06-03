@@ -22,6 +22,7 @@ import { AppealsService } from './appeals.service';
 import { ReputationService } from './reputation.service';
 import { ExportService } from './export.service';
 import { AiInsightsService } from '../surveys/ai-insights.service';
+import { SurveyLotteryService } from '../surveys/survey-lottery.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { SubmitResponseSchema, SubmitResponseDto } from './dto/submit-response.dto';
@@ -33,6 +34,9 @@ const CreateAppealSchema = z.object({
 });
 type CreateAppealDto = z.infer<typeof CreateAppealSchema>;
 
+const ReportLotteryIssueSchema = z.object({ note: z.string().trim().min(5).max(1000) });
+type ReportLotteryIssueDto = z.infer<typeof ReportLotteryIssueSchema>;
+
 // ─── 受試者用（前綴 /tasks）────────────────────────────────────────────────────
 
 @Controller('tasks')
@@ -43,6 +47,7 @@ export class TasksController {
     private readonly respondentAssistant: RespondentAssistantService,
     private readonly appeals: AppealsService,
     private readonly reputation: ReputationService,
+    private readonly surveyLottery: SurveyLotteryService,
   ) {}
 
   /** GET /tasks?category=... — 可填問卷列表（依受眾媒合 + optional category 篩選） */
@@ -50,6 +55,40 @@ export class TasksController {
   getAvailable(@Req() req: Request, @Query('category') category?: string) {
     const user = req.user as AuthenticatedUser;
     return this.responsesService.getAvailableSurveys(user.id, category);
+  }
+
+  /** GET /tasks/lottery-winnings — 自己的中獎與履約案件 */
+  @Get('lottery-winnings')
+  getMyLotteryWinnings(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.getMyWinnings(user.id);
+  }
+
+  /** GET /tasks/lottery-results — 自己參與過的全部抽獎結果 */
+  @Get('lottery-results')
+  getMyLotteryResults(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.getMyLotteryResults(user.id);
+  }
+
+  /** POST /tasks/lottery-winnings/:id/confirm-receipt — 中獎者確認收到獎品 */
+  @Post('lottery-winnings/:id/confirm-receipt')
+  @HttpCode(HttpStatus.OK)
+  confirmLotteryReceipt(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.confirmReceipt(id, user.id);
+  }
+
+  /** POST /tasks/lottery-winnings/:id/report-issue — 中獎者回報尚未收到獎品 */
+  @Post('lottery-winnings/:id/report-issue')
+  @HttpCode(HttpStatus.OK)
+  reportLotteryIssue(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(ReportLotteryIssueSchema)) dto: ReportLotteryIssueDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.reportIssue(id, user.id, dto.note);
   }
 
   /** GET /tasks/category-counts — 各 category 的可填問卷計數 */

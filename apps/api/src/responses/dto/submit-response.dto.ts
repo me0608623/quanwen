@@ -6,9 +6,9 @@ export const AnswerSchema = z.object({
   // text / matrix
   textAnswer: z.string().max(5000).optional(),
   // single_choice / multiple_choice
-  selectedOptionIds: z.array(z.string().uuid()).max(20).optional(),
+  selectedOptionIds: z.array(z.union([z.string().uuid(), z.literal('yes'), z.literal('no')])).max(20).optional(),
   // rating
-  ratingValue: z.number().int().min(1).max(10).optional(),
+  ratingValue: z.number().int().min(0).max(10).optional(),
 });
 
 // Phase 2: behavior tracker log（quality audit pipeline 用）

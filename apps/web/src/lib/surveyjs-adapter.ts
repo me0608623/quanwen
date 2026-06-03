@@ -212,7 +212,7 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
     case 'rating': {
       const config = q.config ?? {};
       const maxRating = (config.maxRating as number) ?? 5;
-      const minRating = 1;
+      const minRating = config.scaleStart === 0 ? 0 : 1;
 
       return {
         ...base,

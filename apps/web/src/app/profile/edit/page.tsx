@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMyProfile, useUpdateRespondentProfile, useTags } from '@/hooks/use-profile';
 import { TagSelector } from '@/components/forms/tag-selector';
 import type { RespondentProfile, AgeRange, Gender, Occupation, Industry, Education } from '@/hooks/use-profile';
 import { extractApiError } from '@/lib/extract-error';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import {
   AGE_RANGE_OPTIONS,
   GENDER_OPTIONS,
@@ -17,8 +18,8 @@ import {
 
 export default function ProfileEditPage() {
   const router = useRouter();
-  const { data: profile, isLoading: profileLoading, isError: profileError } = useMyProfile();
-  const { data: tags = [], isLoading: tagsLoading, isError: tagsError } = useTags();
+  const { data: profile, isLoading: profileLoading, isError: profileError, refetch: refetchProfile } = useMyProfile();
+  const { data: tags = [], isLoading: tagsLoading, isError: tagsError, refetch: refetchTags } = useTags();
   const updateProfile = useUpdateRespondentProfile();
 
   const [form, setForm] = useState<{
@@ -41,11 +42,16 @@ export default function ProfileEditPage() {
     tagIds: [],
   });
 
+  // 已提交時不再警告離開
+  const savedRef = useRef(false);
+  // 預填基準，用於判斷是否有未儲存變更
+  const baselineRef = useRef<string | null>(null);
+
   // Pre-fill from existing profile
   useEffect(() => {
     const rp = profile as RespondentProfile | null;
     if (rp) {
-      setForm({
+      const next = {
         ageRange: (rp.ageRange as AgeRange) ?? '',
         gender: (rp.gender as Gender) ?? '',
         region: rp.region ?? '',
@@ -54,9 +60,25 @@ export default function ProfileEditPage() {
         industryOther: rp.industryOther ?? '',
         education: (rp.education as Education) ?? '',
         tagIds: rp.tags?.map((t) => t.id) ?? [],
-      });
+      };
+      setForm(next);
+      baselineRef.current = JSON.stringify(next);
     }
   }, [profile]);
+
+  const dirty = baselineRef.current !== null && JSON.stringify(form) !== baselineRef.current;
+
+  // 有未儲存變更時，關閉/重新整理分頁前警告
+  useEffect(() => {
+    if (!dirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (savedRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
 
   const set = (field: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
@@ -79,6 +101,7 @@ export default function ProfileEditPage() {
     ) as Parameters<typeof updateProfile.mutateAsync>[0];
     try {
       await updateProfile.mutateAsync(dto);
+      savedRef.current = true;
       router.push('/profile');
     } catch {
       // error displayed via updateProfile.error below
@@ -86,13 +109,14 @@ export default function ProfileEditPage() {
   };
 
   if (profileLoading) {
-    return <main className="mx-auto max-w-lg px-4 py-12"><p className="text-sm text-muted-foreground">載入中…</p></main>;
+    return <main className="mx-auto max-w-lg px-4 py-12"><LoadingSpinner /></main>;
   }
 
   if (profileError) {
     return (
-      <main className="mx-auto max-w-lg px-4 py-12">
-        <p className="text-sm text-destructive">無法載入個人資料，請重新整理頁面。</p>
+      <main className="mx-auto max-w-lg px-4 py-12 text-center">
+        <p className="text-sm text-destructive">無法載入個人資料。</p>
+        <button onClick={() => refetchProfile()} className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10">重試</button>
       </main>
     );
   }
@@ -100,7 +124,13 @@ export default function ProfileEditPage() {
   return (
     <main className="mx-auto max-w-lg px-4 py-12">
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.back()} className="text-sm text-muted-foreground hover:text-primary">
+        <button
+          onClick={() => {
+            if (dirty && !confirm('有未儲存的變更，確定要離開嗎？')) return;
+            router.back();
+          }}
+          className="text-sm text-muted-foreground hover:text-primary"
+        >
           ← 返回
         </button>
         <h1 className="text-2xl font-bold">編輯個人資料</h1>
@@ -118,6 +148,7 @@ export default function ProfileEditPage() {
           <select
             value={form.region}
             onChange={set('region')}
+            aria-label="居住縣市"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">請選擇</option>
@@ -137,6 +168,7 @@ export default function ProfileEditPage() {
               value={form.industryOther}
               onChange={(e) => setForm((prev) => ({ ...prev, industryOther: e.target.value }))}
               maxLength={50}
+              aria-label="行業（其他）"
               placeholder="請填寫你的行業（最多 50 字）"
               className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
@@ -150,7 +182,10 @@ export default function ProfileEditPage() {
           {tagsLoading ? (
             <p className="text-sm text-muted-foreground">載入標籤中…</p>
           ) : tagsError ? (
-            <p className="text-sm text-destructive">標籤載入失敗，請重新整理頁面。</p>
+            <p className="text-sm text-destructive">
+              標籤載入失敗。
+              <button onClick={() => refetchTags()} className="ml-2 underline hover:text-destructive/80">重試</button>
+            </p>
           ) : (
             <TagSelector
               tags={tags}
@@ -192,6 +227,7 @@ function SelectField({
       <select
         value={value}
         onChange={onChange}
+        aria-label={label}
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       >
         <option value="">請選擇</option>

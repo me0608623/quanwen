@@ -7,10 +7,11 @@ import { useMe, useUpdateProfile, isPlaceholderEmail } from '@/hooks/use-auth';
 import { useMyProfile, useUpdateSurveyorProfile } from '@/hooks/use-profile';
 import type { SurveyorProfile } from '@/hooks/use-profile';
 import { extractApiError } from '@/lib/extract-error';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 export default function SurveyorProfilePage() {
   const { data: me } = useMe();
-  const { data: profile, isLoading, isError } = useMyProfile();
+  const { data: profile, isLoading, isError, refetch } = useMyProfile();
   const updateUser = useUpdateProfile();
   const updateSurveyor = useUpdateSurveyorProfile();
 
@@ -58,8 +59,13 @@ export default function SurveyorProfilePage() {
     }
   };
 
-  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
-  if (isError) return <div className="p-10 text-sm text-destructive">載入失敗，請重新整理頁面。</div>;
+  if (isLoading) return <LoadingSpinner />;
+  if (isError) return (
+    <div className="p-10 text-center">
+      <p className="text-sm text-destructive">載入失敗。</p>
+      <button onClick={() => refetch()} className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10">重試</button>
+    </div>
+  );
 
   const sp = profile as SurveyorProfile | null;
   const hasPlaceholder = isPlaceholderEmail(me?.email);

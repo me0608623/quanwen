@@ -1,15 +1,27 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCreateSurvey, SurveyQuestion, AiDraftResult, SURVEY_CATEGORY_LABELS, DEADLINE_TIER_OPTIONS, type SurveyCategory, type AudienceCriteria, type DeadlineTier } from '@/hooks/use-surveys';
 import { usePricingAdvice } from '@/hooks/use-pricing';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
+import { SURVEY_TEMPLATES, type SurveyTemplate } from '@/lib/survey-templates';
 import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-card';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
 import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
+import { ImageUploader } from '@/components/survey-editor/image-uploader';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+
+function localDateTimeInputValue(date: Date): string {
+  return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
+}
+
+const LOTTERY_PRIZE_EXAMPLES = [
+  '饗食天堂平日晚餐券 2 張',
+  '星巴克飲料券 10 份',
+  '超商禮券 NT$500',
+];
 
 const defaultQuestion = (): SurveyQuestion => ({
   type: 'single_choice',
@@ -32,11 +44,38 @@ export default function NewSurveyPage() {
   const [externalUrl, setExternalUrl] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
+  const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
+  const [rewardMode, setRewardMode] = useState<'fixed' | 'lottery'>('fixed');
   const [rewardPoints, setRewardPoints] = useState(0);
+  const [lotteryPrize, setLotteryPrize] = useState('');
+  const [lotteryWinnerCount, setLotteryWinnerCount] = useState(1);
+  const [lotteryDrawMode, setLotteryDrawMode] = useState<'when_full' | 'scheduled' | 'manual'>('when_full');
+  const [lotteryDrawAt, setLotteryDrawAt] = useState('');
+  const [lotteryTermsAccepted, setLotteryTermsAccepted] = useState(false);
   const [deadlineTier, setDeadlineTier] = useState<DeadlineTier>('standard');
   const [targetCount, setTargetCount] = useState(100);
   const [audience, setAudience] = useState<AudienceCriteria>({});
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
+  const savedRef = useRef(false);
+
+  // 有實質填寫內容且尚未儲存時，關閉/重整分頁前警告，避免丟失建立中的問卷
+  const hasContent =
+    title.trim() !== '' ||
+    description.trim() !== '' ||
+    externalUrl.trim() !== '' ||
+    rewardPoints > 0 ||
+    lotteryPrize.trim() !== '' ||
+    questions.some((q) => (q.title ?? '').trim() !== '');
+  useEffect(() => {
+    if (!hasContent) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (savedRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasContent]);
   const livePreviewDraft = useDebouncedValue({ title, description, questions }, 300);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
@@ -70,6 +109,12 @@ export default function NewSurveyPage() {
     );
   };
 
+  const applyTemplate = (t: SurveyTemplate) => {
+    if (!title) setTitle(t.title);
+    if (!description) setDescription(t.description);
+    setQuestions(t.build());
+  };
+
   const updateQuestion = (i: number, q: SurveyQuestion) => {
     setQuestions((prev) => prev.map((old, idx) => (idx === i ? { ...q, sortOrder: i } : old)));
   };
@@ -87,17 +132,27 @@ export default function NewSurveyPage() {
       const survey = await createSurvey.mutateAsync({
         title: title || '未命名問卷',
         description: description || undefined,
+        coverImageUrl: coverImageUrl || undefined,
         type,
         category: category || undefined,
         aiReviewEnabled: type === 'mutual' ? true : aiReviewEnabled,
         externalUrl: type === 'mutual' && externalUrl.trim() ? externalUrl.trim() : undefined,
         rewardPoints: type === 'mutual' ? 0 : rewardPoints,
+        rewardMode: type === 'mutual' ? 'fixed' : rewardMode,
+        lotteryPrize: type === 'standard' && rewardMode === 'lottery' ? lotteryPrize.trim() : undefined,
+        lotteryWinnerCount: type === 'standard' && rewardMode === 'lottery' ? lotteryWinnerCount : undefined,
+        lotteryDrawMode: type === 'standard' && rewardMode === 'lottery' ? lotteryDrawMode : undefined,
+        lotteryDrawAt: type === 'standard' && rewardMode === 'lottery' && lotteryDrawMode === 'scheduled' && lotteryDrawAt
+          ? new Date(lotteryDrawAt).toISOString()
+          : undefined,
+        lotteryTermsAccepted: type === 'standard' && rewardMode === 'lottery' ? lotteryTermsAccepted : undefined,
         deadlineTier: type === 'mutual' ? 'standard' : deadlineTier,
         targetCount: type === 'mutual' ? 9999 : targetCount,
         // 受眾鎖定只對 standard 有意義（mutual 走配對機制）
         audienceCriteria: type === 'standard' && Object.keys(audience).length > 0 ? audience : undefined,
         questions,
       });
+      savedRef.current = true;
       router.push(`/dashboard/surveys/${survey.id}`);
     } catch (err) {
       const e = err as { response?: { data?: { message?: string } } };
@@ -139,7 +194,7 @@ export default function NewSurveyPage() {
                 <span className="ml-auto text-xs font-medium text-primary">✓</span>
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="text-xs text-slate-600">
               設定獎勵點數，平台媒合受試者來填寫。需要預算鎖定 + AI 審核。
             </p>
           </button>
@@ -181,6 +236,22 @@ export default function NewSurveyPage() {
         </button>
       </div>
 
+      {/* 範本快速開始 */}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-xs font-semibold text-muted-foreground">或從範本開始：</span>
+        {SURVEY_TEMPLATES.map((t) => (
+          <button
+            key={t.key}
+            type="button"
+            onClick={() => applyTemplate(t)}
+            className="rounded-full border border-[#126b8a]/30 bg-[#126b8a]/5 px-3 py-1 text-xs font-medium text-[#126b8a] hover:bg-[#126b8a]/10"
+            title={t.description}
+          >
+            {t.name}
+          </button>
+        ))}
+      </div>
+
       {/* Basic info */}
       <section className="space-y-3 rounded-lg border border-border p-4">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">基本資訊</h2>
@@ -193,6 +264,7 @@ export default function NewSurveyPage() {
             onChange={(e) => setTitle(e.target.value)}
             placeholder="輸入問卷標題"
             maxLength={200}
+            aria-label="問卷標題"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
@@ -205,15 +277,24 @@ export default function NewSurveyPage() {
             placeholder="讓受試者了解問卷目的…"
             maxLength={2000}
             rows={3}
+            aria-label="問卷說明"
             className="w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           />
         </div>
+
+        {/* QUA-279: Cover image */}
+        <ImageUploader
+          value={coverImageUrl}
+          onChange={setCoverImageUrl}
+          label="封面圖片（顯示在任務列表卡片）"
+        />
 
         <div>
           <label className="mb-1 block text-sm font-medium">分類（選填）</label>
           <select
             value={category}
             onChange={(e) => setCategory(e.target.value as SurveyCategory | '')}
+            aria-label="問卷分類"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
           >
             <option value="">— 未分類 —</option>
@@ -228,8 +309,30 @@ export default function NewSurveyPage() {
 
         {type === 'standard' && (
           <>
+          <div>
+            <label className="mb-2 block text-sm font-medium">回饋方式</label>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setRewardMode('fixed')}
+                className={`rounded-lg border-2 p-3 text-left ${rewardMode === 'fixed' ? 'border-primary bg-primary/5' : 'border-border'}`}
+              >
+                <p className="text-sm font-semibold">每份固定獎勵</p>
+                <p className="mt-1 text-xs text-slate-600">每位有效填答者都可取得設定的 NT$ 獎勵。</p>
+              </button>
+              <button
+                type="button"
+                onClick={() => setRewardMode('lottery')}
+                className={`rounded-lg border-2 p-3 text-left ${rewardMode === 'lottery' ? 'border-primary bg-primary/5' : 'border-border'}`}
+              >
+                <p className="text-sm font-semibold">抽獎回饋</p>
+                <p className="mt-1 text-xs text-muted-foreground">不必設定每份金額，例如抽饗食天堂餐券或品牌禮券。</p>
+              </button>
+            </div>
+          </div>
+
           <div className="flex gap-4">
-            <div className="flex-1">
+            {rewardMode === 'fixed' && <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">獎勵點數（NT$）</label>
               <input
                 type="number"
@@ -237,9 +340,10 @@ export default function NewSurveyPage() {
                 max={1000}
                 value={rewardPoints}
                 onChange={(e) => setRewardPoints(Number(e.target.value))}
+                aria-label="獎勵點數（NT$）"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
-            </div>
+            </div>}
             <div className="flex-1">
               <label className="mb-1 block text-sm font-medium">目標收集份數</label>
               <input
@@ -248,19 +352,103 @@ export default function NewSurveyPage() {
                 max={10000}
                 value={targetCount}
                 onChange={(e) => setTargetCount(Number(e.target.value))}
+                aria-label="目標收集份數"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />
             </div>
           </div>
+          {rewardMode === 'lottery' && (
+            <div className="space-y-3 rounded-lg border border-amber-200 bg-amber-50/60 p-3">
+              <div>
+                <label className="mb-1 block text-sm font-medium">抽獎獎品 *</label>
+                <input
+                  value={lotteryPrize}
+                  onChange={(e) => setLotteryPrize(e.target.value)}
+                  aria-label="抽獎獎品"
+                  placeholder="例如：饗食天堂平日晚餐券 2 張"
+                  maxLength={300}
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {LOTTERY_PRIZE_EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => setLotteryPrize(example)}
+                      className="rounded-full border border-amber-300 bg-white px-2.5 py-1 text-xs font-semibold text-amber-800 hover:bg-amber-100"
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">中獎名額</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={1000}
+                  value={lotteryWinnerCount}
+                  onChange={(e) => setLotteryWinnerCount(Number(e.target.value))}
+                  aria-label="中獎名額"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                />
+              </div>
+              <div>
+                <label className="mb-1 block text-sm font-medium">開獎方式</label>
+                <select
+                  value={lotteryDrawMode}
+                  onChange={(e) => setLotteryDrawMode(e.target.value as typeof lotteryDrawMode)}
+                  aria-label="開獎方式"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                >
+                  <option value="when_full">問卷收滿後自動開獎並通知</option>
+                  <option value="scheduled">指定日期自動開獎並通知</option>
+                  <option value="manual">問卷收滿後，由我手動開獎並通知</option>
+                </select>
+              </div>
+              {lotteryDrawMode === 'scheduled' && (
+                <div>
+                  <label className="mb-1 block text-sm font-medium">指定開獎時間 *</label>
+                  <input
+                    type="datetime-local"
+                    value={lotteryDrawAt}
+                    min={localDateTimeInputValue(new Date())}
+                    onChange={(e) => setLotteryDrawAt(e.target.value)}
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+              )}
+              <div className="rounded-lg border border-amber-200 bg-white p-3 text-xs text-amber-900">
+                <p className="font-bold">抽獎回報系統會自動處理：</p>
+                <ul className="mt-2 space-y-1">
+                  <li>有效填答者會先收到抽獎資格通知，開獎後會收到「中獎 / 未中獎」系統通知。</li>
+                  <li>若問卷提前截止，會依截止時的有效資格名單開獎；手動開獎時由你在收滿後通知。</li>
+                  <li>建立者有義務於開獎後七日內送出兌獎方式並交付獎品，平台會保留通知與履約核驗紀錄。</li>
+                </ul>
+              </div>
+              <label className="flex items-start gap-2 rounded-lg border border-amber-300 bg-white p-3 text-xs text-amber-900">
+                <input
+                  type="checkbox"
+                  checked={lotteryTermsAccepted}
+                  onChange={(event) => setLotteryTermsAccepted(event.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>我同意於開獎後七日內交付獎品，接受平台留存通知、介入未收到案件並進行履約核驗。</span>
+              </label>
+            </div>
+          )}
+          {rewardMode === 'fixed' && (
           <PricingAdviceCard
             advice={pricingAdvice.data}
             loading={pricingAdvice.isPending}
             currentReward={rewardPoints}
             onApplyFair={setRewardPoints}
           />
+          )}
 
           {/* QUA-34: Rush delivery tier selector */}
-          <div>
+          {rewardMode === 'fixed' && <div>
             <label className="mb-1 block text-sm font-medium">交付速度</label>
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
               {DEADLINE_TIER_OPTIONS.map((opt) => {
@@ -277,7 +465,7 @@ export default function NewSurveyPage() {
                     }`}
                   >
                     <div className="font-semibold">{opt.label}</div>
-                    <div className="mt-0.5 text-muted-foreground">{opt.hint}</div>
+                    <div className="mt-0.5 text-slate-600">{opt.hint}</div>
                     {rewardPoints > 0 && opt.multiplier > 1 && (
                       <div className="mt-1 font-medium text-primary">
                         NT${effectiveReward}/份
@@ -290,7 +478,7 @@ export default function NewSurveyPage() {
             <p className="mt-1.5 text-xs text-muted-foreground">
               選擇較短的交付期限會自動提高每份獎勵吸引受試者，並設定對應截止日。
             </p>
-          </div>
+          </div>}
           </>
         )}
 
@@ -305,6 +493,7 @@ export default function NewSurveyPage() {
                 type="url"
                 value={externalUrl}
                 onChange={(e) => setExternalUrl(e.target.value)}
+                aria-label="外部問卷連結"
                 placeholder="https://forms.gle/... （用 Google 表單等外部平台時填）"
                 className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
               />

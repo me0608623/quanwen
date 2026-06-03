@@ -34,6 +34,9 @@ export default function MutualFillPage() {
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           找不到此配對或無權存取。
         </div>
+        <Link href="/mutual" className="mt-4 inline-block text-sm text-primary hover:underline">
+          ← 回互惠列表
+        </Link>
       </main>
     );
   }

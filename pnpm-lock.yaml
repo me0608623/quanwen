@@ -83,6 +83,9 @@ importers:
       helmet:
         specifier: ^8.2.0
         version: 8.2.0
+      hucre:
+        specifier: ^0.6.0
+        version: 0.6.0
       iconv-lite:
         specifier: ^0.7.2
         version: 0.7.2
@@ -3727,6 +3730,10 @@ packages:
   https-proxy-agent@5.0.1:
     resolution: {integrity: sha512-dFcAjpTQFgoLMzC2VwU+C/CbS7uRL0lWmxDITmqm7C+7F0Odmj6s9l6alZc6AELXhrnggM2CeWSXHGOdX2YtwA==}
     engines: {node: '>= 6'}
+
+  hucre@0.6.0:
+    resolution: {integrity: sha512-Osajs1c1Si0TaUIfminbkWkQI370ZCAEq9CUTQtbi7n80Fa6ejCo9NYTKdtqJV/4j+HPwqd7H7GOwkwI1X4gbw==}
+    hasBin: true
 
   iconv-lite@0.7.2:
     resolution: {integrity: sha512-im9DjEDQ55s9fL4EYzOAv0yMqmMBSZp6G0VvFyTMPKWxiSBHUj9NW/qqLmXUwXrrM7AvqSlTCfvqRb0cM8yYqw==}
@@ -9210,6 +9217,8 @@ snapshots:
       debug: 4.4.3
     transitivePeerDependencies:
       - supports-color
+
+  hucre@0.6.0: {}
 
   iconv-lite@0.7.2:
     dependencies:

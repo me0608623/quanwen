@@ -24,7 +24,7 @@ function Avatar({ src, name }: { src: string | null | undefined; name: string })
   }
   const initials = name.slice(0, 2).toUpperCase();
   return (
-    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary ring-1 ring-border">
+    <div className="flex h-7 w-7 items-center justify-center rounded-full bg-primary/15 text-xs font-semibold text-blue-800 ring-1 ring-border">
       {initials}
     </div>
   );
@@ -96,7 +96,7 @@ export function Navbar() {
 
   return (
     <>
-      <nav className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-sm">
+      <nav aria-label="主要導覽" className="sticky top-0 z-50 border-b border-border bg-background/90 backdrop-blur-sm">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-4 py-3">
           {/* Logo */}
           <Link href={homeHref} className="shrink-0 text-base font-bold tracking-tight">
@@ -143,7 +143,11 @@ export function Navbar() {
             )}
 
             {/* 通知鈴鐺 */}
-            <Link href="/notifications" className="relative rounded-md p-1.5 hover:bg-muted">
+            <Link
+              href="/notifications"
+              aria-label={(unread?.count ?? 0) > 0 ? `通知（${unread?.count} 則未讀）` : '通知'}
+              className="relative rounded-md p-1.5 hover:bg-muted"
+            >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
                 className="h-5 w-5 text-muted-foreground"
@@ -172,6 +176,7 @@ export function Navbar() {
                 className="flex items-center gap-1.5 rounded-full hover:bg-muted px-1 py-1"
                 aria-haspopup="menu"
                 aria-expanded={menuOpen}
+                aria-label="帳號選單"
               >
                 <Avatar src={me.avatarUrl} name={me.displayName} />
                 <svg className="h-3.5 w-3.5 text-muted-foreground" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>

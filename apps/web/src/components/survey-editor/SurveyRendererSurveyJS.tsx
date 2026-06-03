@@ -59,6 +59,9 @@ export function SurveyRendererSurveyJS({
     const model = new Model(surveyJsJson);
     model.showQuestionNumbers = 'on';
     model.questionTitlePattern = 'numRequireTitle';
+    // 顯示填答進度（已答題數），讓受試者知道還剩多少；單頁問卷也適用
+    model.showProgressBar = 'top';
+    model.progressBarType = 'questions';
     // QUA-141: use Traditional Chinese for all built-in SurveyJS strings
     model.locale = 'zh-tw';
 

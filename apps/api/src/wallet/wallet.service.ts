@@ -272,8 +272,23 @@ export class WalletService {
     // 原因：若 deduction 成功但後續 INSERT/UPDATE 失敗，錢會從問券方扣掉
     // 但受試者沒收到、journal 也沒有記錄 → 帳務資料不一致。
     // 將全部操作包在同一個 transaction，保證「扣問券方 + 入受試者 + 帳分錄」要嘛全成功要嘛全滾回。
-    const txResult = { status: 'pending' as 'success' | 'pending' }; // hoisted so logger/notification can read outside tx
+    const txResult = { status: 'pending' as 'success' | 'pending', duplicate: false }; // hoisted so logger/notification can read outside tx
+    try {
     await this.db.transaction(async (tx) => {
+      const existingReward = await tx
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(
+          eq(transactions.relatedResponseId, responseId),
+          eq(transactions.type, 'reward_in'),
+        ))
+        .limit(1);
+      if (existingReward.length > 0) {
+        txResult.duplicate = true;
+        this.logger.log(`Reward skipped: response=${responseId} already has reward transaction`);
+        return;
+      }
+
       // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ─────────────────────────
       // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
       const deducted = await tx
@@ -353,6 +368,15 @@ export class WalletService {
           .where(eq(wallets.userId, respondentId));
       }
     });
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === '23505') {
+        this.logger.log(`Reward skipped: response=${responseId} concurrent duplicate`);
+        return;
+      }
+      throw err;
+    }
+
+    if (txResult.duplicate) return;
 
     this.logger.log(
       `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txResult.status}`,
@@ -610,7 +634,23 @@ export class WalletService {
     await this.ensureWallet(respondentId);
     const now = new Date();
 
+    let duplicate = false;
+    try {
     await this.db.transaction(async (tx) => {
+      const existingPoints = await tx
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(
+          eq(transactions.relatedResponseId, responseId),
+          eq(transactions.type, 'points_in'),
+        ))
+        .limit(1);
+      if (existingPoints.length > 0) {
+        duplicate = true;
+        this.logger.log(`Points skipped: response=${responseId} already has points transaction`);
+        return;
+      }
+
       const [txn] = await tx
         .insert(transactions)
         .values({
@@ -639,6 +679,14 @@ export class WalletService {
         })
         .where(eq(wallets.userId, respondentId));
     });
+    } catch (err: unknown) {
+      if ((err as { code?: string })?.code === '23505') {
+        this.logger.log(`Points skipped: response=${responseId} concurrent duplicate`);
+        return;
+      }
+      throw err;
+    }
+    if (duplicate) return;
 
     this.logger.log(`Points issued: survey=${surveyId} response=${responseId} points=${pointsAmount}`);
 

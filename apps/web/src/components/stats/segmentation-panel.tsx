@@ -68,12 +68,17 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
           <p className="text-xs text-muted-foreground">
             共 {data.totalRespondents} 位回應者，分為 {data.segments.length} 群
           </p>
+          {data.normalizedToCommonScale && (
+            <p className="text-[11px] text-muted-foreground">
+              分群距離會先將不同量尺標準化至共同 0-1 尺度；卡片保留原始平均分，圖表改用相對百分比比較。
+            </p>
+          )}
 
           {/* Segment cards */}
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {data.segments.map((seg, i) => (
               <div
-                key={i}
+                key={seg.segmentId}
                 className="rounded-lg border border-border p-3 space-y-2"
                 style={{ borderLeftColor: SEGMENT_COLORS[i % SEGMENT_COLORS.length], borderLeftWidth: 3 }}
               >
@@ -90,7 +95,12 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
                   {Object.values(seg.avgRatings).map((r, j) => (
                     <li key={j} className="flex items-center justify-between text-xs">
                       <span className="text-muted-foreground truncate mr-2">{r.questionTitle}</span>
-                      <span className="font-semibold shrink-0">{r.avg.toFixed(2)}</span>
+                      <span className="font-semibold shrink-0">
+                        {r.avg === null ? '—' : r.avg.toFixed(2)}
+                        <span className="ml-1 font-normal text-muted-foreground">
+                          ({r.scaleMin}-{r.scaleMax}，n={r.answeredCount})
+                        </span>
+                      </span>
                     </li>
                   ))}
                 </ul>
@@ -112,9 +122,17 @@ function SegmentBarChart({
   segments,
 }: {
   segments: {
+    segmentId: string;
     label: string;
     count: number;
-    avgRatings: Record<string, { questionTitle: string; avg: number }>;
+    avgRatings: Record<string, {
+      questionTitle: string;
+      avg: number | null;
+      scaleMin: number;
+      scaleMax: number;
+      relativeAvg: number | null;
+      answeredCount: number;
+    }>;
   }[];
 }) {
   // Build chart data: one entry per question, keys are segment labels
@@ -122,33 +140,33 @@ function SegmentBarChart({
   if (questionIds.length === 0) return null;
 
   const chartData = questionIds.map((qId) => {
-    const entry: Record<string, string | number> = {
+    const entry: Record<string, string | number | null> = {
       question: segments[0].avgRatings[qId].questionTitle,
     };
     for (const seg of segments) {
-      entry[seg.label] = seg.avgRatings[qId]?.avg ?? 0;
+      const relativeAvg = seg.avgRatings[qId]?.relativeAvg;
+      entry[seg.segmentId] = relativeAvg === null || relativeAvg === undefined ? null : relativeAvg * 100;
     }
     return entry;
   });
 
-  const segLabels = segments.map((s) => s.label);
-
   return (
     <div className="mt-4">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">
-        各群平均分比較
+        各群相對平均分比較
       </p>
       <ResponsiveContainer width="100%" height={Math.max(200, questionIds.length * 40)}>
         <BarChart data={chartData} layout="vertical" margin={{ left: 80, right: 20, top: 5, bottom: 5 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} />
-          <XAxis type="number" domain={[0, 'auto']} tick={{ fontSize: 11 }} />
+          <XAxis type="number" domain={[0, 100]} tick={{ fontSize: 11 }} unit="%" />
           <YAxis type="category" dataKey="question" tick={{ fontSize: 11 }} width={80} />
-          <Tooltip formatter={(v: any) => typeof v === 'number' ? v.toFixed(2) : String(v)} />
+          <Tooltip formatter={(v: any) => typeof v === 'number' ? `${v.toFixed(1)}%` : String(v)} />
           <Legend />
-          {segLabels.map((label, i) => (
+          {segments.map((segment, i) => (
             <Bar
-              key={label}
-              dataKey={label}
+              key={segment.segmentId}
+              dataKey={segment.segmentId}
+              name={segment.label}
               fill={SEGMENT_COLORS[i % SEGMENT_COLORS.length]}
               radius={[0, 4, 4, 0]}
               barSize={14}

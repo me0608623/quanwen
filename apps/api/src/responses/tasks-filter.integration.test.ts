@@ -93,6 +93,11 @@ describe('Tasks category filter (integration)', () => {
         category      survey_category,
         reward_type   reward_type NOT NULL DEFAULT 'cash',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        reward_mode       VARCHAR(16) NOT NULL DEFAULT 'fixed',
+        lottery_prize        TEXT,
+        lottery_winner_count INTEGER,
+        lottery_draw_mode    VARCHAR(16),
+        lottery_draw_at      TIMESTAMPTZ,
         deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
         base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         audience_criteria JSONB,
@@ -101,6 +106,7 @@ describe('Tasks category filter (integration)', () => {
         expires_at    TIMESTAMPTZ,
         ai_score      INTEGER,
         ai_reject_reason TEXT,
+        cover_image_url TEXT,
         is_anonymous  BOOLEAN NOT NULL DEFAULT true,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -244,5 +250,41 @@ describe('Tasks category filter (integration)', () => {
 
     const counts = await service.getCategoryCounts(U1);
     expect(counts.academic).toBeUndefined();
+  });
+
+  it('6. getAvailableSurveys 回傳含 deadlineTier 與 questionCount（任務卡用）', async () => {
+    await pub('TEST standard', 'consumer');
+    const list = await service.getAvailableSurveys(U1);
+    expect(list.length).toBeGreaterThan(0);
+    const s = list[0] as Record<string, unknown>;
+    expect(s).toHaveProperty('deadlineTier');
+    expect(s).toHaveProperty('questionCount');
+    expect(typeof s.questionCount).toBe('number');
+  });
+
+  it('7. getAvailableSurveys 依獎勵高→低排序（前端 reward 排序所依賴）', async () => {
+    await client.query(
+      `INSERT INTO surveys (surveyor_id, title, status, type, reward_points, target_count, completed_count)
+       VALUES ($1,'低獎','published','standard',10,100,0), ($1,'高獎','published','standard',90,100,0), ($1,'中獎','published','standard',50,100,0)`,
+      [SURVEYOR],
+    );
+    const list = await service.getAvailableSurveys(U1);
+    const rewards = list.map((x) => x.rewardPoints);
+    const sorted = [...rewards].sort((a, b) => b - a);
+    expect(rewards).toEqual(sorted);
+    expect(rewards[0]).toBe(90);
+  });
+
+  it('8. rewarded 填答不會重新出現在分類或任務列表', async () => {
+    const surveyId = await pub('TEST rewarded', 'consumer');
+    await client.query(
+      `INSERT INTO survey_responses (survey_id, respondent_id, status, submitted_at) VALUES ($1, $2, 'rewarded', NOW())`,
+      [surveyId, U1],
+    );
+
+    const counts = await service.getCategoryCounts(U1);
+    const list = await service.getAvailableSurveys(U1);
+    expect(counts.consumer).toBeUndefined();
+    expect(list.some((survey) => survey.id === surveyId)).toBe(false);
   });
 });

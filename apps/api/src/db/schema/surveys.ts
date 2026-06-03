@@ -79,6 +79,18 @@ export const surveys = pgTable(
     rewardType: rewardTypeEnum('reward_type').notNull().default('cash'),
     // cash → NT$ 每份金額；points → 每份積分數量
     rewardPoints: integer('reward_points').notNull().default(0),
+    // fixed → 每份固定獎勵；lottery → 有效填答者參加抽獎
+    rewardMode: varchar('reward_mode', { length: 16 }).notNull().default('fixed'),
+    lotteryPrize: text('lottery_prize'),
+    lotteryWinnerCount: integer('lottery_winner_count'),
+    // when_full → 收滿自動開獎；scheduled → 指定日期；manual → 收滿後建立者手動開獎
+    lotteryDrawMode: varchar('lottery_draw_mode', { length: 16 }),
+    lotteryDrawAt: timestamp('lottery_draw_at', { withTimezone: true }),
+    lotteryDrawnAt: timestamp('lottery_drawn_at', { withTimezone: true }),
+    lotteryDrawSeed: text('lottery_draw_seed'),
+    lotteryEligibleDigest: text('lottery_eligible_digest'),
+    lotteryTermsAcceptedAt: timestamp('lottery_terms_accepted_at', { withTimezone: true }),
+    lotteryObligationNotifiedAt: timestamp('lottery_obligation_notified_at', { withTimezone: true }),
 
     // QUA-34: Rush delivery — 4-tier deadline system
     // standard=14d/1.0x | express=7d/1.2x | urgent=3d/1.5x | critical=24h/1.75x

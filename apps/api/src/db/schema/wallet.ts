@@ -10,7 +10,9 @@ import {
   jsonb,
   unique,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
 import { users } from './users';
 import { surveys } from './surveys';
 import { surveyResponses } from './responses';
@@ -69,6 +71,9 @@ export const transactions = pgTable('transactions', {
   userIdx: index('transactions_user_id_idx').on(t.userId),
   statusIdx: index('transactions_status_idx').on(t.status),
   typeIdx: index('transactions_type_idx').on(t.type),
+  responseTypeUnique: uniqueIndex('transactions_related_response_type_unique')
+    .on(t.relatedResponseId, t.type)
+    .where(sql`${t.relatedResponseId} IS NOT NULL`),
 }));
 
 // 複式記帳分錄

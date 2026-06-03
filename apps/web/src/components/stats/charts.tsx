@@ -117,7 +117,7 @@ export function QualityDonut({
   }
 
   return (
-    <div style={{ width: '100%', height: 200 }}>
+    <div style={{ width: '100%', height: 200, overflow: 'hidden' }}>
       <ResponsiveContainer height={200}>
         <PieChart>
           <Pie

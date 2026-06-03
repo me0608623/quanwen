@@ -46,3 +46,4 @@ boot.log
 # Director mode configs
 .director-mode/
 .ecpay-skill/
+.vercel

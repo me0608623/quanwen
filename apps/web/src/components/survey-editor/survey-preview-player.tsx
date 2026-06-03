@@ -85,7 +85,7 @@ export function SurveyPreviewPlayer({ title, description, coverImageUrl, questio
           }}
         />
       </div>
-      <p className="text-[10px] text-slate-400">Q{currentIdx + 1} / {questions.length}</p>
+      <p className="text-[10px] text-slate-500">Q{currentIdx + 1} / {questions.length}</p>
 
       <p className="text-sm font-medium text-slate-900">{q.title || '未命名題目'}</p>
       {questionImageUrl && (

@@ -1,4 +1,4 @@
-import { Injectable, Inject, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { DB, type AppDb } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
 import { surveys, surveyQuestions, questionOptions, surveyResponses, responseAnswers } from '../db/schema';
@@ -42,9 +42,111 @@ export interface NpsResult {
   title: string;
   promoters: number;   // 9-10
   passives: number;    // 7-8
-  detractors: number;  // 1-6
+  detractors: number;  // 0-6
   total: number;
   nps: number | null;  // -100 ~ 100
+  scaleMin: number;
+  scaleMax: number;
+  normalizedToTenPointScale: boolean;
+}
+
+const SYNTHETIC_YES_NO_OPTIONS = [
+  { id: 'yes', label: '是' },
+  { id: 'no', label: '否' },
+];
+
+export interface ScaleReliabilityResult {
+  itemCount: number;
+  completeResponseCount: number;
+  excludedIncompleteResponseCount: number;
+  normalizedToCommonScale: boolean;
+  cronbachAlpha: number | null;
+  interpretation: string;
+  availableItems: Array<{
+    questionId: string;
+    title: string;
+    reverseScored: boolean;
+    selectedForScale: boolean;
+  }>;
+  items: Array<{
+    questionId: string;
+    title: string;
+    mean: number | null;
+    rawMean: number | null;
+    reverseScored: boolean;
+    selectedForScale: boolean;
+    correctedItemTotalCorrelation: number | null;
+    alphaIfDeleted: number | null;
+  }>;
+}
+
+function sampleVariance(values: number[]): number {
+  if (values.length < 2) return 0;
+  const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
+  return values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
+}
+
+export function calculateCronbachAlpha(rows: number[][]): number | null {
+  if (rows.length < 2 || rows[0]?.length < 2) return null;
+  const itemCount = rows[0].length;
+  if (rows.some((row) => row.length !== itemCount)) return null;
+
+  const itemVariance = Array.from({ length: itemCount }, (_, index) =>
+    sampleVariance(rows.map((row) => row[index])),
+  ).reduce((sum, variance) => sum + variance, 0);
+  const totalVariance = sampleVariance(rows.map((row) => row.reduce((sum, value) => sum + value, 0)));
+  if (totalVariance === 0) return null;
+
+  return Math.round((itemCount / (itemCount - 1)) * (1 - itemVariance / totalVariance) * 1000) / 1000;
+}
+
+export function reverseScaleValue(value: number, min: number, max: number): number {
+  return min + max - value;
+}
+
+export function normalizeScaleValue(value: number, min: number, max: number): number {
+  return max > min ? (value - min) / (max - min) : value;
+}
+
+export function ratingScaleRange(config: unknown): { min: number; max: number } {
+  const parsed = questionConfig(config);
+  const rawMax = typeof parsed.maxRating === 'number' && Number.isFinite(parsed.maxRating)
+    ? parsed.maxRating
+    : 5;
+  return {
+    min: parsed.scaleStart === 0 ? 0 : 1,
+    max: Math.max(2, Math.min(10, Math.round(rawMax))),
+  };
+}
+
+function questionConfig(config: unknown): Record<string, unknown> {
+  return typeof config === 'object' && config !== null && !Array.isArray(config)
+    ? config as Record<string, unknown>
+    : {};
+}
+
+export function withReverseScored(config: unknown, reverseScored: boolean): Record<string, unknown> {
+  return { ...questionConfig(config), reverseScored };
+}
+
+function isReverseScored(config: unknown): boolean {
+  return questionConfig(config).reverseScored === true;
+}
+
+export function withScaleSettings(config: unknown, reverseScored: boolean, selectedForScale: boolean): Record<string, unknown> {
+  return { ...questionConfig(config), reverseScored, scaleIncluded: selectedForScale };
+}
+
+export function calculatePearsonCorrelation(left: number[], right: number[]): number | null {
+  if (left.length !== right.length || left.length < 2) return null;
+  const leftMean = left.reduce((sum, value) => sum + value, 0) / left.length;
+  const rightMean = right.reduce((sum, value) => sum + value, 0) / right.length;
+  const numerator = left.reduce((sum, value, index) => sum + (value - leftMean) * (right[index] - rightMean), 0);
+  const leftSquared = left.reduce((sum, value) => sum + (value - leftMean) ** 2, 0);
+  const rightSquared = right.reduce((sum, value) => sum + (value - rightMean) ** 2, 0);
+  const denominator = Math.sqrt(leftSquared * rightSquared);
+  if (denominator === 0) return null;
+  return Math.round((numerator / denominator) * 1000) / 1000;
 }
 
 @Injectable()
@@ -63,8 +165,8 @@ export class AnalyticsService {
       .where(eq(surveys.id, surveyId))
       .limit(1);
 
-    if (!rows[0]) throw new Error('問卷不存在');
-    if (rows[0].surveyorId !== surveyorId) throw new Error('無權存取此問卷');
+    if (!rows[0]) throw new NotFoundException('問卷不存在');
+    if (rows[0].surveyorId !== surveyorId) throw new ForbiddenException('無權存取此問卷');
   }
 
   /**
@@ -72,6 +174,13 @@ export class AnalyticsService {
    */
   async getDescriptiveStats(surveyId: string, surveyorId: string, questionId: string): Promise<DescriptiveStats> {
     await this.verifyAccess(surveyId, surveyorId);
+    const [question] = await this.db
+      .select({ type: surveyQuestions.type })
+      .from(surveyQuestions)
+      .where(and(eq(surveyQuestions.id, questionId), eq(surveyQuestions.surveyId, surveyId)))
+      .limit(1);
+    if (!question) throw new BadRequestException('題目不屬於此問卷');
+    if (question.type !== 'rating') throw new BadRequestException('描述統計僅支援評分題');
 
     const ratings = await this.db
       .select({ value: responseAnswers.ratingValue })
@@ -125,6 +234,192 @@ export class AnalyticsService {
     };
   }
 
+  async getScaleReliability(surveyId: string, surveyorId: string, questionIds?: string[], reverseQuestionIds?: string[]): Promise<ScaleReliabilityResult> {
+    await this.verifyAccess(surveyId, surveyorId);
+
+    const allItems = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, config: surveyQuestions.config })
+      .from(surveyQuestions)
+      .where(and(eq(surveyQuestions.surveyId, surveyId), eq(surveyQuestions.type, 'rating')))
+      .orderBy(surveyQuestions.sortOrder);
+    const scaleSelectionConfigured = allItems.some((item) => typeof questionConfig(item.config).scaleIncluded === 'boolean');
+    const isSelectedForScale = (item: typeof allItems[number]) =>
+      !scaleSelectionConfigured || questionConfig(item.config).scaleIncluded === true;
+    const allowed = new Set(allItems.map((item) => item.id));
+    if ([...(questionIds ?? []), ...(reverseQuestionIds ?? [])].some((id) => !allowed.has(id))) {
+      throw new BadRequestException('量表分析只能選擇此問卷的評分題');
+    }
+    const selected = questionIds?.length ? new Set(questionIds) : null;
+    const items = selected ? allItems.filter((item) => selected.has(item.id)) : allItems.filter(isSelectedForScale);
+    const selectedItemIds = new Set(items.map((item) => item.id));
+    if (reverseQuestionIds?.some((id) => !selectedItemIds.has(id))) {
+      throw new BadRequestException('反向題必須先納入量表題組');
+    }
+    const reversed = new Set(
+      reverseQuestionIds ?? allItems.filter((item) => isReverseScored(item.config)).map((item) => item.id),
+    );
+    const availableItems = allItems.map((item) => ({
+      questionId: item.id,
+      title: item.title,
+      reverseScored: reversed.has(item.id),
+      selectedForScale: selected ? selectedItemIds.has(item.id) : isSelectedForScale(item),
+    }));
+    const rangeFor = (item: typeof items[number]) => ratingScaleRange(item.config);
+    const transform = (item: typeof items[number], value: number) => {
+      const { min, max } = rangeFor(item);
+      return reversed.has(item.id) ? reverseScaleValue(value, min, max) : value;
+    };
+
+    if (items.length < 2) {
+      return {
+        itemCount: items.length,
+        completeResponseCount: 0,
+        excludedIncompleteResponseCount: 0,
+        normalizedToCommonScale: true,
+        cronbachAlpha: null,
+        interpretation: '至少需要 2 題評分量表才能計算信度',
+        availableItems,
+        items: items.map((item) => ({
+          questionId: item.id,
+          title: item.title,
+          mean: null,
+          rawMean: null,
+          reverseScored: reversed.has(item.id),
+          selectedForScale: selected ? selectedItemIds.has(item.id) : isSelectedForScale(item),
+          correctedItemTotalCorrelation: null,
+          alphaIfDeleted: null,
+        })),
+      };
+    }
+
+    const [eligibleResponses, answers] = await Promise.all([
+      this.db
+        .select({ id: surveyResponses.id })
+        .from(surveyResponses)
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded']),
+          ),
+        ),
+      this.db
+        .select({
+          responseId: responseAnswers.responseId,
+          questionId: responseAnswers.questionId,
+          value: responseAnswers.ratingValue,
+        })
+        .from(responseAnswers)
+        .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+        .where(
+          and(
+            eq(surveyResponses.surveyId, surveyId),
+            inArray(surveyResponses.status, ['submitted', 'rewarded']),
+            inArray(responseAnswers.questionId, items.map((item) => item.id)),
+          ),
+        ),
+    ]);
+
+    const byResponse = new Map<string, Map<string, number>>();
+    for (const answer of answers) {
+      if (answer.value === null) continue;
+      const row = byResponse.get(answer.responseId) ?? new Map<string, number>();
+      row.set(answer.questionId, answer.value);
+      byResponse.set(answer.responseId, row);
+    }
+    const completeAnswerRows = [...byResponse.values()]
+      .filter((row) => items.every((item) => row.has(item.id)));
+    const displayRows = completeAnswerRows
+      .map((row) => items.map((item) => transform(item, row.get(item.id)!)));
+    const rawDisplayRows = completeAnswerRows
+      .map((row) => items.map((item) => row.get(item.id)!));
+    const scoredRows = displayRows.map((row) =>
+      row.map((value, index) => {
+        const { min, max } = rangeFor(items[index]);
+        return normalizeScaleValue(value, min, max);
+      }),
+    );
+    const cronbachAlpha = calculateCronbachAlpha(scoredRows);
+    const interpretation = cronbachAlpha === null
+      ? '完整樣本不足或回答沒有變異，暫時無法計算'
+      : cronbachAlpha >= 0.9
+        ? '極佳信度'
+        : cronbachAlpha >= 0.8
+          ? '良好信度'
+          : cronbachAlpha >= 0.7
+            ? '可接受信度'
+            : cronbachAlpha >= 0.6
+              ? '信度偏低，建議檢查題目'
+              : '信度不足，建議重新檢視量表';
+
+    return {
+      itemCount: items.length,
+      completeResponseCount: scoredRows.length,
+      excludedIncompleteResponseCount: eligibleResponses.length - scoredRows.length,
+      normalizedToCommonScale: true,
+      cronbachAlpha,
+      interpretation,
+      availableItems,
+      items: items.map((item, index) => {
+        const values = scoredRows.map((row) => row[index]);
+        const displayValues = displayRows.map((row) => row[index]);
+        const rawDisplayValues = rawDisplayRows.map((row) => row[index]);
+        const rowsWithoutItem = scoredRows.map((row) => row.filter((_, itemIndex) => itemIndex !== index));
+        const totalsWithoutItem = rowsWithoutItem.map((row) => row.reduce((sum, value) => sum + value, 0));
+        return {
+          questionId: item.id,
+          title: item.title,
+          reverseScored: reversed.has(item.id),
+          selectedForScale: selected ? selectedItemIds.has(item.id) : isSelectedForScale(item),
+          correctedItemTotalCorrelation: calculatePearsonCorrelation(values, totalsWithoutItem),
+          alphaIfDeleted: calculateCronbachAlpha(rowsWithoutItem),
+          mean: displayValues.length === 0
+            ? null
+            : Math.round((displayValues.reduce((sum, value) => sum + value, 0) / displayValues.length) * 100) / 100,
+          rawMean: rawDisplayValues.length === 0
+            ? null
+            : Math.round((rawDisplayValues.reduce((sum, value) => sum + value, 0) / rawDisplayValues.length) * 100) / 100,
+        };
+      }),
+    };
+  }
+
+  async updateScaleSettings(
+    surveyId: string,
+    surveyorId: string,
+    questionIds: string[],
+    reverseQuestionIds: string[],
+  ): Promise<ScaleReliabilityResult> {
+    await this.verifyAccess(surveyId, surveyorId);
+
+    const items = await this.db
+      .select({ id: surveyQuestions.id, config: surveyQuestions.config })
+      .from(surveyQuestions)
+      .where(and(eq(surveyQuestions.surveyId, surveyId), eq(surveyQuestions.type, 'rating')));
+    const selected = new Set(questionIds);
+    const reversed = new Set(reverseQuestionIds);
+    const allowed = new Set(items.map((item) => item.id));
+    if ([...questionIds, ...reverseQuestionIds].some((id) => !allowed.has(id))) {
+      throw new BadRequestException('量表設定只能選擇此問卷的評分題');
+    }
+    if (reverseQuestionIds.some((id) => !selected.has(id))) {
+      throw new BadRequestException('反向題必須先納入量表題組');
+    }
+    if (items.length >= 2 && questionIds.length < 2) {
+      throw new BadRequestException('量表題組至少需要 2 題評分題');
+    }
+
+    await this.db.transaction(async (tx) => {
+      await Promise.all(items.map((item) =>
+        tx
+          .update(surveyQuestions)
+          .set({ config: withScaleSettings(item.config, reversed.has(item.id), selected.has(item.id)) })
+          .where(eq(surveyQuestions.id, item.id)),
+      ));
+    });
+
+    return this.getScaleReliability(surveyId, surveyorId);
+  }
+
   /**
    * 交叉分析：兩個選擇題的交叉表 + Cramér's V
    */
@@ -135,23 +430,26 @@ export class AnalyticsService {
     questionBId: string,
   ): Promise<CrossTabResult> {
     await this.verifyAccess(surveyId, surveyorId);
+    if (questionAId === questionBId) throw new BadRequestException('交叉分析必須選擇兩個不同題目');
 
     // 取題目資訊
     const [qA, qB] = await Promise.all([
-      this.db.select().from(surveyQuestions).where(eq(surveyQuestions.id, questionAId)).limit(1),
-      this.db.select().from(surveyQuestions).where(eq(surveyQuestions.id, questionBId)).limit(1),
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, questionAId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, questionBId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
     ]);
 
-    if (!qA[0] || !qB[0]) throw new Error('題目不存在');
+    if (!qA[0] || !qB[0]) throw new BadRequestException('題目不屬於此問卷');
     if (qA[0].type !== 'single_choice' || qB[0].type !== 'single_choice') {
-      throw new Error('交叉分析僅支援單選題');
+      throw new BadRequestException('交叉分析僅支援單選題');
     }
 
     // 取選項
-    const [optsA, optsB] = await Promise.all([
+    const [persistedOptsA, persistedOptsB] = await Promise.all([
       this.db.select().from(questionOptions).where(eq(questionOptions.questionId, questionAId)).orderBy(questionOptions.sortOrder),
       this.db.select().from(questionOptions).where(eq(questionOptions.questionId, questionBId)).orderBy(questionOptions.sortOrder),
     ]);
+    const optsA = questionConfig(qA[0].config).variant === 'yes_no' ? SYNTHETIC_YES_NO_OPTIONS : persistedOptsA;
+    const optsB = questionConfig(qB[0].config).variant === 'yes_no' ? SYNTHETIC_YES_NO_OPTIONS : persistedOptsB;
 
     const labelsA = optsA.map((o: { label: string }) => o.label);
     const labelsB = optsB.map((o: { label: string }) => o.label);
@@ -245,7 +543,7 @@ export class AnalyticsService {
 
   /**
    * NPS 淨推薦值（評分題轉 NPS）
-   * Promoters: 9-10, Passives: 7-8, Detractors: 1-6
+   * Promoters: 9-10, Passives: 7-8, Detractors: 0-6
    */
   async getNps(surveyId: string, surveyorId: string, questionId: string): Promise<NpsResult> {
     await this.verifyAccess(surveyId, surveyorId);
@@ -253,11 +551,11 @@ export class AnalyticsService {
     const qRow = await this.db
       .select()
       .from(surveyQuestions)
-      .where(eq(surveyQuestions.id, questionId))
+      .where(and(eq(surveyQuestions.id, questionId), eq(surveyQuestions.surveyId, surveyId)))
       .limit(1);
 
-    if (!qRow[0]) throw new Error('題目不存在');
-    if (qRow[0].type !== 'rating') throw new Error('NPS 僅支援評分題');
+    if (!qRow[0]) throw new BadRequestException('題目不屬於此問卷');
+    if (qRow[0].type !== 'rating') throw new BadRequestException('NPS 僅支援評分題');
 
     const ratings = await this.db
       .select({ value: responseAnswers.ratingValue })
@@ -273,16 +571,14 @@ export class AnalyticsService {
 
     const values = ratings.map((r: { value: number | null }) => r.value).filter((v: number | null): v is number => v !== null);
 
-    // Map to 1-10 scale if needed (rating might be 1-5)
-    // For NPS we normalize: if max is 5, treat as 10-point (multiply by 2)
-    // We'll detect the scale and map accordingly
-    const maxVal = values.length > 0 ? Math.max(...values) : 5;
-    const scale = maxVal <= 5 ? 2 : 1;
-    const scaled = values.map((v: number) => v * scale);
+    // Normalize the configured scale to 10 points. Observed values cannot
+    // determine the scale because an early 10-point sample may contain only lows.
+    const { min, max } = ratingScaleRange(qRow[0].config);
+    const scaled = values.map((v: number) => normalizeScaleValue(v, min, max) * 10);
 
     const promoters = scaled.filter((v: number) => v >= 9).length;
-    const passives = scaled.filter((v: number) => v >= 7 && v <= 8).length;
-    const detractors = scaled.filter((v: number) => v <= 6).length;
+    const passives = scaled.filter((v: number) => v >= 7 && v < 9).length;
+    const detractors = scaled.filter((v: number) => v < 7).length;
     const total = values.length;
 
     const nps = total > 0
@@ -297,6 +593,9 @@ export class AnalyticsService {
       detractors,
       total,
       nps,
+      scaleMin: min,
+      scaleMax: max,
+      normalizedToTenPointScale: min !== 0 || max !== 10,
     };
   }
 
@@ -316,15 +615,16 @@ export class AnalyticsService {
     interpretation: string;
   }> {
     await this.verifyAccess(surveyId, surveyorId);
+    if (questionAId === questionBId) throw new BadRequestException('相關性分析必須選擇兩個不同題目');
 
     const [qA, qB] = await Promise.all([
-      this.db.select().from(surveyQuestions).where(eq(surveyQuestions.id, questionAId)).limit(1),
-      this.db.select().from(surveyQuestions).where(eq(surveyQuestions.id, questionBId)).limit(1),
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, questionAId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, questionBId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
     ]);
 
-    if (!qA[0] || !qB[0]) throw new Error('題目不存在');
+    if (!qA[0] || !qB[0]) throw new BadRequestException('題目不屬於此問卷');
     if (qA[0].type !== 'rating' || qB[0].type !== 'rating') {
-      throw new Error('相關性分析僅支援評分題');
+      throw new BadRequestException('相關性分析僅支援評分題');
     }
 
     // 取得同時回答 A 和 B 的所有 response
@@ -377,20 +677,19 @@ export class AnalyticsService {
       };
     }
 
-    const meanX = pairs.reduce((s: number, [x]: [number, number]) => s + x, 0) / n;
-    const meanY = pairs.reduce((s: number, [, y]: [number, number]) => s + y, 0) / n;
-
-    let sumXY = 0, sumX2 = 0, sumY2 = 0;
-    for (const [x, y] of pairs) {
-      const dx = x - meanX;
-      const dy = y - meanY;
-      sumXY += dx * dy;
-      sumX2 += dx * dx;
-      sumY2 += dy * dy;
+    const pearsonR = calculatePearsonCorrelation(
+      pairs.map(([x]) => x),
+      pairs.map(([, y]) => y),
+    );
+    if (pearsonR === null) {
+      return {
+        questionA: { id: questionAId, title: qA[0].title },
+        questionB: { id: questionBId, title: qB[0].title },
+        pearsonR: null,
+        n,
+        interpretation: '回答沒有變異，無法計算相關係數',
+      };
     }
-
-    const denom = Math.sqrt(sumX2 * sumY2);
-    const pearsonR = denom === 0 ? 0 : Math.round((sumXY / denom) * 1000) / 1000;
 
     const absR = Math.abs(pearsonR);
     const interpretation =
@@ -418,13 +717,25 @@ export class AnalyticsService {
     k = 3,
   ): Promise<{
     segments: {
+      segmentId: string;
       label: string;
       count: number;
-      avgRatings: Record<string, { questionTitle: string; avg: number }>;
+      avgRatings: Record<string, {
+        questionTitle: string;
+        avg: number | null;
+        scaleMin: number;
+        scaleMax: number;
+        relativeAvg: number | null;
+        answeredCount: number;
+      }>;
     }[];
     totalRespondents: number;
+    normalizedToCommonScale: boolean;
   }> {
     await this.verifyAccess(surveyId, surveyorId);
+    if (!Number.isInteger(k) || k < 2 || k > 10) {
+      throw new BadRequestException('分群數 k 必須是 2 至 10 的整數');
+    }
 
     // 取得所有評分題
     const ratingQuestions = await this.db
@@ -438,7 +749,7 @@ export class AnalyticsService {
       );
 
     if (ratingQuestions.length === 0) {
-      return { segments: [], totalRespondents: 0 };
+      return { segments: [], totalRespondents: 0, normalizedToCommonScale: true };
     }
 
     const qIds = ratingQuestions.map((q: { id: string }) => q.id);
@@ -472,7 +783,8 @@ export class AnalyticsService {
       }
       const qIdx = qIds.indexOf(a.questionId);
       if (qIdx !== -1) {
-        vectors.get(a.responseId)![qIdx] = a.value;
+        const { min, max } = ratingScaleRange(ratingQuestions[qIdx].config);
+        vectors.get(a.responseId)![qIdx] = normalizeScaleValue(a.value, min, max);
       }
     }
 
@@ -536,27 +848,48 @@ export class AnalyticsService {
     // Build result
     const segments = centroids.map((centroid: number[], c: number) => {
       const members = responseIds.filter((_: string, i: number) => assignments[i] === c);
-      const avgRatings: Record<string, { questionTitle: string; avg: number }> = {};
+      const avgRatings: Record<string, {
+        questionTitle: string;
+        avg: number | null;
+        scaleMin: number;
+        scaleMax: number;
+        relativeAvg: number | null;
+        answeredCount: number;
+      }> = {};
       for (let d = 0; d < dim; d++) {
+        const { min, max } = ratingScaleRange(ratingQuestions[d].config);
+        const observedValues = responseIds
+          .filter((_: string, index: number) => assignments[index] === c)
+          .map((responseId: string) => vectors.get(responseId)![d])
+          .filter((value: number) => !isNaN(value));
+        const relativeAvg = observedValues.length === 0
+          ? null
+          : observedValues.reduce((sum: number, value: number) => sum + value, 0) / observedValues.length;
+        const originalScaleAverage = relativeAvg === null ? null : min + relativeAvg * (max - min);
         avgRatings[qIds[d]] = {
           questionTitle: ratingQuestions[d].title,
-          avg: Math.round(centroid[d] * 100) / 100,
+          avg: originalScaleAverage === null ? null : Math.round(originalScaleAverage * 100) / 100,
+          scaleMin: min,
+          scaleMax: max,
+          relativeAvg: relativeAvg === null ? null : Math.round(relativeAvg * 1000) / 1000,
+          answeredCount: observedValues.length,
         };
       }
 
-      // 根據整體平均分決定 label
+      // Centroids use normalized values so mixed scales receive equal weight.
       const overallAvg = centroid.reduce((s: number, v: number) => s + v, 0) / dim;
       const label =
-        overallAvg >= 4 ? `高分群（平均 ${overallAvg.toFixed(1)}）` :
-        overallAvg >= 3 ? `中分群（平均 ${overallAvg.toFixed(1)}）` :
-        `低分群（平均 ${overallAvg.toFixed(1)}）`;
+        overallAvg >= 0.7 ? `高分群（相對 ${Math.round(overallAvg * 100)}%）` :
+        overallAvg >= 0.4 ? `中分群（相對 ${Math.round(overallAvg * 100)}%）` :
+        `低分群（相對 ${Math.round(overallAvg * 100)}%）`;
 
-      return { label, count: members.length, avgRatings };
+      return { segmentId: `segment-${c + 1}`, label, count: members.length, avgRatings };
     });
 
     return {
       segments: segments.sort((a, b) => b.count - a.count),
       totalRespondents: responseIds.length,
+      normalizedToCommonScale: true,
     };
   }
 

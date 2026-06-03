@@ -1,8 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import gsap from 'gsap';
+import { relativeTime } from '@/lib/relative-time';
+import { toCsv } from '@/lib/to-csv';
 import Link from 'next/link';
-import { useMySurveys, useDeleteSurvey, useSurveyorAssistant, SURVEY_CATEGORY_LABELS } from '@/hooks/use-surveys';
+import { useMySurveys, useDeleteSurvey, useDuplicateSurvey, useSurveyorAssistant, SURVEY_CATEGORY_LABELS } from '@/hooks/use-surveys';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -23,8 +26,41 @@ const STATUS_BG: Record<string, string> = {
 };
 
 export default function DashboardPage() {
-  const { data: surveys = [], isLoading } = useMySurveys();
+  const { data: surveys = [], isLoading, isError, refetch: refetchSurveys } = useMySurveys();
   const deleteSurvey = useDeleteSurvey();
+  const duplicateSurvey = useDuplicateSurvey();
+  const [query, setQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'pending_review' | 'published' | 'closed'>('all');
+  const [sortBy, setSortBy] = useState<'newest' | 'reward' | 'responses'>('newest');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyShareLink = (id: string) => {
+    const url = `${window.location.origin}/s/${id}`;
+    navigator.clipboard?.writeText(url).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+    }).catch(() => {});
+  };
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('qw_dash_prefs');
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (['newest', 'reward', 'responses'].includes(p.sortBy)) setSortBy(p.sortBy);
+        if (['all', 'draft', 'pending_review', 'published', 'closed'].includes(p.statusFilter)) setStatusFilter(p.statusFilter);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem('qw_dash_prefs', JSON.stringify({ sortBy, statusFilter }));
+    } catch {
+      /* ignore */
+    }
+  }, [sortBy, statusFilter]);
 
   // KPI 計算（從 surveys list 直接算）
   const totalSurveys = surveys.length;
@@ -33,6 +69,41 @@ export default function DashboardPage() {
   const totalResponses = surveys.reduce((sum, s) => sum + (s.completedCount ?? 0), 0);
   const totalTarget = surveys.reduce((sum, s) => sum + (s.targetCount ?? 0), 0);
   const avgCompletion = totalTarget > 0 ? Math.round((totalResponses / totalTarget) * 100) : 0;
+  const q = query.trim().toLowerCase();
+  const filteredSurveys = surveys
+    .filter((s) => statusFilter === 'all' || s.status === statusFilter)
+    .filter((s) => !q || s.title.toLowerCase().includes(q))
+    .slice()
+    .sort((a, b) => {
+      if (sortBy === 'reward') return (b.rewardPoints ?? 0) - (a.rewardPoints ?? 0);
+      if (sortBy === 'responses') return (b.completedCount ?? 0) - (a.completedCount ?? 0);
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+  // 上架中問卷的鎖定預算（每份獎勵 × 目標份數；抽獎型 rewardPoints 為 0 不計）
+  const lockedBudget = surveys
+    .filter((s) => s.status === 'published')
+    .reduce((sum, s) => sum + (s.rewardPoints ?? 0) * (s.targetCount ?? 0), 0);
+
+  const exportCsv = () => {
+    const rows: string[][] = [['標題', '狀態', '完成', '目標', '每份獎勵(NT$)', '建立日期']];
+    for (const s of filteredSurveys) {
+      rows.push([
+        s.title,
+        STATUS_LABELS[s.status] ?? s.status,
+        String(s.completedCount ?? 0),
+        String(s.targetCount ?? 0),
+        String(s.rewardPoints ?? 0),
+        new Date(s.createdAt).toLocaleDateString('zh-TW'),
+      ]);
+    }
+    const blob = new Blob([toCsv(rows)], { type: 'text/csv;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `我的問卷_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
@@ -43,6 +114,15 @@ export default function DashboardPage() {
           <p className="text-sm text-muted-foreground mt-1">管理你發布的問卷、追蹤回收進度</p>
         </div>
         <div className="flex items-center gap-2">
+          {surveys.length > 0 && (
+            <button
+              onClick={exportCsv}
+              className="rounded-[10px] border border-border px-4 py-2.5 text-sm font-semibold text-muted-foreground transition-all hover:bg-muted"
+              title="匯出目前清單為 CSV"
+            >
+              匯出 CSV
+            </button>
+          )}
           <Link
             href="/dashboard/surveys/import"
             className="rounded-[10px] border border-[#126b8a]/40 px-4 py-2.5 text-sm font-semibold text-[#126b8a] transition-all hover:bg-[#126b8a]/5"
@@ -65,16 +145,44 @@ export default function DashboardPage() {
       {!isLoading && surveys.length > 0 && (
         <div className="mb-8 grid gap-3 sm:grid-cols-4">
           <Kpi label="問卷總數" value={totalSurveys} suffix="份" />
-          <Kpi label="上架中" value={publishedCount} suffix="份" accent="green" />
+          <Kpi
+            label="上架中"
+            value={publishedCount}
+            suffix="份"
+            extra={lockedBudget > 0 ? `鎖定預算 NT$${lockedBudget.toLocaleString()}` : undefined}
+            accent="green"
+          />
           <Kpi label="待審" value={pendingCount} suffix="份" accent="yellow" />
           <Kpi label="累計回收" value={totalResponses} extra={`完成率 ${avgCompletion}%`} accent="blue" />
         </div>
       )}
 
-      {isLoading && <p className="text-muted-foreground text-sm">載入中…</p>}
+      {isLoading && (
+        <div className="space-y-3" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-border bg-background p-4">
+              <div className="h-3 w-24 rounded bg-muted" />
+              <div className="mt-2 h-4 w-2/3 rounded bg-muted" />
+              <div className="mt-2 h-3 w-20 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {isError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6 text-center">
+          <p className="text-sm text-destructive">問卷載入失敗。</p>
+          <button
+            onClick={() => refetchSurveys()}
+            className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+          >
+            重試
+          </button>
+        </div>
+      )}
 
       {/* Empty state */}
-      {!isLoading && surveys.length === 0 && (
+      {!isLoading && !isError && surveys.length === 0 && (
         <div className="rounded-xl border-2 border-dashed border-border p-12 text-center">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-[#126b8a]/10">
             <svg className="h-7 w-7 text-[#126b8a]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -99,9 +207,55 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* Search + status filter */}
+      {!isLoading && surveys.length > 0 && (
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="搜尋問卷標題…"
+            aria-label="搜尋問卷標題"
+            className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+            aria-label="篩選問卷狀態"
+            className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+          >
+            <option value="all">全部狀態</option>
+            <option value="draft">草稿</option>
+            <option value="pending_review">審核中</option>
+            <option value="published">已發布</option>
+            <option value="closed">已關閉</option>
+          </select>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+            aria-label="排序方式"
+            className="rounded-md border border-input bg-background px-2 py-2 text-sm"
+          >
+            <option value="newest">最新建立</option>
+            <option value="reward">獎勵高 → 低</option>
+            <option value="responses">回收多 → 少</option>
+          </select>
+          {(query || statusFilter !== 'all') && (
+            <span className="text-xs text-muted-foreground">顯示 {filteredSurveys.length} / {surveys.length} 份</span>
+          )}
+        </div>
+      )}
+
+      {/* No match */}
+      {!isLoading && surveys.length > 0 && filteredSurveys.length === 0 && (
+        <p className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
+          找不到符合「{query}」的問卷。
+        </p>
+      )}
+
       {/* Survey list */}
       <div className="space-y-3">
-        {surveys.map((survey) => {
+        {filteredSurveys.map((survey) => {
           const completion = survey.targetCount > 0
             ? Math.round(((survey.completedCount ?? 0) / survey.targetCount) * 100)
             : 0;
@@ -131,22 +285,58 @@ export default function DashboardPage() {
                           {survey.completedCount}/{survey.targetCount} 份
                         </span>
                         <span className="text-xs text-muted-foreground">·</span>
-                        <span className="text-xs font-medium text-[#126b8a]">NT${survey.rewardPoints}</span>
+                        <span className="text-xs font-medium text-[#126b8a]">
+                          {survey.rewardMode === 'lottery' ? `🎁 抽 ${survey.lotteryPrize ?? '獎品'}` : `NT$${survey.rewardPoints}`}
+                        </span>
                       </>
+                    )}
+                    {survey.deadlineTier && survey.deadlineTier !== 'standard' && (
+                      <span className="rounded-full bg-orange-100 text-orange-700 px-2 py-0.5 text-xs font-medium">
+                        ⚡ 加急
+                      </span>
+                    )}
+                    {survey.scheduledPublishAt && (
+                      <span className="rounded-full bg-violet-100 text-violet-700 px-2 py-0.5 text-xs font-medium">
+                        🕒 {new Date(survey.scheduledPublishAt).toLocaleDateString('zh-TW')} 發布
+                      </span>
                     )}
                   </div>
                   <p className="font-medium truncate">{survey.title}</p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(survey.createdAt).toLocaleDateString('zh-TW')}
+                    建立於 {new Date(survey.createdAt).toLocaleDateString('zh-TW')}
+                    {survey.updatedAt && new Date(survey.updatedAt).getTime() - new Date(survey.createdAt).getTime() > 60000 && (
+                      <span> · 更新於 {relativeTime(survey.updatedAt)}</span>
+                    )}
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Link
-                    href={`/dashboard/surveys/${survey.id}`}
+                    href={
+                      survey.status === 'published' || survey.status === 'closed'
+                        ? `/dashboard/surveys/${survey.id}/stats`
+                        : `/dashboard/surveys/${survey.id}`
+                    }
                     className="rounded-md border px-3 py-1.5 text-sm hover:bg-muted transition-colors"
                   >
-                    {survey.status === 'draft' || survey.status === 'rejected' ? '編輯' : '查看'}
+                    {survey.status === 'draft' || survey.status === 'rejected' ? '編輯' : '查看分析'}
                   </Link>
+                  <button
+                    onClick={() => duplicateSurvey.mutate(survey.id)}
+                    disabled={duplicateSurvey.isPending}
+                    className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors disabled:opacity-60"
+                    title="複製為新草稿"
+                  >
+                    {duplicateSurvey.isPending ? '複製中…' : '複製'}
+                  </button>
+                  {(survey.status === 'published' || survey.status === 'closed') && (
+                    <button
+                      onClick={() => copyShareLink(survey.id)}
+                      className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                      title="複製公開填答連結"
+                    >
+                      {copiedId === survey.id ? '已複製!' : '複製連結'}
+                    </button>
+                  )}
                   {(survey.status === 'draft' || survey.status === 'rejected') && (
                     <button
                       onClick={() => {
@@ -307,11 +497,29 @@ function Kpi({
     yellow: 'text-yellow-600',
     blue: 'text-[#126b8a]',
   }[accent];
+  // GSAP 數字 count-up（尊重 prefers-reduced-motion）
+  const [display, setDisplay] = useState(value);
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
+    const obj = { v: 0 };
+    const tw = gsap.to(obj, {
+      v: value,
+      duration: 0.9,
+      ease: 'power2.out',
+      onUpdate: () => setDisplay(Math.round(obj.v)),
+    });
+    return () => {
+      tw.kill();
+    };
+  }, [value]);
   return (
     <div className="rounded-xl border border-border bg-background p-4">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
       <p className={`mt-1.5 text-2xl font-bold ${accentClass}`}>
-        {value}
+        {display}
         {suffix && <span className="ml-0.5 text-sm font-normal text-muted-foreground">{suffix}</span>}
       </p>
       {extra && <p className="mt-0.5 text-xs text-muted-foreground">{extra}</p>}

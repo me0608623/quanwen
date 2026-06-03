@@ -7,6 +7,8 @@ import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
 import { DEFAULT_BACKGROUND, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
 import type { AnswerInput } from '@/hooks/use-responses';
+import { lotteryDisclosure } from '@/lib/lottery-display';
+import { estimateFillMinutes } from '@/lib/fill-time';
 
 export default function SurveyFillPage() {
   const { id } = useParams<{ id: string }>();
@@ -62,7 +64,20 @@ export default function SurveyFillPage() {
   };
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
-  if (!survey) return <div className="p-10 text-sm text-destructive">問卷不存在或尚未上架</div>;
+  if (!survey)
+    return (
+      <main className="mx-auto max-w-md px-4 py-16 text-center">
+        <div className="text-4xl mb-3">🔍</div>
+        <h1 className="text-lg font-bold">問卷不存在或尚未上架</h1>
+        <p className="mt-2 text-sm text-muted-foreground">這份問卷可能已截止或被下架。</p>
+        <button
+          onClick={() => router.push('/tasks')}
+          className="mt-6 inline-block rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+        >
+          ← 回到問卷列表
+        </button>
+      </main>
+    );
 
   if (submitted || survey.alreadySubmitted) {
     return (
@@ -73,7 +88,7 @@ export default function SurveyFillPage() {
             ? '您已填過此問卷'
             : flagged
             ? '填答已記錄'
-            : '感謝您的填答！'}
+            : '填答已送出！'}
         </h1>
         {flagged && (
           <p className="text-orange-600 text-sm mb-4">
@@ -85,12 +100,27 @@ export default function SurveyFillPage() {
             NT${survey.rewardPoints} 獎勵將在審核後發放至您的帳戶。
           </p>
         )}
-        <button
-          onClick={() => router.push('/tasks')}
-          className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          回到問卷列表
-        </button>
+        {!survey.alreadySubmitted && !flagged && survey.rewardMode === 'lottery' && (
+          <p className="text-muted-foreground mb-6">
+            品質審核通過後，您會取得「{survey.lotteryPrize}」抽獎資格，開獎後會收到系統通知。
+          </p>
+        )}
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            onClick={() => router.push('/tasks')}
+            className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            回到問卷列表
+          </button>
+          {!survey.alreadySubmitted && !flagged && (
+            <button
+              onClick={() => router.push('/spin')}
+              className="rounded-md border border-amber-300 bg-amber-50 px-5 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"
+            >
+              🎡 前往轉盤
+            </button>
+          )}
+        </div>
       </main>
     );
   }
@@ -117,9 +147,21 @@ export default function SurveyFillPage() {
       )}
       <div className="flex items-center gap-3 text-xs text-muted-foreground mb-8">
         {survey.rewardPoints > 0 && <span className="text-primary font-semibold">獎勵 NT${survey.rewardPoints}</span>}
+        {survey.rewardMode === 'lottery' && (
+          <span className="font-semibold text-amber-700">抽獎：{survey.lotteryPrize}</span>
+        )}
         {survey.isAnonymous && <span>匿名填答</span>}
         <span>{survey.questions.length} 題</span>
+        {survey.questions.length > 0 && (
+          <span>· 預估約 {estimateFillMinutes(survey.questions.length)} 分鐘</span>
+        )}
       </div>
+      {survey.rewardMode === 'lottery' && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">抽獎規則：{lotteryDisclosure(survey)}</p>
+          <p className="mt-1">平台追蹤：建立者已接受開獎後七日內交付獎品條款。平台會留存通知、中獎者確認與未收到回報，必要時介入處理並核驗履約紀錄。</p>
+        </div>
+      )}
 
       {/* Phase 2: 即時干預提示 */}
       {interventionMsg && (

@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useEarningsSummary } from '@/hooks/use-wallet';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 // ─── 月收益長條圖（純 CSS）────────────────────────────────────────────────────
 
@@ -37,14 +38,19 @@ function MonthlyChart({ data }: { data: { month: string; amount: number }[] }) {
 }
 
 export default function EarningsPage() {
-  const { data: summary, isLoading, isError } = useEarningsSummary();
+  const { data: summary, isLoading, isError, refetch } = useEarningsSummary();
 
   if (isLoading) {
-    return <main className="mx-auto max-w-xl px-4 py-10"><p className="text-sm text-muted-foreground">載入中…</p></main>;
+    return <main className="mx-auto max-w-xl px-4 py-10"><LoadingSpinner /></main>;
   }
 
   if (isError) {
-    return <main className="mx-auto max-w-xl px-4 py-10"><p className="text-sm text-destructive">載入失敗，請重新整理頁面。</p></main>;
+    return (
+      <main className="mx-auto max-w-xl px-4 py-10 text-center">
+        <p className="text-sm text-destructive">載入失敗。</p>
+        <button onClick={() => refetch()} className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10">重試</button>
+      </main>
+    );
   }
 
   if (!summary) return null;
@@ -65,7 +71,7 @@ export default function EarningsPage() {
         </div>
         <div className="rounded-lg border border-border bg-card p-4 text-center">
           <p className="text-xs text-muted-foreground mb-1">待入帳</p>
-          <p className="text-xl font-bold tabular-nums text-yellow-600">NT${summary.pendingRewards.toLocaleString()}</p>
+          <p className="text-xl font-bold tabular-nums text-yellow-700">NT${summary.pendingRewards.toLocaleString()}</p>
         </div>
       </div>
 

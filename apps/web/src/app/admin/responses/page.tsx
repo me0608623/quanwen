@@ -1,7 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useSuspiciousResponses, useRejectResponse, useResponseAiAnalysis } from '@/hooks/use-admin';
+import {
+  useApproveResponse,
+  useReAuditResponse,
+  useRejectResponse,
+  useResponseAiAnalysis,
+  useSuspiciousResponses,
+} from '@/hooks/use-admin';
+import { extractApiError } from '@/lib/extract-error';
 
 type SuspiciousRow = {
   id: string;
@@ -34,6 +41,35 @@ function formatDuration(seconds: number | null): string {
 export default function AdminResponsesPage() {
   const { data: responses = [], isLoading } = useSuspiciousResponses();
   const rejectResponse = useRejectResponse();
+  const approveResponse = useApproveResponse();
+  const reAuditResponse = useReAuditResponse();
+
+  const handleReject = async (id: string) => {
+    try {
+      await rejectResponse.mutateAsync(id);
+      alert('已標記為無效填答');
+    } catch (err) {
+      alert(extractApiError(err, '標記無效失敗'));
+    }
+  };
+
+  const handleApprove = async (id: string) => {
+    try {
+      await approveResponse.mutateAsync(id);
+      alert('已核准為有效填答');
+    } catch (err) {
+      alert(extractApiError(err, '核准失敗'));
+    }
+  };
+
+  const handleReAudit = async (id: string) => {
+    try {
+      await reAuditResponse.mutateAsync(id);
+      alert('重新審核完成');
+    } catch (err) {
+      alert(extractApiError(err, '重新審核失敗'));
+    }
+  };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10">
@@ -62,8 +98,12 @@ export default function AdminResponsesPage() {
           <ResponseRow
             key={r.id}
             r={r as SuspiciousRow}
-            onReject={() => rejectResponse.mutate(r.id)}
+            onReject={() => handleReject(r.id)}
+            onApprove={() => handleApprove(r.id)}
+            onReAudit={() => handleReAudit(r.id)}
             rejecting={rejectResponse.isPending}
+            approving={approveResponse.isPending}
+            reAuditing={reAuditResponse.isPending}
           />
         ))}
       </div>
@@ -74,11 +114,15 @@ export default function AdminResponsesPage() {
 // ─── Response Row ────────────────────────────────────────────────────────────
 
 function ResponseRow({
-  r, onReject, rejecting,
+  r, onReject, onApprove, onReAudit, rejecting, approving, reAuditing,
 }: {
   r: SuspiciousRow;
   onReject: () => void;
+  onApprove: () => void;
+  onReAudit: () => void;
   rejecting: boolean;
+  approving: boolean;
+  reAuditing: boolean;
 }) {
   const [aiOpen, setAiOpen] = useState(false);
   const { data: ai, isLoading: aiLoading, error: aiError } = useResponseAiAnalysis(r.id, aiOpen);
@@ -92,6 +136,9 @@ function ResponseRow({
             <ScoreBadge score={r.antiCheatScore} />
             {r.status === 'rejected' && (
               <span className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-500">已拒絕</span>
+            )}
+            {r.status === 'pending_review' && (
+              <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-700">待人工審核</span>
             )}
           </div>
 
@@ -123,11 +170,29 @@ function ResponseRow({
           </button>
           {r.status !== 'rejected' && (
             <button
+              onClick={onReAudit}
+              disabled={reAuditing}
+              className="rounded-md border border-[#126b8a]/30 px-3 py-1.5 text-xs font-medium text-[#126b8a] disabled:opacity-50 hover:bg-[#126b8a]/10"
+            >
+              重新審核
+            </button>
+          )}
+          {r.status !== 'rejected' && (
+            <button
               onClick={onReject}
               disabled={rejecting}
               className="rounded-md border border-destructive px-3 py-1.5 text-xs font-medium text-destructive disabled:opacity-50 hover:bg-destructive/10"
             >
               標記無效
+            </button>
+          )}
+          {r.status === 'pending_review' && (
+            <button
+              onClick={onApprove}
+              disabled={approving}
+              className="rounded-md bg-emerald-700 px-3 py-1.5 text-xs font-medium text-white disabled:opacity-50 hover:bg-emerald-800"
+            >
+              核准有效
             </button>
           )}
         </div>

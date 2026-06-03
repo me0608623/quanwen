@@ -2,8 +2,12 @@
 
 import { useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
 import { usePublicLinkSurvey, useSubmitPublicResponse } from '@/hooks/use-responses';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
+import { lotteryDisclosure } from '@/lib/lottery-display';
+import { estimateFillMinutes } from '@/lib/fill-time';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
 
@@ -26,36 +30,92 @@ export default function PublicSurveyPage() {
 
   const [done, setDone] = useState<{ flagged: boolean } | null>(null);
 
-  if (isLoading) return <main className="p-6 text-sm">載入中…</main>;
-  if (!survey) return <main className="p-6 text-sm">找不到問卷或問卷尚未發布。</main>;
+  if (isLoading) return <main className="p-6"><LoadingSpinner /></main>;
+  if (!survey)
+    return (
+      <main className="mx-auto max-w-md px-4 py-16 text-center">
+        <div className="text-4xl mb-3">🔍</div>
+        <h1 className="text-lg font-bold">找不到這份問卷</h1>
+        <p className="mt-2 text-sm text-muted-foreground">問卷可能已下架、截止，或連結有誤。</p>
+        <Link
+          href="/auth/register"
+          className="mt-6 inline-block rounded-md bg-[#126b8a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
+        >
+          免費註冊券問，填問卷賺獎勵 →
+        </Link>
+      </main>
+    );
+  if (survey.rewardMode === 'lottery') {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-12 text-center">
+        <h1 className="text-2xl font-bold">{survey.title}</h1>
+        <p className="mt-3 text-sm text-muted-foreground">
+          這份問卷提供「{survey.lotteryPrize}」抽獎回饋。請登入後填答，系統才能在開獎後通知你是否中獎。
+        </p>
+        <p className="mt-2 text-sm font-semibold text-amber-800">抽獎規則：{lotteryDisclosure(survey)}</p>
+        <Link href={`/auth/login?redirect=${encodeURIComponent(`/tasks/${id}`)}`} className="mt-6 inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700">
+          登入後參與抽獎
+        </Link>
+      </main>
+    );
+  }
 
   if (done || survey.alreadySubmitted) {
     return (
       <main className="mx-auto max-w-xl px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold">{done?.flagged ? 'AI 審核中' : '已完成'}</h1>
+        <h1 className="text-2xl font-bold">{done ? (done.flagged ? 'AI 審核中' : '填答已送出') : '已完成'}</h1>
         <p className="mt-3 text-sm text-muted-foreground">
-          {done?.flagged
-            ? '您的開放式填答正在進行 AI 品質審核，審核完成後將發放獎勵。'
+          {done
+            ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
             : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`}
         </p>
+        <div className="mt-6 rounded-xl border border-[#126b8a]/20 bg-[#126b8a]/5 p-4">
+          <p className="text-sm font-medium text-[#126b8a]">想填更多問卷賺獎勵，或自己發問卷找受試者？</p>
+          <Link
+            href="/auth/register"
+            className="mt-3 inline-block rounded-md bg-[#126b8a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
+          >
+            免費註冊券問 →
+          </Link>
+        </div>
       </main>
     );
   }
 
   const handleSubmit = async (answers: Array<{ questionId: string; textAnswer?: string; selectedOptionIds?: string[]; ratingValue?: number }>) => {
-    const result = await submit.mutateAsync({
-      answers,
-      startedAt: startedAtRef.current,
-    });
-    setDone({ flagged: result.flagged });
+    try {
+      const result = await submit.mutateAsync({
+        answers,
+        startedAt: startedAtRef.current,
+      });
+      setDone({ flagged: result.flagged });
+    } catch {
+      // 錯誤透過 submit.error 顯示於下方，避免未處理的 rejection 卡住表單
+    }
   };
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
-      <h1 className="mb-6 text-2xl font-bold">{survey.title}</h1>
+      <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
       {survey.description && (
-        <p className="mb-6 text-sm text-muted-foreground">{survey.description}</p>
+        <p className="mb-2 text-sm text-muted-foreground">{survey.description}</p>
       )}
+      <p className="mb-6 text-xs text-muted-foreground">
+        {survey.questions.length} 題
+        {survey.questions.length > 0 && ` · 預估約 ${estimateFillMinutes(survey.questions.length)} 分鐘`}
+      </p>
+      {submit.error && (() => {
+        const err = submit.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
+        const status = err?.response?.status;
+        const backendMsg = err?.response?.data?.message;
+        return (
+          <p className="mb-4 text-sm text-destructive">
+            {status === 409 ? '⚠️ 這份問卷你已經填過了'
+              : status === 400 ? '⚠️ ' + (backendMsg ?? '送出資料有誤，請檢查後重試')
+              : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
+          </p>
+        );
+      })()}
       <SurveyRendererSurveyJS
         survey={survey}
         onSubmit={handleSubmit}

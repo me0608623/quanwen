@@ -18,6 +18,7 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
 import { SurveysService } from './surveys.service';
+import { SurveyLotteryService } from './survey-lottery.service';
 import { SurveyorAssistantService } from './surveyor-assistant.service';
 import { PricingService } from './pricing/pricing.service';
 import { SurveyExportService } from './template-io/survey-export.service';
@@ -39,12 +40,17 @@ import { AiDraftSchema, AiDraftDto } from './dto/ai-draft.dto';
 import { RegenerateQuestionSchema, RegenerateQuestionDto } from './dto/ai-regenerate.dto';
 import { PricingAdviceSchema, PricingAdviceDto } from './pricing/pricing-advice.dto';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
+import { z } from 'zod';
+
+const FulfillLotterySchema = z.object({ note: z.string().trim().min(5).max(1000) });
+type FulfillLotteryDto = z.infer<typeof FulfillLotterySchema>;
 
 @Controller('surveys')
 @UseGuards(JwtAuthGuard)
 export class SurveysController {
   constructor(
     private readonly surveysService: SurveysService,
+    private readonly surveyLottery: SurveyLotteryService,
     private readonly walletService: WalletService,
     private readonly assistantService: SurveyorAssistantService,
     private readonly pricingService: PricingService,
@@ -104,6 +110,30 @@ export class SurveysController {
     return this.surveysService.findMine(user.id);
   }
 
+  @Get(':id/lottery')
+  lotterySummary(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.getSummary(id, user.id);
+  }
+
+  @Post(':id/lottery/draw')
+  @HttpCode(HttpStatus.OK)
+  drawLottery(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.draw(id, user.id);
+  }
+
+  @Post(':id/lottery/fulfill')
+  @HttpCode(HttpStatus.OK)
+  fulfillLottery(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(FulfillLotterySchema)) dto: FulfillLotteryDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.fulfill(id, user.id, dto.note);
+  }
+
   // ─── GET /surveys/:id ──────────────────────────────────────────────────────
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: Request) {
@@ -128,6 +158,14 @@ export class SurveysController {
   publish(@Param('id') id: string, @Req() req: Request) {
     const user = req.user as AuthenticatedUser;
     return this.surveysService.publish(id, user.id);
+  }
+
+  // ─── POST /surveys/:id/duplicate — 複製為新草稿 ────────────────────────────
+  @Post(':id/duplicate')
+  @HttpCode(HttpStatus.CREATED)
+  duplicate(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveysService.duplicate(id, user.id);
   }
 
   // ─── DELETE /surveys/:id ───────────────────────────────────────────────────

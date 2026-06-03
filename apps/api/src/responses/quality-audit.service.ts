@@ -60,6 +60,20 @@ const WEIGHTS = {
   timing: 0.05,
 };
 
+export function calculateReversePairConsistency(
+  pairs: Array<{ a: number; b: number; minRating: number; maxRating: number }>,
+): number | null {
+  if (pairs.length === 0) return null;
+
+  const avgDeviation = pairs.reduce((sum, pair) => {
+    const expected = pair.minRating + pair.maxRating;
+    const deviation = Math.abs(pair.a + pair.b - expected);
+    return sum + deviation / Math.max(1, pair.maxRating - pair.minRating);
+  }, 0) / pairs.length;
+
+  return Math.round(Math.max(0, 1 - avgDeviation) * 100);
+}
+
 @Injectable()
 export class QualityAuditService {
   private readonly logger = new Logger(QualityAuditService.name);
@@ -297,7 +311,7 @@ export class QualityAuditService {
     const attentionCheck = this.scoreAttentionChecks(questions, answers, options);
 
     // ── Phase 5.3: Reverse Pair 一致性 ────────────────────────────────────
-    // 量表題若 config.reverseOf 指向另一題，正反加總應接近常數（理論上 = scale max + 1）
+    // 量表題若 config.reverseOf 指向另一題，正反加總應接近量尺起點 + 終點。
     const reverseConsistency = this.scoreReversePairs(questions, answers);
 
     return {
@@ -354,12 +368,12 @@ export class QualityAuditService {
     answers: Array<{ questionId: string; ratingValue: number | null }>,
   ): number | null {
     // 只看 rating 題 + 有 reverseOfIndex（sortOrder）或 reverseOf（id）
-    const pairs: Array<{ a: number; b: number; maxRating: number }> = [];
+    const pairs: Array<{ a: number; b: number; minRating: number; maxRating: number }> = [];
     const seen = new Set<string>();
 
     for (const q of questions) {
       if (q.type !== 'rating') continue;
-      const cfg = q.config as { reverseOf?: string; reverseOfIndex?: number; maxRating?: number } | null;
+      const cfg = q.config as { reverseOf?: string; reverseOfIndex?: number; maxRating?: number; scaleStart?: number } | null;
       let partner: typeof q | undefined;
       if (cfg?.reverseOfIndex != null) {
         partner = questions.find((x) => x.sortOrder === cfg.reverseOfIndex && x.type === 'rating');
@@ -373,27 +387,16 @@ export class QualityAuditService {
       const ansB = answers.find((a) => a.questionId === partner.id)?.ratingValue;
       if (ansA == null || ansB == null) continue;
 
-      const partnerCfg = partner.config as { maxRating?: number } | null;
+      const partnerCfg = partner.config as { maxRating?: number; scaleStart?: number } | null;
       const maxRating = cfg?.maxRating ?? partnerCfg?.maxRating ?? 5;
+      const minRating = (cfg?.scaleStart ?? partnerCfg?.scaleStart) === 0 ? 0 : 1;
 
-      pairs.push({ a: ansA, b: ansB, maxRating });
+      pairs.push({ a: ansA, b: ansB, minRating, maxRating });
       seen.add(q.id);
       seen.add(partner.id);
     }
 
-    if (pairs.length === 0) return null;
-
-    // 反向題：正反加總理論上 = maxRating + 1（例如 5 點量表 → 6）
-    // 計算每對偏差，平均後映射到 0-100
-    let totalDeviation = 0;
-    for (const p of pairs) {
-      const expected = p.maxRating + 1;
-      const deviation = Math.abs(p.a + p.b - expected);
-      // 偏差 0 → 100 分；偏差 = maxRating-1 (最大可能值) → 0 分
-      totalDeviation += deviation / Math.max(1, p.maxRating - 1);
-    }
-    const avgDeviation = totalDeviation / pairs.length; // 0~1
-    return Math.round(Math.max(0, (1 - avgDeviation)) * 100);
+    return calculateReversePairConsistency(pairs);
   }
 
   private weightedBehavior(s: QualityBreakdown['signalScores']): number {

@@ -3,11 +3,20 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useMyRedemptions, useMarkRedemptionUsed, CATEGORY_LABEL, CATEGORY_BADGE } from '@/hooks/use-shop';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 export default function MyRedemptionsPage() {
   const { data: redemptions = [], isLoading } = useMyRedemptions();
   const markUsed = useMarkRedemptionUsed();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyPin = (id: string, pin: string) => {
+    navigator.clipboard?.writeText(pin).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((c) => (c === id ? null : c)), 1500);
+    });
+  };
 
   const toggleReveal = (id: string) => {
     setRevealed((prev) => {
@@ -35,7 +44,7 @@ export default function MyRedemptionsPage() {
         <Link href="/shop" className="text-sm text-primary hover:underline">← 回商城</Link>
       </div>
 
-      {isLoading && <p className="text-sm text-muted-foreground">載入中…</p>}
+      {isLoading && <LoadingSpinner />}
 
       {!isLoading && redemptions.length === 0 && (
         <p className="rounded-lg border border-border bg-card p-8 text-center text-sm text-muted-foreground">
@@ -90,10 +99,10 @@ export default function MyRedemptionsPage() {
                     </button>
                     {isShown && (
                       <button
-                        onClick={() => navigator.clipboard.writeText(r.pinCode!)}
+                        onClick={() => copyPin(r.id, r.pinCode!)}
                         className="text-xs text-blue-600 hover:underline"
                       >
-                        複製
+                        {copiedId === r.id ? '已複製！' : '複製'}
                       </button>
                     )}
                   </div>

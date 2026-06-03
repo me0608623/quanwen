@@ -182,6 +182,14 @@ export interface Survey {
   aiReviewEnabled?: boolean;
   externalUrl?: string | null;
   rewardPoints: number;
+  rewardMode?: 'fixed' | 'lottery';
+  lotteryPrize?: string | null;
+  lotteryWinnerCount?: number | null;
+  lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual' | null;
+  lotteryDrawAt?: string | null;
+  lotteryDrawnAt?: string | null;
+  lotteryTermsAccepted?: boolean;
+  lotteryTermsAcceptedAt?: string | null;
   baseRewardPoints?: number;
   deadlineTier?: DeadlineTier;
   targetCount: number;
@@ -201,6 +209,49 @@ export interface Survey {
   updatedAt: string;
   publishedAt?: string;
   questions: SurveyQuestion[];
+}
+
+export interface SurveyLotterySummary {
+  surveyId: string;
+  rewardMode: 'lottery';
+  prize: string;
+  winnerCount: number;
+  drawMode: 'when_full' | 'scheduled' | 'manual';
+  drawAt?: string | null;
+  drawnAt?: string | null;
+  drawSeed?: string | null;
+  eligibleDigest?: string | null;
+  drawAuditVerified?: boolean | null;
+  creatorObligationNotifiedAt?: string | null;
+  completedCount: number;
+  targetCount: number;
+  participantCount: number;
+  notifiedParticipantCount: number;
+  actualWinnerCount: number;
+  fulfillmentDueAt?: string | null;
+  winners: Array<{
+    id: string;
+    fulfillmentStatus: 'pending' | 'notified' | 'verified';
+    fulfillmentNote?: string | null;
+    fulfilledAt?: string | null;
+    fulfillmentNotifiedAt?: string | null;
+    platformVerifiedAt?: string | null;
+    platformNote?: string | null;
+    platformIntervenedAt?: string | null;
+    platformInterventionNote?: string | null;
+    platformInterventionHistory?: LotteryPlatformIntervention[];
+    recipientStatus: 'awaiting_delivery' | 'received' | 'issue_reported';
+    recipientConfirmedAt?: string | null;
+    recipientIssueNote?: string | null;
+    recipientIssueReportedAt?: string | null;
+  }>;
+}
+
+export interface LotteryPlatformIntervention {
+  intervenedAt: string;
+  adminId: string;
+  reason: 'winner_issue' | 'fulfillment_overdue';
+  note: string;
 }
 
 export interface AiDraftResult {
@@ -233,6 +284,44 @@ export function useSurvey(id: string) {
     },
     enabled: !!id,
     staleTime: 10_000,
+  });
+}
+
+export function useSurveyLottery(id: string, enabled = true) {
+  return useQuery<SurveyLotterySummary>({
+    queryKey: ['surveys', id, 'lottery'],
+    queryFn: async () => {
+      const { data } = await api.get<SurveyLotterySummary>(`/surveys/${id}/lottery`);
+      return data;
+    },
+    enabled: enabled && !!id,
+    staleTime: 30_000,
+  });
+}
+
+export function useDrawSurveyLottery(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<SurveyLotterySummary>(`/surveys/${id}/lottery/draw`);
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['surveys', id, 'lottery'], data);
+    },
+  });
+}
+
+export function useFulfillSurveyLottery(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (note: string) => {
+      const { data } = await api.post<SurveyLotterySummary>(`/surveys/${id}/lottery/fulfill`, { note });
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['surveys', id, 'lottery'], data);
+    },
   });
 }
 
@@ -277,6 +366,20 @@ export function usePublishSurvey() {
     },
     onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['surveys', id] });
+      queryClient.invalidateQueries({ queryKey: ['surveys', 'mine'] });
+    },
+  });
+}
+
+export function useDuplicateSurvey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post<Survey>(`/surveys/${id}/duplicate`);
+      return data;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['surveys', 'mine'] });
     },
   });

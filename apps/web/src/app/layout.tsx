@@ -1,16 +1,14 @@
 import type { Metadata } from "next";
-import { Cormorant_Garamond, Inter, Noto_Sans_TC, Noto_Serif_TC } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
 import { ConditionalNavbar } from "@/components/layout/conditional-navbar";
 
-const cormorant = Cormorant_Garamond({ subsets:["latin"], weight:["500","600"], variable:"--font-serif-latin" });
-const notoSerifTc = Noto_Serif_TC({ subsets:["latin"], weight:["500","700"], variable:"--font-serif-cjk" });
-const inter = Inter({ subsets:["latin"], weight:["400","500","600"], variable:"--font-sans-latin" });
-const notoSansTc = Noto_Sans_TC({ subsets:["latin"], weight:["400","500","700"], variable:"--font-sans-cjk" });
-
 export const metadata: Metadata = {
-  title: "券問 QuanWen — 找到你的受試者",
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  title: {
+    template: "%s · 券問 QuanWen",
+    default: "券問 QuanWen — 找到你的受試者",
+  },
   description: "雙邊問卷媒合平台，多元獎勵 + AI 品質審核",
   openGraph: {
     title: "券問 QuanWen — 找到你的受試者",
@@ -25,5 +23,24 @@ export const metadata: Metadata = {
   },
 };
 export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="zh-TW" suppressHydrationWarning><body className={`${cormorant.variable} ${notoSerifTc.variable} ${inter.variable} ${notoSansTc.variable} font-sans`} suppressHydrationWarning><Providers><ConditionalNavbar />{children}</Providers></body></html>;
+  return <html lang="zh-TW" suppressHydrationWarning>
+    <head>
+      <link rel="preconnect" href="https://fonts.googleapis.com" />
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+      <link
+        href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&display=swap"
+        rel="stylesheet"
+      />
+    </head>
+    <body className="font-sans" suppressHydrationWarning><Providers>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:bg-primary focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground focus:shadow-lg"
+      >
+        跳至主要內容
+      </a>
+      <ConditionalNavbar />
+      <div id="main-content" tabIndex={-1} className="outline-none">{children}</div>
+    </Providers></body>
+  </html>;
 }

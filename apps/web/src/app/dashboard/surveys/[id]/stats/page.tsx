@@ -1,18 +1,32 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import {
+  ArrowLeft,
+  BarChart3,
+  CheckCircle2,
+  Download,
+  FileSpreadsheet,
+  Presentation,
+  ShieldCheck,
+  Sparkles,
+  Users,
+  X,
+  type LucideIcon,
+} from 'lucide-react';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, type ReportType } from '@/hooks/use-surveys';
-import { useDescriptiveStats, useCrossTab, useNps } from '@/hooks/use-analytics';
-import { OptionBarChart, QualityDonut } from '@/components/stats/charts';
+import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
+import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
+import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
-import { CrossTabPanel, CrossTabSection } from '@/components/stats/cross-tab-panel';
-import { NpsGauge, NpsSection } from '@/components/stats/nps-gauge';
+import { CrossTabSection } from '@/components/stats/cross-tab-panel';
+import { NpsSection } from '@/components/stats/nps-gauge';
 import { CorrelationSection } from '@/components/stats/correlation-panel';
 import { SegmentationSection } from '@/components/stats/segmentation-panel';
+import { AiReportExport } from '@/components/stats/ai-report-export';
 
 interface OptionCount { optionId: string; label: string; count: number }
 interface QuestionStat {
@@ -22,6 +36,9 @@ interface QuestionStat {
   totalAnswers: number;
   optionCounts?: OptionCount[];
   averageRating?: number | null;
+  ratingMin?: number;
+  ratingMax?: number;
+  ratingBuckets?: Array<{ value: number; count: number }>;
   sampleTexts?: (string | null)[];
 }
 interface QualityDistribution {
@@ -36,6 +53,13 @@ interface SurveyStats {
   surveyId: string;
   title: string;
   totalResponses: number;
+  targetCount: number;
+  rewardMode?: 'fixed' | 'lottery';
+  lotteryPrize?: string | null;
+  lotteryWinnerCount?: number | null;
+  lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual' | null;
+  lotteryDrawAt?: string | null;
+  lotteryDrawnAt?: string | null;
   questionStats: QuestionStat[];
   qualityDistribution?: QualityDistribution;
 }
@@ -230,6 +254,13 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
 
 export default function SurveyStatsPage() {
   const { id } = useParams<{ id: string }>();
+  const [linkCopied, setLinkCopied] = useState(false);
+  const copyPublicLink = () => {
+    navigator.clipboard?.writeText(`${window.location.origin}/s/${id}`).then(() => {
+      setLinkCopied(true);
+      setTimeout(() => setLinkCopied(false), 1500);
+    }).catch(() => {});
+  };
   const router = useRouter();
   const { data: stats, isLoading } = useSurveyStats(id);
 
@@ -273,84 +304,155 @@ export default function SurveyStatsPage() {
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
   if (!stats) return <div className="p-10 text-sm text-destructive">無法取得統計資料</div>;
 
-  const completionPct = stats.totalResponses > 0 ? Math.min(100, stats.totalResponses) : 0;
+  const qualityScore = stats.qualityDistribution?.avgScore;
+  const auditedResponses = stats.qualityDistribution
+    ? stats.qualityDistribution.total - stats.qualityDistribution.unaudited
+    : 0;
+  const chartQuestions = stats.questionStats.filter((q) =>
+    (q.optionCounts && q.optionCounts.length > 0) || q.averageRating !== undefined,
+  ).length;
 
   return (
-    <main className="mx-auto max-w-3xl space-y-6">
+    <main className="mx-auto max-w-6xl space-y-6 pb-12">
       {/* Header */}
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <button onClick={() => router.back()} className="text-sm text-muted-foreground hover:underline">
-            ← 返回問卷
-          </button>
-          <h1 className="mt-2 text-2xl font-bold">{stats.title}</h1>
-          <p className="text-sm text-muted-foreground">共 {stats.totalResponses} 份有效填答</p>
+      <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F2A5C] via-[#126b8a] to-[#8B5CF6] p-6 text-white shadow-lg md:p-8">
+        <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
+        <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <button onClick={() => router.push('/dashboard')} className="inline-flex items-center gap-1.5 text-xs font-medium text-white/75 hover:text-white">
+              <ArrowLeft className="h-3.5 w-3.5" />
+              返回我的問卷
+            </button>
+            <p className="mt-6 text-xs font-bold uppercase tracking-[0.2em] text-cyan-100">Survey Analytics Workspace</p>
+            <h1 className="mt-2 max-w-3xl text-3xl font-bold tracking-tight md:text-4xl">{stats.title}</h1>
+            <p className="mt-3 max-w-2xl text-sm leading-6 text-white/75">
+              集中查看回收進度、樣本品質、量化圖表與 AI 洞察，將填答資料整理成可採取行動的結論。
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <button
+                onClick={copyPublicLink}
+                className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+              >
+                {linkCopied ? '已複製!' : '🔗 複製公開連結'}
+              </button>
+              <a
+                href={`/s/${id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+              >
+                開啟填答頁 ↗
+              </a>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[520px]">
+            <HeroMetric icon={Users} label="有效樣本" value={`${stats.totalResponses}`} suffix="份" />
+            <HeroMetric icon={BarChart3} label="題目數" value={`${stats.questionStats.length}`} suffix="題" />
+            <HeroMetric icon={ShieldCheck} label="平均品質" value={qualityScore == null ? '—' : `${qualityScore}`} suffix={qualityScore == null ? '' : '分'} />
+            <HeroMetric icon={CheckCircle2} label="已審核" value={`${auditedResponses}`} suffix="份" />
+          </div>
         </div>
-        <div className="shrink-0 flex flex-wrap gap-2 justify-end">
+      </section>
+
+      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm font-bold text-slate-900">分析工具列</p>
+          <p className="mt-1 text-xs text-slate-500">匯出原始資料、乾淨樣本，或往下查看 AI 分析簡報。</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => handleExportCsv(false)}
-            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-muted"
           >
-            CSV
+            <Download className="h-3.5 w-3.5" /> CSV
           </button>
           <button
             onClick={handleExportJson}
-            className="rounded-md border border-border px-3 py-1.5 text-xs hover:bg-muted"
+            className="rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-muted"
             title="結構化 JSON（程式 / 資料分析用）"
           >
             {'{ } JSON'}
           </button>
           <button
             onClick={() => handleExportXlsx(false)}
-            className="rounded-md border border-emerald-300 bg-emerald-50 text-emerald-800 px-3 py-1.5 text-xs hover:bg-emerald-100"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
             title="Excel：填答資料 + 摘要兩個工作表"
           >
-            📊 Excel
+            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
           </button>
           <button
             onClick={handleExportPdf}
-            className="rounded-md border border-rose-300 bg-rose-50 text-rose-800 px-3 py-1.5 text-xs hover:bg-rose-100"
+            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100"
             title="PDF 統計總覽報表"
           >
-            📄 PDF 報表
+            PDF 報表
           </button>
           <button
             onClick={() => handleExportXlsx(true)}
-            className="rounded-md border border-[#126b8a] bg-[#126b8a] px-3 py-1.5 text-xs text-white font-semibold hover:bg-[#0f5d78]"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#126b8a] bg-[#126b8a] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0f5d78]"
             title="只匯出品質分數 ≥ 70 的高品質樣本（Excel）"
           >
-            ✨ 乾淨 Excel
+            <Sparkles className="h-3.5 w-3.5" /> 乾淨 Excel
           </button>
         </div>
-      </div>
+      </section>
+
+      <nav className="flex flex-wrap gap-2 rounded-xl border border-slate-200 bg-slate-50 p-2 text-xs font-semibold text-slate-600">
+        <a href="#ai-insights" className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#126b8a]">AI 洞察簡報</a>
+        <a href="#quality" className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#126b8a]">樣本品質</a>
+        <a href="#trend" className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#126b8a]">回收趨勢</a>
+        <a href="#advanced" className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#126b8a]">進階統計</a>
+        <a href="#questions" className="rounded-lg px-3 py-2 hover:bg-white hover:text-[#126b8a]">逐題圖表</a>
+      </nav>
+
+      {stats.rewardMode === 'lottery' && (
+        <LotteryPanel surveyId={id} stats={stats} />
+      )}
 
       {/* Quality Distribution（品質審核分布）*/}
       {stats.qualityDistribution && stats.qualityDistribution.total > 0 && (
-        <QualityDistributionPanel data={stats.qualityDistribution} />
+        <div id="quality"><QualityDistributionPanel data={stats.qualityDistribution} /></div>
       )}
 
       {/* AI 洞察 */}
-      <AiInsightsPanel surveyId={id} totalResponses={stats.totalResponses} />
+      <div id="ai-insights">
+        <AiInsightsPanel surveyId={id} surveyTitle={stats.title} totalResponses={stats.totalResponses} />
+      </div>
 
       {/* 趨勢圖 */}
-      <TrendChart surveyId={id} />
+      <div id="trend"><TrendChart surveyId={id} /></div>
 
       {/* 交叉分析 */}
-      <CrossTabSection questionStats={stats.questionStats} surveyId={id} />
+      <div id="advanced" className="space-y-6">
+        <section className="rounded-xl border border-[#126b8a]/20 bg-[#126b8a]/[0.04] p-4">
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#126b8a]">進階量化分析</p>
+          <p className="mt-1 text-sm text-slate-600">
+            目前有 {chartQuestions} 題可直接視覺化。你也可以執行交叉分析、NPS、相關性與分群，找出更深層的受訪者差異。
+          </p>
+        </section>
+        <CrossTabSection questionStats={stats.questionStats} surveyId={id} />
 
-      {/* NPS 淨推薦值 */}
-      <NpsSection questionStats={stats.questionStats} surveyId={id} />
+        <ScaleReliabilityPanel surveyId={id} />
 
-      {/* 相關性分析 */}
-      <CorrelationSection questionStats={stats.questionStats} surveyId={id} />
+        {/* NPS 淨推薦值 */}
+        <NpsSection questionStats={stats.questionStats} surveyId={id} />
 
-      {/* 分群分析 */}
-      <SegmentationSection surveyId={id} />
+        {/* 相關性分析 */}
+        <CorrelationSection questionStats={stats.questionStats} surveyId={id} />
+
+        {/* 分群分析 */}
+        <SegmentationSection surveyId={id} />
+      </div>
 
       {/* 受訪者清單（匿名化 token） */}
       <RespondentsPanel surveyId={id} totalResponses={stats.totalResponses} />
 
       {/* 題目統計 */}
+      <div id="questions" className="space-y-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#126b8a]">逐題量化圖表</p>
+        <h2 className="mt-1 text-xl font-bold text-slate-900">每一題的回答分布</h2>
+      </div>
       {stats.questionStats.map((q, i) => (
         <section key={q.questionId} className="rounded-lg border border-border p-5 space-y-3">
           <div>
@@ -370,8 +472,11 @@ export default function SurveyStatsPage() {
               <p className="text-3xl font-bold">
                 {q.averageRating != null ? q.averageRating.toFixed(1) : '—'}
               </p>
-              <span className="text-sm text-muted-foreground">平均分（滿 5 分）</span>
+              <span className="text-sm text-muted-foreground">平均分（滿 {q.ratingMax ?? 5} 分）</span>
             </div>
+          )}
+          {q.ratingBuckets && q.ratingBuckets.length > 0 && (
+            <RatingDistribution buckets={q.ratingBuckets} />
           )}
 
           {/* 文字回答 */}
@@ -389,7 +494,301 @@ export default function SurveyStatsPage() {
           )}
         </section>
       ))}
+      </div>
     </main>
+  );
+}
+
+function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStats }) {
+  const [fulfillmentNote, setFulfillmentNote] = useState('');
+  const { data } = useSurveyLottery(surveyId);
+  const draw = useDrawSurveyLottery(surveyId);
+  const fulfill = useFulfillSurveyLottery(surveyId);
+  const drawnAt = data?.drawnAt ?? stats.lotteryDrawnAt;
+  const canDraw = stats.lotteryDrawMode === 'manual' && stats.totalResponses >= stats.targetCount && !drawnAt;
+  const drawModeLabel = stats.lotteryDrawMode === 'scheduled'
+    ? `指定日期：${stats.lotteryDrawAt ? new Date(stats.lotteryDrawAt).toLocaleString('zh-TW') : '尚未設定'}`
+    : stats.lotteryDrawMode === 'manual'
+      ? '收滿後由建立者手動開獎'
+      : '收滿後自動開獎';
+  const pendingFulfillment = data?.winners.some((winner) => winner.fulfillmentStatus === 'pending') ?? false;
+  const verifiedCount = data?.winners.filter((winner) => winner.fulfillmentStatus === 'verified').length ?? 0;
+
+  return (
+    <section className="rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Lottery Reward</p>
+          <h2 className="mt-1 text-xl font-bold text-slate-900">抽獎回饋：{stats.lotteryPrize}</h2>
+          <p className="mt-1 text-sm text-slate-600">
+            {stats.lotteryWinnerCount} 個中獎名額 · {drawModeLabel}
+          </p>
+          <p className="mt-2 text-xs text-slate-500">
+            {drawnAt
+              ? `已於 ${new Date(drawnAt).toLocaleString('zh-TW')} 完成開獎。結果通知已送達 ${data?.notifiedParticipantCount ?? 0} / ${data?.participantCount ?? stats.totalResponses} 位有效填答者。`
+              : `目前收集 ${stats.totalResponses} / ${stats.targetCount} 份，開獎後系統會通知所有有效填答者結果。`}
+          </p>
+          {drawnAt && (
+            <p className="mt-2 text-xs font-medium text-amber-800">
+              建立者有義務完成獎品交付。平台保留通知與核驗紀錄，履約期限：
+              {data?.fulfillmentDueAt ? new Date(data.fulfillmentDueAt).toLocaleString('zh-TW') : '開獎後七日內'}。
+              義務通知：{data?.creatorObligationNotifiedAt ? '已送達' : '等待系統補送'}。
+            </p>
+          )}
+          {data?.drawSeed && data.eligibleDigest && (
+            <div className="mt-3 rounded-lg border border-amber-200 bg-white/70 p-3 text-[11px] text-slate-600">
+              <p className="font-semibold text-amber-800">
+                可重播抽獎稽核證明 · {data.drawAuditVerified ? '核對通過' : '核對異常'}
+              </p>
+              <p className="mt-1 break-all font-mono">候選摘要：{data.eligibleDigest}</p>
+              <p className="mt-1 break-all font-mono">抽獎種子：{data.drawSeed}</p>
+            </div>
+          )}
+        </div>
+        {stats.lotteryDrawMode === 'manual' && !drawnAt && (
+          <button
+            type="button"
+            disabled={!canDraw || draw.isPending}
+            onClick={() => draw.mutate()}
+            className="rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {draw.isPending ? '開獎中…' : canDraw ? '立即開獎並通知' : '收滿後可開獎'}
+          </button>
+        )}
+      </div>
+      {drawnAt && data && (
+        <div className="mt-4 rounded-xl border border-amber-200 bg-white/70 p-4">
+          <p className="text-sm font-semibold text-slate-900">中獎履約進度</p>
+          <p className="mt-1 text-xs text-slate-600">
+            共 {data.actualWinnerCount} 位中獎者，平台已核驗 {verifiedCount} 位。
+          </p>
+          {pendingFulfillment && (
+            <div className="mt-3 space-y-2">
+              <textarea
+                value={fulfillmentNote}
+                onChange={(event) => setFulfillmentNote(event.target.value)}
+                placeholder="例如：請於七日內回覆通知信，客服將協助安排餐券寄送。"
+                className="min-h-20 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+              />
+              <button
+                type="button"
+                disabled={fulfillmentNote.trim().length < 5 || fulfill.isPending}
+                onClick={() => fulfill.mutate(fulfillmentNote, { onSuccess: () => setFulfillmentNote('') })}
+                className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {fulfill.isPending ? '送出中…' : '通知中獎者兌獎方式'}
+              </button>
+            </div>
+          )}
+          {!pendingFulfillment && (
+            <p className="mt-3 text-xs text-emerald-700">
+              已送出兌獎說明，通知已送達 {data.winners.filter((winner) => winner.fulfillmentNotifiedAt).length} / {data.actualWinnerCount} 位中獎者，等待平台逐筆核驗。
+            </p>
+          )}
+          <div className="mt-4 space-y-2">
+            {data.winners.map((winner, index) => (
+              <div key={winner.id} className="rounded-lg border border-amber-100 bg-white p-3 text-xs text-slate-700">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-slate-900">匿名中獎者 #{index + 1}</p>
+                  <span className={`rounded-full px-2 py-0.5 font-semibold ${
+                    winner.platformVerifiedAt
+                      ? 'bg-emerald-100 text-emerald-800'
+                      : winner.recipientStatus === 'issue_reported'
+                        ? 'bg-red-100 text-red-700'
+                        : winner.recipientStatus === 'received'
+                          ? 'bg-sky-100 text-sky-800'
+                          : 'bg-amber-100 text-amber-800'
+                  }`}>
+                    {winner.platformVerifiedAt
+                      ? '平台已核驗'
+                      : winner.recipientStatus === 'issue_reported'
+                        ? '中獎者已回報問題'
+                        : winner.recipientStatus === 'received'
+                          ? '中獎者已確認收到'
+                          : winner.fulfillmentStatus === 'pending'
+                            ? '等待送出兌獎說明'
+                            : '等待中獎者確認'}
+                  </span>
+                </div>
+                {winner.recipientIssueNote && (
+                  <p className="mt-2 whitespace-pre-wrap rounded-md bg-red-50 p-2 font-semibold text-red-700">
+                    中獎者回報：{winner.recipientIssueNote}
+                  </p>
+                )}
+                {(!!winner.platformInterventionHistory?.length || !!winner.platformInterventionNote) && (
+                  <div className="mt-2 rounded-md bg-sky-50 p-2 text-sky-800">
+                    <p className="font-semibold">平台介入歷程</p>
+                    {(winner.platformInterventionHistory?.length
+                      ? winner.platformInterventionHistory
+                      : [{
+                          intervenedAt: winner.platformIntervenedAt ?? '',
+                          adminId: '',
+                          reason: 'winner_issue' as const,
+                          note: winner.platformInterventionNote ?? '',
+                        }]
+                    ).map((entry, entryIndex) => (
+                      <p key={`${entry.intervenedAt}-${entryIndex}`} className="mt-1 whitespace-pre-wrap">
+                        {entry.note}
+                        <span className="ml-1 text-sky-600">
+                          · {entry.reason === 'fulfillment_overdue' ? '逾期主動介入' : '問題回報介入'}
+                          {entry.intervenedAt ? ` · ${new Date(entry.intervenedAt).toLocaleString('zh-TW')}` : ''}
+                        </span>
+                      </p>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {draw.isError && <p className="mt-3 text-xs text-red-600">開獎失敗，請稍後再試。</p>}
+      {fulfill.isError && <p className="mt-3 text-xs text-red-600">兌獎說明送出失敗，請稍後再試。</p>}
+    </section>
+  );
+}
+
+function ScaleReliabilityPanel({ surveyId }: { surveyId: string }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [reverseIds, setReverseIds] = useState<string[]>([]);
+  const [selectionInitialized, setSelectionInitialized] = useState(false);
+  const { data: allData, isLoading } = useScaleReliability(surveyId);
+  const saveSettings = useSaveScaleSettings(surveyId);
+  const canCalculate = selectedIds.length >= 2;
+  const availableItems = allData?.availableItems ?? allData?.items ?? [];
+  const persistedSelectedIds = availableItems.filter((item) => item.selectedForScale).map((item) => item.questionId);
+  const persistedReverseIds = availableItems.filter((item) => item.reverseScored).map((item) => item.questionId);
+  const scaleSelectionChanged = selectedIds.length !== persistedSelectedIds.length
+    || selectedIds.some((id) => !persistedSelectedIds.includes(id));
+  const reverseSelectionChanged = reverseIds.length !== persistedReverseIds.length
+    || reverseIds.some((id) => !persistedReverseIds.includes(id));
+  const useCustomCalculation = !!allData && canCalculate
+    && (scaleSelectionChanged || reverseSelectionChanged);
+  const { data: customData } = useScaleReliability(surveyId, selectedIds, reverseIds, useCustomCalculation);
+  const data = useCustomCalculation ? customData ?? allData : allData;
+
+  useEffect(() => {
+    if (!allData || selectionInitialized) return;
+    setSelectedIds(allData.availableItems.filter((item) => item.selectedForScale).map((item) => item.questionId));
+    setReverseIds(allData.availableItems.filter((item) => item.reverseScored).map((item) => item.questionId));
+    setSelectionInitialized(true);
+  }, [allData, selectionInitialized]);
+
+  if (isLoading) return <section className="h-24 animate-pulse rounded-xl bg-muted" />;
+  if (!allData || availableItems.length < 2) return null;
+  const displayData = data ?? allData;
+
+  return (
+    <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-5">
+      <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">量表信度統計</p>
+      <div className="mt-3 flex flex-wrap items-end gap-6">
+        <div>
+          <p className="text-3xl font-bold text-slate-900">{canCalculate ? displayData.cronbachAlpha ?? '—' : '—'}</p>
+          <p className="text-xs text-slate-500">Cronbach&apos;s alpha</p>
+        </div>
+        <p className="text-sm text-slate-700">
+          {canCalculate ? displayData.interpretation : '請選擇至少 2 題'} · {selectedIds.length} 題量表 · {canCalculate ? displayData.completeResponseCount : 0} 份完整樣本
+        </p>
+      </div>
+      {displayData.normalizedToCommonScale && (
+        <p className="mt-3 text-[11px] text-slate-500">
+          信度、題目總分相關與刪題後 alpha 會先將各題標準化至共同 0-1 尺度，避免混合量尺扭曲結果；逐題平均保留原量尺，反向題會標示換算前後分數。
+        </p>
+      )}
+      {canCalculate && displayData.excludedIncompleteResponseCount > 0 && (
+        <p className="mt-3 text-xs font-semibold text-amber-700">
+          已排除 {displayData.excludedIncompleteResponseCount} 份未完整回答本題組的樣本，避免缺題資料扭曲信度。
+        </p>
+      )}
+      <div className="mt-4 grid gap-2 sm:grid-cols-2">
+        {availableItems.map((item) => {
+          const calculatedItem = displayData.items.find((candidate) => candidate.questionId === item.questionId);
+          return (
+          <div key={item.questionId} className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs">
+            <label className="flex cursor-pointer gap-2">
+            <input
+              type="checkbox"
+              checked={selectedIds.includes(item.questionId)}
+              onChange={(event) => {
+                setSelectedIds((current) =>
+                  event.target.checked
+                    ? [...current, item.questionId]
+                    : current.filter((id) => id !== item.questionId),
+                );
+                if (!event.target.checked) {
+                  setReverseIds((current) => current.filter((id) => id !== item.questionId));
+                }
+              }}
+            />
+            <span>
+              <span className="block text-slate-700">{item.title}</span>
+              <span className="mt-1 block font-semibold text-indigo-700">
+                {calculatedItem?.reverseScored
+                  ? `原始平均 ${calculatedItem.rawMean ?? '—'} → 計分平均 ${calculatedItem.mean ?? '—'}`
+                  : `平均 ${calculatedItem?.mean ?? '—'}`}
+              </span>
+              {calculatedItem && (
+                <span className="mt-1 block text-[11px] text-slate-500">
+                  校正題目總分相關 {calculatedItem.correctedItemTotalCorrelation ?? '—'} · 刪除此題後 α {calculatedItem.alphaIfDeleted ?? '—'}
+                </span>
+              )}
+            </span>
+            </label>
+            <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-indigo-50 pt-2 text-[11px] text-slate-500">
+              <input
+                type="checkbox"
+                checked={reverseIds.includes(item.questionId)}
+                disabled={!selectedIds.includes(item.questionId)}
+                onChange={(event) => setReverseIds((current) =>
+                  event.target.checked
+                    ? [...current, item.questionId]
+                    : current.filter((id) => id !== item.questionId),
+                )}
+              />
+              此題為反向題，計算時反向計分
+            </label>
+          </div>
+          );
+        })}
+      </div>
+      <p className="mt-3 text-[11px] text-slate-500">校正題目總分相關越低，越值得檢查題意；若刪除此題後 alpha 明顯上升，可評估修改或移除。</p>
+      <div className="mt-3 flex flex-wrap items-center gap-3">
+        <button
+          type="button"
+          disabled={selectedIds.length < 2 || saveSettings.isPending}
+          onClick={() => saveSettings.mutate({ questionIds: selectedIds, reverseQuestionIds: reverseIds })}
+          className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+        >
+          {saveSettings.isPending ? '儲存中…' : '儲存量表題組設定'}
+        </button>
+        {saveSettings.isSuccess && <p className="text-xs font-semibold text-emerald-700">量表題組設定已保存。</p>}
+        {saveSettings.isError && <p className="text-xs font-semibold text-red-700">儲存失敗，請稍後再試。</p>}
+      </div>
+      {selectedIds.length < 2 && <p className="mt-3 text-xs font-semibold text-red-700">請至少勾選 2 題屬於同一構念的量表題。</p>}
+    </section>
+  );
+}
+
+function HeroMetric({
+  icon: Icon,
+  label,
+  value,
+  suffix,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  suffix: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm">
+      <Icon className="h-4 w-4 text-cyan-100" />
+      <p className="mt-3 text-[10px] font-bold uppercase tracking-[0.14em] text-white/55">{label}</p>
+      <p className="mt-1 text-2xl font-bold">
+        {value}
+        {suffix && <span className="ml-1 text-xs font-medium text-white/60">{suffix}</span>}
+      </p>
+    </div>
   );
 }
 
@@ -499,9 +898,18 @@ function FreqBadge({ freq }: { freq: 'high' | 'medium' | 'low' }) {
 
 // ─── AI Insights Panel ──────────────────────────────────────────────────────
 
-function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; totalResponses: number }) {
+function AiInsightsPanel({
+  surveyId,
+  surveyTitle,
+  totalResponses,
+}: {
+  surveyId: string;
+  surveyTitle: string;
+  totalResponses: number;
+}) {
   const [enabled, setEnabled] = useState(false);
   const [reportType, setReportType] = useState<ReportType>('simple');
+  const [presentationOpen, setPresentationOpen] = useState(false);
   const queryClient = useQueryClient();
   const { data, isLoading, isFetching, error, refetch } = useSurveyAiInsights(surveyId, enabled, reportType);
   const { data: usage } = useAiUsage();
@@ -675,12 +1083,119 @@ function AiInsightsPanel({ surveyId, totalResponses }: { surveyId: string; total
             </div>
           )}
 
-          <p className="text-right text-[10px] text-slate-400">
-            {data.reportType === 'detailed' ? '詳細報告' : '簡單報告'} · 樣本 {data.sampleSize} 份 · 生成於 {new Date(data.generatedAt).toLocaleString('zh-TW')}
-          </p>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#126b8a]/15 pt-3">
+            <p className="text-[10px] text-slate-400">
+              {data.reportType === 'detailed' ? '詳細報告' : '簡單報告'} · 樣本 {data.sampleSize} 份 · 生成於 {new Date(data.generatedAt).toLocaleString('zh-TW')}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <AiReportExport insights={data} surveyTitle={surveyTitle} />
+              <button
+                type="button"
+                onClick={() => setPresentationOpen(true)}
+                className="inline-flex items-center gap-1.5 rounded-md bg-gradient-to-r from-[#0F2A5C] to-[#8B5CF6] px-3 py-1.5 text-xs font-medium text-white transition hover:opacity-90"
+              >
+                <Presentation className="h-3.5 w-3.5" />
+                摘要簡報
+              </button>
+            </div>
+          </div>
         </div>
       )}
+      {data && presentationOpen && (
+        <AiPresentation
+          insights={data}
+          surveyTitle={surveyTitle}
+          onClose={() => setPresentationOpen(false)}
+        />
+      )}
     </section>
+  );
+}
+
+function AiPresentation({
+  insights,
+  surveyTitle,
+  onClose,
+}: {
+  insights: SurveyAiInsights;
+  surveyTitle: string;
+  onClose: () => void;
+}) {
+  const [slide, setSlide] = useState(0);
+  const slides = [
+    {
+      eyebrow: 'AI EXECUTIVE SUMMARY',
+      title: surveyTitle,
+      body: insights.summary,
+      items: [`有效樣本 ${insights.sampleSize} 份`, `生成時間 ${new Date(insights.generatedAt).toLocaleString('zh-TW')}`],
+    },
+    {
+      eyebrow: 'KEY FINDINGS',
+      title: '資料告訴我們什麼？',
+      body: '以下是 AI 從填答中整理出的主要發現。',
+      items: insights.keyFindings,
+    },
+    {
+      eyebrow: 'CONCERNS',
+      title: '需要留意的訊號',
+      body: '在採取決策前，先檢查可能影響解讀的風險。',
+      items: insights.concerns.length > 0 ? insights.concerns : ['目前沒有特別需要提醒的風險。'],
+    },
+    {
+      eyebrow: 'NEXT ACTIONS',
+      title: '建議下一步',
+      body: '將洞察轉成具體行動，讓問卷資料真正產生價值。',
+      items: insights.recommendations,
+    },
+  ];
+  const current = slides[slide];
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-4xl overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F2A5C] via-[#126b8a] to-[#8B5CF6] p-6 text-white shadow-2xl md:p-10">
+        <div className="pointer-events-none absolute -right-24 -top-24 h-80 w-80 rounded-full bg-white/10 blur-3xl" />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="關閉摘要簡報"
+          className="absolute right-5 top-5 rounded-full bg-white/10 p-2 text-white/80 transition hover:bg-white/20 hover:text-white"
+        >
+          <X className="h-5 w-5" />
+        </button>
+        <div className="relative min-h-[460px]">
+          <p className="text-xs font-bold tracking-[0.2em] text-cyan-100">{current.eyebrow}</p>
+          <h3 className="mt-5 max-w-3xl text-3xl font-bold tracking-tight md:text-5xl">{current.title}</h3>
+          <p className="mt-5 max-w-3xl text-base leading-7 text-white/75">{current.body}</p>
+          <ul className="mt-8 grid gap-3 md:grid-cols-2">
+            {current.items.map((item, index) => (
+              <li key={`${slide}-${index}`} className="rounded-2xl border border-white/15 bg-white/10 p-4 text-sm leading-6 backdrop-blur-sm">
+                {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+        <div className="relative mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-white/15 pt-5">
+          <p className="text-xs text-white/60">AI 摘要簡報 · {slide + 1} / {slides.length}</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setSlide((value) => Math.max(0, value - 1))}
+              disabled={slide === 0}
+              className="rounded-lg border border-white/20 px-4 py-2 text-xs font-semibold text-white transition hover:bg-white/10 disabled:opacity-40"
+            >
+              上一頁
+            </button>
+            <button
+              type="button"
+              onClick={() => slide === slides.length - 1 ? onClose() : setSlide((value) => value + 1)}
+              className="rounded-lg bg-white px-4 py-2 text-xs font-semibold text-[#0F2A5C] transition hover:bg-cyan-50"
+            >
+              {slide === slides.length - 1 ? '完成' : '下一頁'}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -740,7 +1255,7 @@ function QualityDistributionPanel({ data }: { data: QualityDistribution }) {
       </div>
 
       {/* Phase V: recharts donut + 保留 bar 線型 + legend cells */}
-      <div className="grid gap-3 md:grid-cols-[1fr,200px] items-center">
+      <div className="grid gap-3 md:grid-cols-[1fr,220px] items-center">
         <div>
           {/* Bar */}
           <div className="flex h-6 w-full overflow-hidden rounded-md border border-slate-200 bg-white">

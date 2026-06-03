@@ -9,7 +9,7 @@ import {
 import { eq, desc, inArray } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyQuestions, questionOptions, surveyLogicRules, mutualPairs } from '../db/schema';
+import { surveys, surveyQuestions, questionOptions, surveyLogicRules, mutualPairs, surveyLotteryResults } from '../db/schema';
 import type { CreateSurveyDto, SurveyQuestionDto } from './dto/create-survey.dto';
 import type { UpdateSurveyDto } from './dto/update-survey.dto';
 import type { LogicRuleDto } from './dto/logic-rule.dto';
@@ -62,7 +62,8 @@ export class SurveysService {
 
   async create(surveyorId: string, dto: CreateSurveyDto) {
     const tier = (dto.deadlineTier ?? 'standard') as DeadlineTier;
-    const basePoints = dto.rewardPoints ?? 0;
+    const rewardMode = dto.type === 'mutual' ? 'fixed' : (dto.rewardMode ?? 'fixed');
+    const basePoints = rewardMode === 'lottery' ? 0 : (dto.rewardPoints ?? 0);
     const effectivePoints = applyRushMultiplier(basePoints, tier);
     // If caller explicitly set expiresAt use it; otherwise derive from tier
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : tierExpiresAt(tier);
@@ -81,6 +82,12 @@ export class SurveysService {
           externalUrl: dto.externalUrl,
           rewardPoints: effectivePoints,
           baseRewardPoints: basePoints,
+          rewardMode,
+          lotteryPrize: rewardMode === 'lottery' ? dto.lotteryPrize : null,
+          lotteryWinnerCount: rewardMode === 'lottery' ? dto.lotteryWinnerCount : null,
+          lotteryDrawMode: rewardMode === 'lottery' ? dto.lotteryDrawMode : null,
+          lotteryDrawAt: rewardMode === 'lottery' && dto.lotteryDrawAt ? new Date(dto.lotteryDrawAt) : null,
+          lotteryTermsAcceptedAt: rewardMode === 'lottery' && dto.lotteryTermsAccepted ? new Date() : null,
           deadlineTier: tier,
           targetCount: dto.targetCount ?? 100,
           expiresAt,
@@ -92,6 +99,10 @@ export class SurveysService {
           coverImageUrl: dto.coverImageUrl,
           // 樣式主題
           theme: dto.theme,
+          // QUA-201: 排程發布 / 自動關閉（建立時可一併設定）
+          scheduledPublishAt: dto.scheduledPublishAt ? new Date(dto.scheduledPublishAt) : null,
+          autoCloseAt: dto.autoCloseAt ? new Date(dto.autoCloseAt) : null,
+          autoCloseAfterN: dto.autoCloseAfterN ?? null,
         })
         .returning();
 
@@ -148,6 +159,45 @@ export class SurveysService {
       .orderBy(desc(surveys.createdAt));
   }
 
+  /** 複製問卷為新草稿（含題目/選項；不含 skip-logic 與已收回覆） */
+  async duplicate(surveyId: string, surveyorId: string) {
+    const src = await this.findOneDetailed(surveyId, surveyorId); // 內含擁有者檢查
+    if (src.rewardMode === 'lottery') {
+      throw new BadRequestException('抽獎問卷不可直接複製，請建立新問卷並重新接受獎品履約條款');
+    }
+    const dto = {
+      title: `${src.title} (副本)`,
+      description: src.description ?? undefined,
+      type: src.type,
+      category: src.category ?? undefined,
+      aiReviewEnabled: src.aiReviewEnabled,
+      // 用 base（create 會依 deadlineTier 重新套加急倍率）
+      rewardPoints: src.baseRewardPoints ?? src.rewardPoints,
+      rewardMode: src.rewardMode ?? 'fixed',
+      lotteryPrize: src.lotteryPrize ?? undefined,
+      lotteryWinnerCount: src.lotteryWinnerCount ?? undefined,
+      lotteryDrawMode: src.lotteryDrawMode ?? undefined,
+      targetCount: src.targetCount,
+      deadlineTier: src.deadlineTier,
+      isAnonymous: src.isAnonymous,
+      questionShuffleMode: src.questionShuffleMode ?? undefined,
+      coverImageUrl: src.coverImageUrl ?? undefined,
+      theme: src.theme ?? undefined,
+      audienceCriteria: src.audienceCriteria ?? undefined,
+      questions: src.questions.map((q) => ({
+        type: q.type,
+        title: q.title,
+        description: q.description ?? undefined,
+        imageUrl: q.imageUrl ?? undefined,
+        sortOrder: q.sortOrder,
+        isRequired: q.isRequired,
+        config: (q.config ?? undefined) as Record<string, unknown> | undefined,
+        options: (q.options ?? []).map((o) => ({ label: o.label, sortOrder: o.sortOrder })),
+      })),
+    } as CreateSurveyDto;
+    return this.create(surveyorId, dto);
+  }
+
   async findOneDetailed(surveyId: string, requesterId?: string) {
     const rows = await this.db
       .select()
@@ -197,20 +247,75 @@ export class SurveysService {
   }
 
   async update(surveyId: string, surveyorId: string, dto: UpdateSurveyDto) {
-    await this.assertOwnerAndDraft(surveyId, surveyorId);
+    const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
 
     const { questions, logicRules, ...surveyFields } = dto;
     const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    const effectiveRewardMode = surveyFields.rewardMode ?? survey.rewardMode;
+    if (effectiveRewardMode === 'lottery') {
+      if (survey.type === 'mutual') throw new BadRequestException('互惠問卷不可設定抽獎回饋');
+      const lotteryPrize = surveyFields.lotteryPrize ?? survey.lotteryPrize;
+      const lotteryWinnerCount = surveyFields.lotteryWinnerCount ?? survey.lotteryWinnerCount;
+      const lotteryDrawMode = surveyFields.lotteryDrawMode ?? survey.lotteryDrawMode;
+      const lotteryDrawAt = surveyFields.lotteryDrawAt ? new Date(surveyFields.lotteryDrawAt) : survey.lotteryDrawAt;
+      const lotteryConfigChanged =
+        survey.rewardMode !== 'lottery'
+        || (surveyFields.lotteryPrize !== undefined && surveyFields.lotteryPrize !== survey.lotteryPrize)
+        || (surveyFields.lotteryWinnerCount !== undefined && surveyFields.lotteryWinnerCount !== survey.lotteryWinnerCount)
+        || (surveyFields.lotteryDrawMode !== undefined && surveyFields.lotteryDrawMode !== survey.lotteryDrawMode)
+        || (surveyFields.lotteryDrawAt !== undefined && lotteryDrawAt?.getTime() !== survey.lotteryDrawAt?.getTime());
+      if (!lotteryPrize) throw new BadRequestException('抽獎回饋必須填寫獎品名稱');
+      if (!lotteryWinnerCount) throw new BadRequestException('抽獎回饋必須設定中獎名額');
+      if (!lotteryDrawMode) throw new BadRequestException('抽獎回饋必須設定開獎方式');
+      if (lotteryDrawMode === 'scheduled' && !lotteryDrawAt) {
+        throw new BadRequestException('指定日期開獎必須設定開獎時間');
+      }
+      if (lotteryDrawMode === 'scheduled' && lotteryDrawAt && lotteryDrawAt.getTime() <= Date.now()) {
+        throw new BadRequestException('指定開獎時間必須晚於目前時間');
+      }
+      if (lotteryConfigChanged && surveyFields.lotteryTermsAccepted !== true) {
+        throw new BadRequestException('修改抽獎設定後必須重新接受獎品履約條款');
+      }
+      if (!survey.lotteryTermsAcceptedAt && surveyFields.lotteryTermsAccepted !== true) {
+        throw new BadRequestException('建立抽獎問卷前必須接受獎品履約條款');
+      }
+    }
 
     if (surveyFields.title !== undefined) updateData.title = surveyFields.title;
     if (surveyFields.description !== undefined) updateData.description = surveyFields.description;
     if (surveyFields.category !== undefined) updateData.category = surveyFields.category;
     if (surveyFields.aiReviewEnabled !== undefined) updateData.aiReviewEnabled = surveyFields.aiReviewEnabled;
-    if (surveyFields.rewardPoints !== undefined) updateData.rewardPoints = surveyFields.rewardPoints;
+    // 加急倍率：editor 送的 rewardPoints 為基準值，依 deadlineTier 套倍率算實際值（與 create 一致）
+    if (surveyFields.deadlineTier !== undefined) {
+      const tier = surveyFields.deadlineTier as DeadlineTier;
+      const base = surveyFields.rewardPoints ?? 0;
+      updateData.deadlineTier = tier;
+      updateData.baseRewardPoints = base;
+      updateData.rewardPoints = applyRushMultiplier(base, tier);
+      if (surveyFields.expiresAt === undefined) updateData.expiresAt = tierExpiresAt(tier);
+    } else if (surveyFields.rewardPoints !== undefined) {
+      updateData.rewardPoints = surveyFields.rewardPoints;
+    }
+    if (surveyFields.rewardMode !== undefined) updateData.rewardMode = surveyFields.rewardMode;
+    if (surveyFields.lotteryPrize !== undefined) updateData.lotteryPrize = surveyFields.lotteryPrize;
+    if (surveyFields.lotteryWinnerCount !== undefined) updateData.lotteryWinnerCount = surveyFields.lotteryWinnerCount;
+    if (surveyFields.lotteryDrawMode !== undefined) updateData.lotteryDrawMode = surveyFields.lotteryDrawMode;
+    if (surveyFields.lotteryDrawAt !== undefined) updateData.lotteryDrawAt = new Date(surveyFields.lotteryDrawAt);
+    if (effectiveRewardMode === 'lottery' && surveyFields.lotteryTermsAccepted) updateData.lotteryTermsAcceptedAt = new Date();
+    if (effectiveRewardMode === 'lottery') {
+      updateData.rewardPoints = 0;
+      updateData.baseRewardPoints = 0;
+    }
     if (surveyFields.targetCount !== undefined) updateData.targetCount = surveyFields.targetCount;
     if (surveyFields.expiresAt !== undefined) updateData.expiresAt = new Date(surveyFields.expiresAt);
     if (surveyFields.isAnonymous !== undefined) updateData.isAnonymous = surveyFields.isAnonymous;
     if (surveyFields.audienceCriteria !== undefined) updateData.audienceCriteria = surveyFields.audienceCriteria;
+    // QUA-201: 排程發布 / 自動關閉（空字串/缺省 → null 以便清除）
+    if (surveyFields.scheduledPublishAt !== undefined)
+      updateData.scheduledPublishAt = surveyFields.scheduledPublishAt ? new Date(surveyFields.scheduledPublishAt) : null;
+    if (surveyFields.autoCloseAt !== undefined)
+      updateData.autoCloseAt = surveyFields.autoCloseAt ? new Date(surveyFields.autoCloseAt) : null;
+    if (surveyFields.autoCloseAfterN !== undefined) updateData.autoCloseAfterN = surveyFields.autoCloseAfterN;
     // QUA-204: Allow updating question shuffle mode
     if (surveyFields.questionShuffleMode !== undefined) updateData.questionShuffleMode = surveyFields.questionShuffleMode;
     // QUA-279: Allow updating cover image
@@ -237,6 +342,9 @@ export class SurveysService {
 
   async publish(surveyId: string, surveyorId: string) {
     const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
+    if (survey.rewardMode === 'lottery' && !survey.lotteryTermsAcceptedAt) {
+      throw new BadRequestException('抽獎問卷發布前必須接受獎品履約條款');
+    }
 
     const questionCount = await this.db
       .select({ id: surveyQuestions.id })
@@ -299,7 +407,15 @@ export class SurveysService {
   }
 
   async remove(surveyId: string, surveyorId: string) {
-    await this.assertOwnerAndDraft(surveyId, surveyorId);
+    const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
+    const [lotteryResult] = await this.db
+      .select({ id: surveyLotteryResults.id })
+      .from(surveyLotteryResults)
+      .where(eq(surveyLotteryResults.surveyId, surveyId))
+      .limit(1);
+    if (survey.lotteryDrawnAt || lotteryResult) {
+      throw new BadRequestException('抽獎已開獎，平台須保留履約與稽核紀錄，不能刪除');
+    }
     await this.db.delete(surveys).where(eq(surveys.id, surveyId));
     return { message: '草稿已刪除' };
   }
@@ -695,7 +811,20 @@ export class SurveysService {
 
   private async assertOwnerAndDraft(surveyId: string, surveyorId: string) {
     const rows = await this.db
-      .select({ id: surveys.id, surveyorId: surveys.surveyorId, status: surveys.status, type: surveys.type, aiReviewEnabled: surveys.aiReviewEnabled })
+      .select({
+        id: surveys.id,
+        surveyorId: surveys.surveyorId,
+        status: surveys.status,
+        type: surveys.type,
+        aiReviewEnabled: surveys.aiReviewEnabled,
+        rewardMode: surveys.rewardMode,
+        lotteryDrawnAt: surveys.lotteryDrawnAt,
+        lotteryTermsAcceptedAt: surveys.lotteryTermsAcceptedAt,
+        lotteryPrize: surveys.lotteryPrize,
+        lotteryWinnerCount: surveys.lotteryWinnerCount,
+        lotteryDrawMode: surveys.lotteryDrawMode,
+        lotteryDrawAt: surveys.lotteryDrawAt,
+      })
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);

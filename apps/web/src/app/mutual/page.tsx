@@ -5,7 +5,7 @@ import { useMyMutualPairs, useMutualPoolStats, useMyMutualStats, type MutualPair
 
 const ACTION_LABEL: Record<MutualPair['nextAction'], { label: string; tone: string }> = {
   wait_match:      { label: '配對中', tone: 'bg-amber-100 text-amber-800 border-amber-200' },
-  fill_other:      { label: '輪到你填', tone: 'bg-primary/10 text-primary border-primary/30' },
+  fill_other:      { label: '輪到你填', tone: 'bg-primary/10 text-blue-700 border-primary/30' },
   wait_other_fill: { label: '等對方填', tone: 'bg-slate-100 text-slate-700 border-slate-200' },
   unlocked:        { label: '已解鎖', tone: 'bg-emerald-100 text-emerald-800 border-emerald-200' },
   expired_or_dead: { label: '結束', tone: 'bg-slate-100 text-slate-500 border-slate-200' },
@@ -45,7 +45,14 @@ export default function MutualPage() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
-        <div className="text-muted-foreground">載入中…</div>
+        <div className="space-y-3" aria-hidden>
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="animate-pulse rounded-xl border border-border bg-background p-4">
+              <div className="h-4 w-1/3 rounded bg-muted" />
+              <div className="mt-2 h-3 w-1/2 rounded bg-muted" />
+            </div>
+          ))}
+        </div>
       </main>
     );
   }

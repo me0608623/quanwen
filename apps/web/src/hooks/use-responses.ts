@@ -12,11 +12,21 @@ export interface AvailableSurvey {
   description?: string;
   category?: string | null;
   rewardPoints: number;
+  rewardMode?: 'fixed' | 'lottery';
+  lotteryPrize?: string | null;
+  lotteryWinnerCount?: number | null;
+  lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual' | null;
+  lotteryDrawAt?: string | null;
+  lotteryTermsAcceptedAt?: string | null;
   targetCount: number;
   completedCount: number;
   expiresAt?: string;
   isAnonymous: boolean;
   publishedAt?: string;
+  // QUA-34: 加急等級
+  deadlineTier?: 'standard' | 'express' | 'urgent' | 'critical';
+  // 題數（用於估算填答時間）
+  questionCount?: number;
   // QUA-279: 封面圖片
   coverImageUrl?: string;
 }
@@ -39,6 +49,12 @@ export interface PublicSurvey {
   title: string;
   description?: string;
   rewardPoints: number;
+  rewardMode?: 'fixed' | 'lottery';
+  lotteryPrize?: string | null;
+  lotteryWinnerCount?: number | null;
+  lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual' | null;
+  lotteryDrawAt?: string | null;
+  lotteryTermsAcceptedAt?: string | null;
   isAnonymous: boolean;
   theme?: SurveyTheme | null;
   alreadySubmitted: boolean;
@@ -59,6 +75,12 @@ export interface MyResponseRecord {
   submittedAt?: string;
   surveyTitle: string;
   rewardPoints: number;
+  rewardMode?: 'fixed' | 'lottery';
+  lotteryPrize?: string | null;
+  lotteryWinnerCount?: number | null;
+  lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual' | null;
+  lotteryDrawAt?: string | null;
+  lotteryDrawnAt?: string | null;
   qualityScore?: number | null;
   qualityBreakdown?: {
     finalScore: number;
@@ -67,6 +89,39 @@ export interface MyResponseRecord {
     llmReasoning?: string | null;
   } | null;
   suspiciousFlags?: string[] | null;
+}
+
+export interface LotteryWinning {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  prize: string;
+  drawnAt?: string | null;
+  fulfillmentDueAt?: string | null;
+  fulfillmentStatus: 'pending' | 'notified' | 'verified' | 'not_applicable';
+  fulfillmentNote?: string | null;
+  fulfilledAt?: string | null;
+  platformVerifiedAt?: string | null;
+  platformIntervenedAt?: string | null;
+  platformInterventionNote?: string | null;
+  platformInterventionHistory?: LotteryPlatformIntervention[];
+  recipientStatus: 'awaiting_delivery' | 'received' | 'issue_reported' | 'not_applicable';
+  recipientConfirmedAt?: string | null;
+  recipientIssueNote?: string | null;
+  recipientIssueReportedAt?: string | null;
+}
+
+export interface LotteryPlatformIntervention {
+  intervenedAt: string;
+  adminId: string;
+  reason: 'winner_issue' | 'fulfillment_overdue';
+  note: string;
+}
+
+export interface LotteryResult extends LotteryWinning {
+  isWinner: boolean;
+  participantCount: number;
+  drawAuditVerified: boolean | null;
 }
 
 // ─── Hooks ────────────────────────────────────────────────────────────────────
@@ -125,6 +180,56 @@ export function useMyResponses() {
       return data;
     },
     staleTime: 30_000,
+  });
+}
+
+export function useLotteryWinnings() {
+  return useQuery<LotteryWinning[]>({
+    queryKey: ['tasks', 'lottery-winnings'],
+    queryFn: async () => {
+      const { data } = await api.get<LotteryWinning[]>('/tasks/lottery-winnings');
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useLotteryResults() {
+  return useQuery<LotteryResult[]>({
+    queryKey: ['tasks', 'lottery-results'],
+    queryFn: async () => {
+      const { data } = await api.get<LotteryResult[]>('/tasks/lottery-results');
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
+export function useConfirmLotteryReceipt() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/tasks/lottery-winnings/${id}/confirm-receipt`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'lottery-winnings'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'lottery-results'] });
+    },
+  });
+}
+
+export function useReportLotteryIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, note }: { id: string; note: string }) => {
+      const { data } = await api.post(`/tasks/lottery-winnings/${id}/report-issue`, { note });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'lottery-winnings'] });
+      queryClient.invalidateQueries({ queryKey: ['tasks', 'lottery-results'] });
+    },
   });
 }
 

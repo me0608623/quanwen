@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type SidebarTab = 'questions' | 'styling' | 'settings';
+export type SidebarTab = 'questions' | 'styling' | 'rewards' | 'settings';
 
 interface SurveyEditorShellProps {
   /** Survey title displayed in the top bar (controlled) */
@@ -32,6 +32,7 @@ interface SurveyEditorShellProps {
   /** Content for each sidebar tab */
   questionsSidebar: ReactNode;
   stylingSidebar?: ReactNode;
+  rewardsSidebar?: ReactNode;
   settingsSidebar?: ReactNode;
 
   /** Main content area (center) */
@@ -61,6 +62,7 @@ export function SurveyEditorShell({
   onBack,
   questionsSidebar,
   stylingSidebar,
+  rewardsSidebar,
   settingsSidebar,
   children,
   previewPane,
@@ -77,6 +79,12 @@ export function SurveyEditorShell({
         return stylingSidebar ?? (
           <div className="p-4 text-sm text-muted-foreground">
             樣式選項即將推出。
+          </div>
+        );
+      case 'rewards':
+        return rewardsSidebar ?? (
+          <div className="p-4 text-sm text-muted-foreground">
+            獎勵設定即將推出。
           </div>
         );
       case 'settings':
@@ -112,6 +120,7 @@ export function SurveyEditorShell({
               type="text"
               value={surveyTitle}
               onChange={(e) => onTitleChange(e.target.value)}
+              maxLength={200}
               className="w-full max-w-sm truncate rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-semibold text-foreground hover:border-input focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
               placeholder="未命名問卷"
             />
@@ -184,6 +193,7 @@ export function SurveyEditorShell({
             {([
               { id: 'questions' as SidebarTab, label: '題目' },
               { id: 'styling' as SidebarTab, label: '樣式' },
+              { id: 'rewards' as SidebarTab, label: '獎勵' },
               { id: 'settings' as SidebarTab, label: '設定' },
             ]).map((tab) => (
               <button

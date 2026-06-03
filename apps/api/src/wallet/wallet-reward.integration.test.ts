@@ -151,6 +151,15 @@ describe('WalletService.issueReward (integration)', () => {
     return r?.cash ?? 0;
   }
 
+  async function pointsOf(userId: string) {
+    const [r] = await db
+      .select({ points: schema.wallets.pointsBalance })
+      .from(schema.wallets)
+      .where(eq(schema.wallets.userId, userId))
+      .limit(1);
+    return r?.points ?? 0;
+  }
+
   async function txnsByResponse(responseId: string) {
     return db
       .select()
@@ -297,5 +306,50 @@ describe('WalletService.issueReward (integration)', () => {
       .where(eq(schema.journalEntries.transactionId, feeTxn!.id));
     const platformRev = entries.find((e) => e.accountName === 'platform_revenue');
     expect(platformRev?.creditAmount).toBe(30);
+  });
+
+  it('6. 同一份填答重試發獎時不重複扣款或入帳', async () => {
+    const responseId = 'cccccccc-cccc-cccc-cccc-cccccccccc06';
+    await service.issueReward({
+      surveyId: SURVEY_ID,
+      responseId,
+      respondentId: RESPONDENT_ID,
+      surveyorId: SURVEYOR_ID,
+      rewardAmount: 120,
+    });
+    const surveyorAfterFirst = await cashOf(SURVEYOR_ID);
+    const respondentAfterFirst = await cashOf(RESPONDENT_ID);
+
+    await service.issueReward({
+      surveyId: SURVEY_ID,
+      responseId,
+      respondentId: RESPONDENT_ID,
+      surveyorId: SURVEYOR_ID,
+      rewardAmount: 120,
+    });
+
+    expect(await cashOf(SURVEYOR_ID)).toBe(surveyorAfterFirst);
+    expect(await cashOf(RESPONDENT_ID)).toBe(respondentAfterFirst);
+    expect(await txnsByResponse(responseId)).toHaveLength(3);
+  });
+
+  it('7. 同一份填答重試發積分時不重複入帳', async () => {
+    const responseId = 'cccccccc-cccc-cccc-cccc-cccccccccc07';
+    const before = await pointsOf(RESPONDENT_ID);
+    await service.issuePoints({
+      surveyId: SURVEY_ID,
+      responseId,
+      respondentId: RESPONDENT_ID,
+      pointsAmount: 75,
+    });
+    await service.issuePoints({
+      surveyId: SURVEY_ID,
+      responseId,
+      respondentId: RESPONDENT_ID,
+      pointsAmount: 75,
+    });
+
+    expect(await pointsOf(RESPONDENT_ID)).toBe(before + 75);
+    expect(await txnsByResponse(responseId)).toHaveLength(1);
   });
 });

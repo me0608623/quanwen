@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useNps, type NpsResult } from '@/hooks/use-analytics';
 import {
   PieChart,
@@ -141,6 +141,12 @@ export function NpsGauge({ data }: { data: NpsResult }) {
       <p className="text-right text-[10px] text-muted-foreground">
         共 {data.total} 份回應
       </p>
+      <p className="text-[10px] text-muted-foreground">
+        原始量尺 {data.scaleMin}-{data.scaleMax}
+        {data.normalizedToTenPointScale
+          ? '，已線性換算為 0-10 後套用 NPS 分類。'
+          : '，直接套用 NPS 分類。'}
+      </p>
     </div>
   );
 }
@@ -160,10 +166,10 @@ export function NpsSection({ questionStats, surveyId }: { questionStats: Questio
     [questionStats],
   );
 
-  // Show NPS for the first rating question found (could be extended to show all)
-  const firstRating = ratingQuestions[0];
+  const [selectedQuestionId, setSelectedQuestionId] = useState('');
+  const selectedRating = ratingQuestions.find((question) => question.questionId === selectedQuestionId);
 
-  const { data, isLoading, error } = useNps(surveyId, firstRating?.questionId, !!firstRating);
+  const { data, isLoading, error } = useNps(surveyId, selectedRating?.questionId, !!selectedRating);
 
   if (ratingQuestions.length === 0) {
     return null;
@@ -174,8 +180,22 @@ export function NpsSection({ questionStats, surveyId }: { questionStats: Questio
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         NPS 淨推薦值
       </h2>
-      <p className="text-sm font-medium">{firstRating?.title}</p>
+      <p className="text-xs text-muted-foreground">
+        請選擇「推薦意願」評分題；一般滿意度題不等同 NPS。
+      </p>
+      <select
+        value={selectedRating?.questionId ?? ''}
+        onChange={(event) => setSelectedQuestionId(event.target.value)}
+        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+        aria-label="NPS 推薦意願題"
+      >
+        <option value="">請選擇推薦意願題</option>
+        {ratingQuestions.map((question) => (
+          <option key={question.questionId} value={question.questionId}>{question.title}</option>
+        ))}
+      </select>
 
+      {!selectedRating && <p className="text-xs font-semibold text-amber-700">選定推薦意願題後才會計算 NPS，避免將一般滿意度誤當成推薦值。</p>}
       {isLoading && <div className="h-24 animate-pulse rounded bg-muted" />}
       {error && <p className="text-xs text-red-600">NPS 計算失敗</p>}
       {data && !isLoading && <NpsGauge data={data} />}

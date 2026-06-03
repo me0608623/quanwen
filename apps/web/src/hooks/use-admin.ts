@@ -37,6 +37,48 @@ export interface AdminSurvey {
   questionCount: number;
 }
 
+export interface LotteryObligation {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  surveyorId: string;
+  respondentId: string;
+  prize: string;
+  fulfillmentStatus: 'pending' | 'notified' | 'verified';
+  fulfillmentNote: string | null;
+  fulfilledAt: string | null;
+  fulfillmentNotifiedAt: string | null;
+  platformVerifiedAt: string | null;
+  platformNote: string | null;
+  platformVerifiedNotifiedAt: string | null;
+  platformIntervenedAt: string | null;
+  platformInterventionNote: string | null;
+  platformInterventionNotifiedAt: string | null;
+  platformInterventionHistory: LotteryPlatformIntervention[];
+  recipientStatus: 'awaiting_delivery' | 'received' | 'issue_reported';
+  recipientConfirmedAt: string | null;
+  recipientConfirmedNotifiedAt: string | null;
+  recipientIssueNote: string | null;
+  recipientIssueReportedAt: string | null;
+  recipientIssueNotifiedAt: string | null;
+  drawNotifiedAt: string | null;
+  drawnAt: string;
+  lotteryTermsAcceptedAt: string | null;
+  creatorObligationNotifiedAt: string | null;
+  drawSeed: string | null;
+  eligibleDigest: string | null;
+  drawAuditVerified: boolean | null;
+  fulfillmentDueAt: string;
+  isOverdue: boolean;
+}
+
+export interface LotteryPlatformIntervention {
+  intervenedAt: string;
+  adminId: string;
+  reason: 'winner_issue' | 'fulfillment_overdue';
+  note: string;
+}
+
 export interface SuspiciousResponse {
   id: string;
   surveyId: string;
@@ -175,6 +217,44 @@ export function useCloseSurvey() {
   });
 }
 
+export function useLotteryObligations() {
+  return useQuery<LotteryObligation[]>({
+    queryKey: ['admin', 'lottery-obligations'],
+    queryFn: async () => {
+      const { data } = await api.get<LotteryObligation[]>('/admin/lottery-obligations');
+      return data;
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useVerifyLotteryFulfillment() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, adminNote }: { id: string; adminNote?: string }) => {
+      const { data } = await api.post(`/admin/lottery-obligations/${id}/verify`, { adminNote });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'lottery-obligations'] });
+    },
+  });
+}
+
+export function useInterveneLotteryIssue() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, adminNote }: { id: string; adminNote: string }) => {
+      const { data } = await api.post(`/admin/lottery-obligations/${id}/intervene`, { adminNote });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'lottery-obligations'] });
+    },
+  });
+}
+
 export function useSuspiciousResponses() {
   return useQuery<SuspiciousResponse[]>({
     queryKey: ['admin', 'responses', 'suspicious'],
@@ -191,6 +271,32 @@ export function useRejectResponse() {
   return useMutation({
     mutationFn: async (id: string) => {
       await api.post(`/admin/responses/${id}/reject`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'responses'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+    },
+  });
+}
+
+export function useApproveResponse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/admin/responses/${id}/approve`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'responses'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+    },
+  });
+}
+
+export function useReAuditResponse() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => {
+      await api.post(`/admin/responses/${id}/re-audit`);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'responses'] });
@@ -263,6 +369,8 @@ export interface AdminAppealRow {
   qualityScore: number | null;
   surveyTitle: string;
   rewardPoints: number;
+  rewardMode: 'fixed' | 'lottery';
+  lotteryPrize: string | null;
 }
 
 export function useAdminAppeals(status: 'pending' | 'approved' | 'dismissed' = 'pending') {

@@ -5,6 +5,7 @@ import { DB } from '../db';
 import type { AppDb } from '../db';
 import { surveys, users } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
+import { WalletService } from '../wallet/wallet.service';
 
 /**
  * QUA-201: Scheduled publish and auto-close for surveys.
@@ -21,6 +22,7 @@ export class SurveySchedulerService {
   constructor(
     @Inject(DB) private readonly db: AppDb,
     private readonly notifications: NotificationsService,
+    private readonly wallet: WalletService,
   ) {}
 
   // ─── Scheduled publish: every minute ─────────────────────────────────────
@@ -34,6 +36,9 @@ export class SurveySchedulerService {
         id: surveys.id,
         surveyorId: surveys.surveyorId,
         title: surveys.title,
+        type: surveys.type,
+        rewardMode: surveys.rewardMode,
+        lotteryTermsAcceptedAt: surveys.lotteryTermsAcceptedAt,
       })
       .from(surveys)
       .where(
@@ -49,6 +54,24 @@ export class SurveySchedulerService {
     this.logger.log(`Publishing ${due.length} scheduled survey(s)`);
 
     for (const s of due) {
+      if (s.rewardMode === 'lottery' && !s.lotteryTermsAcceptedAt) {
+        await this.db
+          .update(surveys)
+          .set({ scheduledPublishAt: null, updatedAt: now })
+          .where(eq(surveys.id, s.id));
+        try {
+          await this.notifications.create({
+            userId: s.surveyorId,
+            type: 'system',
+            title: `「${s.title}」抽獎問卷未自動發布`,
+            body: '請回到問卷設定重新確認獎品、開獎方式，並接受獎品履約條款後再發布。',
+            metadata: { surveyId: s.id, lottery: true, termsAcceptanceRequired: true },
+          });
+        } catch (err) {
+          this.logger.warn(`Failed to notify lottery terms requirement for survey ${s.id}: ${err}`);
+        }
+        continue;
+      }
       await this.db
         .update(surveys)
         .set({
@@ -57,6 +80,14 @@ export class SurveySchedulerService {
           updatedAt: now,
         })
         .where(eq(surveys.id, s.id));
+
+      // 與手動 publish() 一致：標準（付費取樣）問卷需鎖定預算；mutual 不鎖。
+      // 先前排程自動發布漏鎖，導致排程上架的問卷獎勵無資金保留。
+      if (s.type !== 'mutual') {
+        this.wallet.lockSurveyBudget(s.surveyorId, s.id).catch((err) =>
+          this.logger.error(`排程發布預算鎖定失敗 surveyId=${s.id}`, err),
+        );
+      }
 
       this.logger.log(`Auto-published survey ${s.id} (${s.title})`);
     }

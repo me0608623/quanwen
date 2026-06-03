@@ -138,7 +138,7 @@ export function AiDraftPanel({ onApply }: AiDraftPanelProps) {
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm font-medium text-primary hover:bg-primary/20"
+        className="flex items-center gap-1.5 rounded-md border border-primary/50 bg-primary/10 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-primary/20"
       >
         ✨ AI 草稿生成
       </button>

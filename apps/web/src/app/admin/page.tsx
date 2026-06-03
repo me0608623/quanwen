@@ -33,6 +33,7 @@ export default function AdminOverviewPage() {
           <a href="/admin/withdrawals" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">提領審核</a>
           <a href="/admin/appeals" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">申訴管理</a>
           <a href="/admin/kyc" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">KYC 審核</a>
+          <a href="/admin/lottery" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">抽獎履約</a>
         </section>
       </main>
     );
@@ -140,6 +141,12 @@ export default function AdminOverviewPage() {
           className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
         >
           KYC 審核
+        </a>
+        <a
+          href="/admin/lottery"
+          className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-800 hover:bg-amber-100"
+        >
+          抽獎履約
         </a>
       </section>
     </main>

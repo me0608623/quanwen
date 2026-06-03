@@ -606,3 +606,8 @@ docker compose -f docker-compose.hub.yml down
 | API 啟動後 crash | `.env` 缺少必要變數 | 確認 `JWT_SECRET` 和 `PII_ENCRYPTION_KEY` 已設定 |
 | `port is already allocated` | 端口被佔用 | `sudo lsof -i :3000` 找出佔用程序並 kill |
 | Postgres unhealthy | 容器啟動太慢 | 等待 30 秒後再試 `docker compose ps` |
+
+## 本地測試帳號（dev only）
+
+- `user1@quanwen.com` / 密碼 `000` — 用於登入 `/dashboard/*` 驗證 UI。
+- 僅限本地 docker dev 環境；勿用於生產。

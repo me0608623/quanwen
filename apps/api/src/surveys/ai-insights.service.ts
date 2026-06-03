@@ -61,6 +61,7 @@ interface QuestionStatInput {
   totalAnswers: number;
   optionCounts?: Array<{ label: string; count: number }>;
   averageRating?: number | null;
+  ratingMax?: number;
   sampleTexts?: Array<string | null>;
 }
 
@@ -377,7 +378,7 @@ export class AiInsightsService {
         });
       }
       if (typeof q.averageRating === 'number') {
-        lines.push(`  平均分數：${q.averageRating.toFixed(2)} / 5`);
+        lines.push(`  平均分數：${q.averageRating.toFixed(2)} / ${q.ratingMax ?? 5}`);
       }
       if (q.sampleTexts && q.sampleTexts.length > 0) {
         lines.push('  文字回答樣本：');
@@ -502,8 +503,8 @@ export class AiInsightsService {
       }
       // 評分題：平均分
       if (typeof q.averageRating === 'number') {
-        findings.push(`「${q.title}」平均分 ${q.averageRating.toFixed(1)} / 5`);
-        qInsight = `平均分 ${q.averageRating.toFixed(1)} / 5（${q.totalAnswers} 人評分）`;
+        findings.push(`「${q.title}」平均分 ${q.averageRating.toFixed(1)} / ${q.ratingMax ?? 5}`);
+        qInsight = `平均分 ${q.averageRating.toFixed(1)} / ${q.ratingMax ?? 5}（${q.totalAnswers} 人評分）`;
       }
       // 文字題：列出第一個有效回答
       if (q.sampleTexts && q.sampleTexts.length > 0) {

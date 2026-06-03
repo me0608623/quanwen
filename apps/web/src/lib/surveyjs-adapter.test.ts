@@ -118,6 +118,20 @@ describe('quanswenToSurveyJs', () => {
     expect(model.pages[0].elements[0].rateMax).toBe(5);
   });
 
+  it('converts a zero-based rating scale', () => {
+    const q: PublicQuestion = {
+      id: 'q-zero',
+      type: 'rating',
+      title: 'Rate from zero',
+      sortOrder: 0,
+      isRequired: true,
+      config: { maxRating: 5, scaleStart: 0 },
+      options: [],
+    };
+    const model = quanswenToSurveyJs({ questions: [q] });
+    expect(model.pages[0].elements[0].rateMin).toBe(0);
+  });
+
   it('converts matrix question', () => {
     const q: PublicQuestion = {
       id: 'q6',

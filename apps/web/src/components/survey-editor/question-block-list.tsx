@@ -14,6 +14,8 @@ interface QuestionBlockListProps {
   onReorder: (questions: SurveyQuestion[]) => void;
   onDelete: (index: number) => void;
   onAdd: (type: QuestionType) => void;
+  /** Optional: callback to duplicate a question */
+  onDuplicate?: (index: number) => void;
   /** Optional: currently selected question index */
   selectedIndex?: number;
   /** Optional: callback when a question is clicked */
@@ -48,6 +50,7 @@ export function QuestionBlockList({
   onReorder,
   onDelete,
   onAdd,
+  onDuplicate,
   selectedIndex,
   onSelect,
 }: QuestionBlockListProps) {
@@ -155,7 +158,7 @@ export function QuestionBlockList({
               )}
 
               {/* Question number + type icon */}
-              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+              <span className="shrink-0 rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-medium text-slate-600">
                 Q{index + 1}
               </span>
 
@@ -167,6 +170,24 @@ export function QuestionBlockList({
               {/* Required badge */}
               {q.isRequired && (
                 <span className="text-[10px] text-red-400">*</span>
+              )}
+
+              {/* Duplicate button (shown on hover or focus) */}
+              {canEdit && onDuplicate && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDuplicate(index);
+                  }}
+                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                  aria-label={`複製第 ${index + 1} 題`}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="9" width="13" height="13" rx="2" />
+                    <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                  </svg>
+                </button>
               )}
 
               {/* Delete button (shown on hover or focus) */}

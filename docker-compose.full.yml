@@ -23,6 +23,7 @@ services:
       REDIS_URL: redis://redis:6379
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
       PII_ENCRYPTION_KEY: ${PII_ENCRYPTION_KEY:-change-me-in-production}
+      PII_KDF_SALT: ${PII_KDF_SALT:-}
       WEB_URL: ${WEB_URL:-http://localhost:3000}
       # 以下需在 .env 設定才能啟用對應功能
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
@@ -37,6 +38,8 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       ZAI_API_KEY: ${ZAI_API_KEY:-}
+      ZAI_BASE_URL: ${ZAI_BASE_URL:-}
+      ZAI_MODEL: ${ZAI_MODEL:-glm-5.1}
       SENTRY_DSN: ${SENTRY_DSN:-}
     ports:
       - '3001:3001'
@@ -57,6 +60,10 @@ services:
     environment:
       NODE_ENV: production
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001/api/v1}
+      # 對外站台 URL（metadataBase / OG 絕對 URL 解析用）；正式部署請設為實際網域
+      NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3000}
+      # 伺服器端(SSR/generateMetadata)用的內部 API URL（docker 服務名）；瀏覽器仍用 NEXT_PUBLIC_API_URL
+      INTERNAL_API_URL: ${INTERNAL_API_URL:-http://api:3001/api/v1}
       NEXT_PUBLIC_POSTHOG_KEY: ${NEXT_PUBLIC_POSTHOG_KEY:-}
       NEXT_PUBLIC_SENTRY_DSN: ${NEXT_PUBLIC_SENTRY_DSN:-}
     ports:

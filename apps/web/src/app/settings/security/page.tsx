@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMe, useSecurityInfo, useChangeEmail, useSetPassword, useChangePassword, useSendVerificationEmail } from '@/hooks/use-auth';
 import { extractApiError } from '@/lib/extract-error';
+import { passwordStrength } from '@/lib/password-strength';
 
 function SectionCard({ title, description, children }: {
   title: string;
@@ -111,7 +112,7 @@ export default function SecurityPage() {
   if (isLoading) return <div className="py-10 text-sm text-muted-foreground">載入中...</div>;
 
   return (
-    <div className="space-y-6">
+    <main className="space-y-6">
       {toast && <Toast message={toast} onClose={() => setToast(null)} />}
 
       <h1 className="text-xl font-bold">帳號安全</h1>
@@ -158,6 +159,7 @@ export default function SecurityPage() {
             value={emailInput}
             onChange={(e) => setEmailInput(e.target.value)}
             placeholder={isPlaceholderEmail ? '輸入你的電子郵件' : '輸入新的電子郵件'}
+            aria-label="電子郵件"
             required
             className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
           />
@@ -186,6 +188,7 @@ export default function SecurityPage() {
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 required
                 placeholder="輸入目前密碼"
+                aria-label="目前密碼"
                 className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -198,11 +201,29 @@ export default function SecurityPage() {
                 required
                 placeholder="至少 8 碼，含大寫字母及數字"
                 minLength={8}
+                aria-label="新密碼"
                 className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {pwTooShort && <p className="mt-1 text-xs text-destructive">密碼至少 8 個字元</p>}
               {!pwTooShort && pwNoUppercase && <p className="mt-1 text-xs text-destructive">需包含至少一個大寫字母</p>}
               {!pwTooShort && !pwNoUppercase && pwNoDigit && <p className="mt-1 text-xs text-destructive">需包含至少一個數字</p>}
+              {newPassword.length > 0 && (() => {
+                const st = passwordStrength(newPassword);
+                const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-lime-500', 'bg-emerald-500'];
+                return (
+                  <div className="mt-2">
+                    <div className="flex gap-1">
+                      {[0, 1, 2, 3].map((i) => (
+                        <span
+                          key={i}
+                          className={`h-1 flex-1 rounded-full ${i <= st.score - 1 ? colors[st.score] : 'bg-muted'}`}
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">強度：{st.label}</p>
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">確認新密碼</label>
@@ -212,6 +233,7 @@ export default function SecurityPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 required
                 placeholder="再輸入一次"
+                aria-label="確認新密碼"
                 className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -224,7 +246,7 @@ export default function SecurityPage() {
             </button>
             <p className="text-xs text-muted-foreground">
               忘記目前密碼？
-              <Link href="/auth/forgot-password" className="ml-1 text-primary hover:underline">
+              <Link href="/auth/forgot-password" className="ml-1 text-primary underline">
                 重設密碼
               </Link>
             </p>
@@ -251,11 +273,29 @@ export default function SecurityPage() {
                 placeholder="至少 8 碼，含大寫字母及數字"
                 minLength={8}
                 disabled={isPlaceholderEmail || setPassword.isPending}
+                aria-label="新密碼"
                 className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
               {pwTooShort && <p className="mt-1 text-xs text-destructive">密碼至少 8 個字元</p>}
               {!pwTooShort && pwNoUppercase && <p className="mt-1 text-xs text-destructive">需包含至少一個大寫字母</p>}
               {!pwTooShort && !pwNoUppercase && pwNoDigit && <p className="mt-1 text-xs text-destructive">需包含至少一個數字</p>}
+              {newPassword.length > 0 && (() => {
+                const st = passwordStrength(newPassword);
+                const colors = ['bg-red-500', 'bg-orange-500', 'bg-yellow-500', 'bg-lime-500', 'bg-emerald-500'];
+                return (
+                  <div className="mt-2">
+                    <div className="flex gap-1">
+                      {[0, 1, 2, 3].map((i) => (
+                        <span
+                          key={i}
+                          className={`h-1 flex-1 rounded-full ${i <= st.score - 1 ? colors[st.score] : 'bg-muted'}`}
+                        />
+                      ))}
+                    </div>
+                    <p className="mt-1 text-[11px] text-muted-foreground">強度：{st.label}</p>
+                  </div>
+                );
+              })()}
             </div>
             <div>
               <label className="block text-sm font-medium mb-1">確認密碼</label>
@@ -266,6 +306,7 @@ export default function SecurityPage() {
                 required
                 placeholder="再輸入一次"
                 disabled={isPlaceholderEmail || setPassword.isPending}
+                aria-label="確認密碼"
                 className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
             </div>
@@ -297,6 +338,6 @@ export default function SecurityPage() {
           ))}
         </div>
       </SectionCard>
-    </div>
+    </main>
   );
 }

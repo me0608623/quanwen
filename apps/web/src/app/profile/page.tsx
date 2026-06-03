@@ -1,13 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useMe, useUpdateProfile, isPlaceholderEmail } from '@/hooks/use-auth';
 import { useMyProfile } from '@/hooks/use-profile';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useEscapeKey } from '@/components/ui/use-escape-key';
+import { useLockBodyScroll } from '@/components/ui/use-lock-body-scroll';
+import { useFocusTrap } from '@/components/ui/use-focus-trap';
 import { useMyResponses, useMyAppeals, useCreateAppeal, useMyReputationHistory } from '@/hooks/use-responses';
 import type { RespondentProfile } from '@/hooks/use-profile';
+import { profileCompleteness } from '@/lib/profile-completeness';
 import { ReputationTrend } from '@/components/profile/reputation-trend';
 import {
   AGE_RANGE_LABELS,
@@ -20,7 +25,7 @@ import {
 const REPUTATION_LEVELS = [
   { min: 90, label: '優質受試者', color: 'text-green-600', bg: 'bg-green-100' },
   { min: 70, label: '良好', color: 'text-blue-600', bg: 'bg-blue-100' },
-  { min: 50, label: '一般', color: 'text-yellow-600', bg: 'bg-yellow-100' },
+  { min: 50, label: '一般', color: 'text-yellow-800', bg: 'bg-yellow-100' },
   { min: 0,  label: '待改進', color: 'text-orange-600', bg: 'bg-orange-100' },
 ] as const;
 
@@ -31,14 +36,19 @@ function getReputationLevel(score: number) {
 export default function ProfilePage() {
   const router = useRouter();
   const { data: me } = useMe();
-  const { data: profile, isLoading, isError } = useMyProfile();
+  const { data: profile, isLoading, isError, refetch } = useMyProfile();
   const { data: history = [] } = useMyResponses();
   const updateProfile = useUpdateProfile();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
 
-  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
-  if (isError) return <div className="p-10 text-sm text-destructive">載入失敗，請重新整理頁面。</div>;
+  if (isLoading) return <LoadingSpinner />;
+  if (isError) return (
+    <div className="p-10 text-center">
+      <p className="text-sm text-destructive">載入失敗。</p>
+      <button onClick={() => refetch()} className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10">重試</button>
+    </div>
+  );
 
   const handleNameSave = async () => {
     if (!nameInput.trim()) return;
@@ -215,6 +225,34 @@ export default function ProfilePage() {
               編輯
             </button>
           </div>
+          {/* 完整度條僅對受試者 profile 顯示（發問卷者無受眾欄位，避免誤導 0%） */}
+          {rp && 'reputationScore' in rp && (() => {
+            const c = profileCompleteness(rp);
+            return (
+              <div className="rounded-md bg-muted/30 p-3">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-foreground">資料完整度</span>
+                  <span className={c.percent === 100 ? 'font-semibold text-emerald-600' : 'font-semibold text-[#126b8a]'}>
+                    {c.percent}%（{c.filled}/{c.total}）
+                  </span>
+                </div>
+                <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-muted">
+                  <div
+                    className={`h-full rounded-full transition-all ${c.percent === 100 ? 'bg-emerald-500' : 'bg-[#126b8a]'}`}
+                    style={{ width: `${c.percent}%` }}
+                  />
+                </div>
+                {c.percent < 100 && (
+                  <p className="mt-1.5 text-[11px] text-muted-foreground">
+                    填越完整，越容易被媒合到問卷、接收更多任務。
+                    <button onClick={() => router.push('/profile/edit')} className="ml-1 font-semibold text-[#126b8a] hover:underline">
+                      去完善 →
+                    </button>
+                  </p>
+                )}
+              </div>
+            );
+          })()}
           <div className="grid grid-cols-2 gap-y-2 text-sm">
             {rp.ageRange && <Item label="年齡" value={AGE_RANGE_LABELS[rp.ageRange] ?? rp.ageRange} />}
             {rp.gender && <Item label="性別" value={GENDER_LABELS[rp.gender] ?? rp.gender} />}
@@ -292,6 +330,11 @@ function MyQualitySection({
   const createAppeal = useCreateAppeal();
   const [appealTarget, setAppealTarget] = useState<{ responseId: string; surveyTitle: string } | null>(null);
   const [appealReason, setAppealReason] = useState('');
+  const closeAppeal = () => { setAppealTarget(null); setAppealReason(''); };
+  const appealRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(closeAppeal, !!appealTarget);
+  useLockBodyScroll(!!appealTarget);
+  useFocusTrap(appealRef, !!appealTarget);
   const appealedIds = new Set(appeals.map((a) => a.responseId));
 
   const submitAppeal = async () => {
@@ -426,8 +469,8 @@ function MyQualitySection({
 
       {/* 申訴對話框 */}
       {appealTarget && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeAppeal}>
+          <div ref={appealRef} role="dialog" aria-modal="true" aria-label="提出申訴" onClick={(e) => e.stopPropagation()} className="w-full max-w-md rounded-xl bg-white p-5 shadow-xl">
             <h3 className="text-base font-bold text-slate-900">提出申訴</h3>
             <p className="mt-1 text-xs text-slate-500 truncate">{appealTarget.surveyTitle}</p>
             <textarea
@@ -436,12 +479,13 @@ function MyQualitySection({
               placeholder="請說明為何認為此筆填答不應被退件（至少 5 字）"
               rows={4}
               maxLength={2000}
+              autoFocus
               className="mt-3 w-full resize-none rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             <p className="mt-1 text-[10px] text-slate-400">提交後管理員會審核，若通過會補發獎勵且信譽分 +5</p>
             <div className="mt-3 flex justify-end gap-2">
               <button
-                onClick={() => { setAppealTarget(null); setAppealReason(''); }}
+                onClick={closeAppeal}
                 className="rounded border border-slate-300 px-3 py-1.5 text-xs text-slate-600 hover:bg-slate-50"
               >
                 取消

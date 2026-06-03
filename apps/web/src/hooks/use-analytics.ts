@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
@@ -32,6 +32,34 @@ export interface NpsResult {
   detractors: number;
   total: number;
   nps: number | null;
+  scaleMin: number;
+  scaleMax: number;
+  normalizedToTenPointScale: boolean;
+}
+
+export interface ScaleReliabilityResult {
+  itemCount: number;
+  completeResponseCount: number;
+  excludedIncompleteResponseCount: number;
+  normalizedToCommonScale: boolean;
+  cronbachAlpha: number | null;
+  interpretation: string;
+  availableItems: Array<{
+    questionId: string;
+    title: string;
+    reverseScored: boolean;
+    selectedForScale: boolean;
+  }>;
+  items: Array<{
+    questionId: string;
+    title: string;
+    mean: number | null;
+    rawMean: number | null;
+    reverseScored: boolean;
+    selectedForScale: boolean;
+    correctedItemTotalCorrelation: number | null;
+    alphaIfDeleted: number | null;
+  }>;
 }
 
 // ─── Hooks ──────────────────────────────────────────────────────────────────
@@ -46,6 +74,36 @@ export function useDescriptiveStats(surveyId: string, questionId?: string, enabl
     },
     enabled: enabled && !!surveyId,
     staleTime: 60_000,
+  });
+}
+
+export function useScaleReliability(surveyId: string, questionIds?: string[], reverseQuestionIds?: string[], enabled = true) {
+  return useQuery<ScaleReliabilityResult>({
+    queryKey: ['analytics', surveyId, 'scale-reliability', questionIds, reverseQuestionIds],
+    queryFn: async () => {
+      const { data } = await api.get(`/surveys/${surveyId}/analytics/scale-reliability`, {
+        params: {
+          ...(questionIds?.length ? { questionIds: questionIds.join(',') } : {}),
+          ...(reverseQuestionIds ? { reverseQuestionIds: reverseQuestionIds.join(',') } : {}),
+        },
+      });
+      return data;
+    },
+    enabled: enabled && !!surveyId,
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveScaleSettings(surveyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ questionIds, reverseQuestionIds }: { questionIds: string[]; reverseQuestionIds: string[] }) => {
+      const { data } = await api.patch(`/surveys/${surveyId}/analytics/scale-settings`, { questionIds, reverseQuestionIds });
+      return data as ScaleReliabilityResult;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['analytics', surveyId, 'scale-reliability'] });
+    },
   });
 }
 
@@ -78,11 +136,20 @@ export interface CorrelationResult {
 
 export interface SegmentationResult {
   segments: {
+    segmentId: string;
     label: string;
     count: number;
-    avgRatings: Record<string, { questionTitle: string; avg: number }>;
+    avgRatings: Record<string, {
+      questionTitle: string;
+      avg: number | null;
+      scaleMin: number;
+      scaleMax: number;
+      relativeAvg: number | null;
+      answeredCount: number;
+    }>;
   }[];
   totalRespondents: number;
+  normalizedToCommonScale: boolean;
 }
 
 export function useNps(surveyId: string, questionId?: string, enabled = true) {

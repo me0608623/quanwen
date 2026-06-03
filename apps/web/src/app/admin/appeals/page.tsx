@@ -74,7 +74,9 @@ export default function AdminAppealsPage() {
                 <p className="text-xs text-muted-foreground">
                   申訴於 {new Date(a.createdAt).toLocaleString('zh-TW')}
                   {a.qualityScore != null && ` · 品質分 ${a.qualityScore}`}
-                  {' · 獎勵 NT$'}{a.rewardPoints}
+                  {a.rewardMode === 'lottery'
+                    ? ` · 抽獎：${a.lotteryPrize ?? '未命名獎品'}`
+                    : ` · 獎勵 NT$${a.rewardPoints}`}
                 </p>
               </div>
               <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-bold ${
@@ -110,7 +112,9 @@ export default function AdminAppealsPage() {
                   onClick={() => { setTarget({ row: a, action: 'approve' }); setNote(''); }}
                   className="rounded bg-green-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-green-700"
                 >
-                  ✓ 通過（補發獎勵 + 信譽分 +5）
+                  {a.rewardMode === 'lottery'
+                    ? '✓ 通過（恢復抽獎資格 + 信譽分 +5）'
+                    : '✓ 通過（補發獎勵 + 信譽分 +5）'}
                 </button>
               </div>
             )}
@@ -134,7 +138,11 @@ export default function AdminAppealsPage() {
               className="mt-3 w-full resize-none rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
             {target.action === 'approve' && (
-              <p className="mt-1 text-[10px] text-slate-400">通過後會自動補發獎勵、加 5 點信譽分、改判 response 為 rewarded</p>
+              <p className="mt-1 text-[10px] text-slate-400">
+                {target.row.rewardMode === 'lottery'
+                  ? '通過後會恢復抽獎資格、加 5 點信譽分，且不補發固定現金獎勵'
+                  : '通過後會自動補發獎勵、加 5 點信譽分、改判 response 為 rewarded'}
+              </p>
             )}
             <div className="mt-3 flex justify-end gap-2">
               <button

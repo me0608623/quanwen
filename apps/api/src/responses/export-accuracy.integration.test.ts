@@ -25,6 +25,8 @@ const RESPONDENT_2 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb02';
 const SURVEY_ID = 'cccccccc-cccc-cccc-cccc-cccccccccc00';
 const Q_TEXT = 'dddddddd-dddd-dddd-dddd-dddddddddd01';
 const Q_CHOICE = 'dddddddd-dddd-dddd-dddd-dddddddddd02';
+const Q_OPTIONAL_TEXT = 'dddddddd-dddd-dddd-dddd-dddddddddd03';
+const Q_YES_NO = 'dddddddd-dddd-dddd-dddd-dddddddddd04';
 const OPT_YES = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee01';
 const OPT_NO = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee02';
 const RESP_1 = 'ffffffff-ffff-ffff-ffff-fffffffffff1';
@@ -48,10 +50,12 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
       INSERT INTO surveys (id, surveyor_id, title, status, reward_points, target_count, published_at)
       VALUES ('${SURVEY_ID}', '${SURVEYOR_ID}', 'Export Test Survey', 'published', 50, 10, NOW());
 
-      INSERT INTO survey_questions (id, survey_id, type, title, sort_order)
+      INSERT INTO survey_questions (id, survey_id, type, title, sort_order, config)
       VALUES
-        ('${Q_TEXT}',   '${SURVEY_ID}', 'text',          '開放題', 0),
-        ('${Q_CHOICE}', '${SURVEY_ID}', 'single_choice', '選擇題', 1);
+        ('${Q_TEXT}',   '${SURVEY_ID}', 'text',          '開放題', 0, NULL),
+        ('${Q_CHOICE}', '${SURVEY_ID}', 'single_choice', '選擇題', 1, NULL),
+        ('${Q_OPTIONAL_TEXT}', '${SURVEY_ID}', 'text', '空白選填題', 2, NULL),
+        ('${Q_YES_NO}', '${SURVEY_ID}', 'single_choice', '是否推薦', 3, '{"variant":"yes_no"}');
 
       INSERT INTO question_options (id, question_id, label, sort_order)
       VALUES
@@ -77,6 +81,16 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
 
       INSERT INTO response_answers (response_id, question_id, survey_id, selected_option_ids)
       VALUES ('${RESP_2}', '${Q_CHOICE}', '${SURVEY_ID}', '["${OPT_NO}"]');
+
+      INSERT INTO response_answers (response_id, question_id, survey_id)
+      VALUES
+        ('${RESP_1}', '${Q_OPTIONAL_TEXT}', '${SURVEY_ID}'),
+        ('${RESP_2}', '${Q_OPTIONAL_TEXT}', '${SURVEY_ID}');
+
+      INSERT INTO response_answers (response_id, question_id, survey_id, selected_option_ids)
+      VALUES
+        ('${RESP_1}', '${Q_YES_NO}', '${SURVEY_ID}', '["yes"]'),
+        ('${RESP_2}', '${Q_YES_NO}', '${SURVEY_ID}', '["no"]');
     `);
 
     db = drizzle(client, { schema });
@@ -152,6 +166,36 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
     expect(rows).toHaveLength(1);
   });
 
+  it('ODS export includes all submitted/rewarded responses', async () => {
+    const buf = await (service as unknown as {
+      generateResponsesOds: (
+        surveyId: string,
+        surveyorId: string,
+        options?: { cleanOnly?: boolean; minQualityScore?: number },
+      ) => Promise<Buffer>;
+    }).generateResponsesOds(SURVEY_ID, SURVEYOR_ID);
+
+    expect(buf).toBeInstanceOf(Buffer);
+    expect(buf.byteLength).toBeGreaterThan(0);
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const XLSX = require('xlsx');
+    const workbook = XLSX.read(buf, { type: 'buffer' });
+    expect(workbook.SheetNames).toEqual(expect.arrayContaining(['Responses', 'Summary']));
+
+    const responses = XLSX.utils.sheet_to_json(workbook.Sheets.Responses, {
+      header: 1,
+      raw: false,
+    }) as unknown[][];
+    expect(responses).toHaveLength(3); // header + 2 data rows
+
+    const summary = XLSX.utils.sheet_to_json(workbook.Sheets.Summary, {
+      header: 1,
+      raw: false,
+    }) as unknown[][];
+    expect(summary[1]?.[1]).toBe('2');
+  });
+
   // ── AC3.2: CSV streaming export ───────────────────────────────────────────
 
   it('CSV stream contains correct header and one row per response', async () => {
@@ -211,5 +255,32 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
     expect(rejected).toBe(1);
     expect(gray).toBe(0);
     expect(unaudit).toBe(0);
+  });
+
+  it('does not count blank optional answer rows in summary question totals', async () => {
+    const stats = await (service as unknown as {
+      computeStats: (surveyId: string) => Promise<{ questionStats: Array<{ questionId: string; responseCount: number }> }>;
+    }).computeStats(SURVEY_ID);
+    expect(stats.questionStats).toEqual(expect.arrayContaining([
+      expect.objectContaining({ questionId: Q_OPTIONAL_TEXT, responseCount: 0 }),
+    ]));
+  });
+
+  it('includes synthetic yes-no choices in summary question totals', async () => {
+    const stats = await (service as unknown as {
+      computeStats: (surveyId: string) => Promise<{
+        questionStats: Array<{ questionId: string; responseCount: number; optionCounts: Array<{ id: string; label: string; count: number }> }>;
+      }>;
+    }).computeStats(SURVEY_ID);
+    expect(stats.questionStats).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        questionId: Q_YES_NO,
+        responseCount: 2,
+        optionCounts: [
+          { id: 'yes', label: '是', count: 1 },
+          { id: 'no', label: '否', count: 1 },
+        ],
+      }),
+    ]));
   });
 });

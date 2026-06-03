@@ -1,12 +1,26 @@
-import { Injectable, Inject, NotFoundException, Logger } from '@nestjs/common';
-import { eq, and, desc, gte, sql } from 'drizzle-orm';
+import { BadRequestException, Injectable, Inject, NotFoundException, Logger, ConflictException, Optional } from '@nestjs/common';
+import { Cron } from '@nestjs/schedule';
+import { eq, and, desc, gte, inArray, isNotNull, isNull, or, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, surveyResponses, users, transactions, mutualPairs } from '../db/schema';
+import { surveys, surveyResponses, users, transactions, mutualPairs, surveyLotteryResults } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WalletService } from '../wallet/wallet.service';
 import { SuspiciousAnalyzerService } from './suspicious-analyzer.service';
 import { QualityAuditService } from '../responses/quality-audit.service';
+import { verifyLotteryAuditProof } from '../surveys/survey-lottery.service';
+import { RedisLockService } from '../common/redis/redis-lock.service';
+
+export function lotteryObligationPriority(item: {
+  recipientStatus: string;
+  isOverdue: boolean;
+  platformVerifiedAt: Date | null;
+}): number {
+  if (item.recipientStatus === 'issue_reported') return 0;
+  if (item.isOverdue) return 1;
+  if (!item.platformVerifiedAt) return 2;
+  return 3;
+}
 
 @Injectable()
 export class AdminService {
@@ -18,9 +32,320 @@ export class AdminService {
     private readonly wallet: WalletService,
     private readonly suspiciousAnalyzer: SuspiciousAnalyzerService,
     private readonly qualityAudit: QualityAuditService,
+    @Optional() private readonly lock?: RedisLockService,
   ) {}
 
   // ─── 問卷管理 ────────────────────────────────────────────────────────────────
+
+  async getLotteryObligations() {
+    const rows = await this.db
+      .select({
+        id: surveyLotteryResults.id,
+        surveyId: surveys.id,
+        surveyTitle: surveys.title,
+        surveyorId: surveys.surveyorId,
+        respondentId: surveyLotteryResults.respondentId,
+        prize: surveyLotteryResults.prize,
+        fulfillmentStatus: surveyLotteryResults.fulfillmentStatus,
+        fulfillmentNote: surveyLotteryResults.fulfillmentNote,
+        fulfilledAt: surveyLotteryResults.fulfilledAt,
+        fulfillmentNotifiedAt: surveyLotteryResults.fulfillmentNotifiedAt,
+        platformVerifiedAt: surveyLotteryResults.platformVerifiedAt,
+        platformNote: surveyLotteryResults.platformNote,
+        platformVerifiedNotifiedAt: surveyLotteryResults.platformVerifiedNotifiedAt,
+        platformIntervenedAt: surveyLotteryResults.platformIntervenedAt,
+        platformInterventionNote: surveyLotteryResults.platformInterventionNote,
+        platformInterventionNotifiedAt: surveyLotteryResults.platformInterventionNotifiedAt,
+        platformInterventionHistory: surveyLotteryResults.platformInterventionHistory,
+        recipientStatus: surveyLotteryResults.recipientStatus,
+        recipientConfirmedAt: surveyLotteryResults.recipientConfirmedAt,
+        recipientConfirmedNotifiedAt: surveyLotteryResults.recipientConfirmedNotifiedAt,
+        recipientIssueNote: surveyLotteryResults.recipientIssueNote,
+        recipientIssueReportedAt: surveyLotteryResults.recipientIssueReportedAt,
+        recipientIssueNotifiedAt: surveyLotteryResults.recipientIssueNotifiedAt,
+        drawNotifiedAt: surveyLotteryResults.drawNotifiedAt,
+        drawnAt: surveys.lotteryDrawnAt,
+        drawSeed: surveys.lotteryDrawSeed,
+        eligibleDigest: surveys.lotteryEligibleDigest,
+        winnerCount: surveys.lotteryWinnerCount,
+        lotteryTermsAcceptedAt: surveys.lotteryTermsAcceptedAt,
+        creatorObligationNotifiedAt: surveys.lotteryObligationNotifiedAt,
+      })
+      .from(surveyLotteryResults)
+      .innerJoin(surveys, eq(surveyLotteryResults.surveyId, surveys.id))
+      .where(eq(surveyLotteryResults.isWinner, true))
+      .orderBy(desc(surveys.lotteryDrawnAt));
+
+    const surveyIds = [...new Set(rows.map((row) => row.surveyId))];
+    const auditRows = surveyIds.length === 0
+      ? []
+      : await this.db
+        .select({
+          surveyId: surveyLotteryResults.surveyId,
+          responseId: surveyLotteryResults.responseId,
+          isWinner: surveyLotteryResults.isWinner,
+        })
+        .from(surveyLotteryResults)
+        .where(inArray(surveyLotteryResults.surveyId, surveyIds));
+    const auditRowsBySurvey = new Map<string, Array<{ responseId: string; isWinner: boolean }>>();
+    for (const auditRow of auditRows) {
+      const entries = auditRowsBySurvey.get(auditRow.surveyId) ?? [];
+      entries.push(auditRow);
+      auditRowsBySurvey.set(auditRow.surveyId, entries);
+    }
+    const now = Date.now();
+    return rows.map((row) => ({
+      ...row,
+      drawAuditVerified: row.drawSeed && row.eligibleDigest
+        ? verifyLotteryAuditProof(auditRowsBySurvey.get(row.surveyId) ?? [], row.drawSeed, row.eligibleDigest, row.winnerCount ?? 1)
+        : null,
+      fulfillmentDueAt: row.drawnAt ? new Date(row.drawnAt.getTime() + 7 * 24 * 60 * 60_000) : null,
+      isOverdue:
+        !!row.drawnAt &&
+        !row.platformVerifiedAt &&
+        now > row.drawnAt.getTime() + 7 * 24 * 60 * 60_000,
+    })).sort((a, b) => (
+      lotteryObligationPriority(a) - lotteryObligationPriority(b)
+      || (b.drawnAt?.getTime() ?? 0) - (a.drawnAt?.getTime() ?? 0)
+    ));
+  }
+
+  async verifyLotteryFulfillment(resultId: string, adminId: string, note?: string) {
+    const [result] = await this.db
+      .select({
+        id: surveyLotteryResults.id,
+        surveyId: surveyLotteryResults.surveyId,
+        surveyorId: surveys.surveyorId,
+        respondentId: surveyLotteryResults.respondentId,
+        title: surveys.title,
+        prize: surveyLotteryResults.prize,
+        isWinner: surveyLotteryResults.isWinner,
+        fulfillmentStatus: surveyLotteryResults.fulfillmentStatus,
+        recipientStatus: surveyLotteryResults.recipientStatus,
+      })
+      .from(surveyLotteryResults)
+      .innerJoin(surveys, eq(surveyLotteryResults.surveyId, surveys.id))
+      .where(eq(surveyLotteryResults.id, resultId))
+      .limit(1);
+
+    if (!result || !result.isWinner) throw new NotFoundException('查無中獎履約紀錄');
+    if (result.fulfillmentStatus === 'verified') throw new ConflictException('此履約案件已完成平台核驗');
+    if (result.fulfillmentStatus !== 'notified') throw new NotFoundException('建立者尚未送出兌獎說明');
+    if (result.recipientStatus !== 'received') throw new NotFoundException('中獎者尚未確認收到獎品');
+
+    const verifiedAt = new Date();
+    const claimed = await this.db
+      .update(surveyLotteryResults)
+      .set({
+        fulfillmentStatus: 'verified',
+        platformVerifiedAt: verifiedAt,
+        platformVerifiedBy: adminId,
+        platformNote: note?.trim().slice(0, 500) || null,
+        platformVerifiedNotifiedAt: null,
+      })
+      .where(and(
+        eq(surveyLotteryResults.id, resultId),
+        eq(surveyLotteryResults.fulfillmentStatus, 'notified'),
+        isNull(surveyLotteryResults.platformVerifiedAt),
+      ))
+      .returning({ id: surveyLotteryResults.id });
+    if (claimed.length === 0) throw new ConflictException('此履約案件已完成平台核驗');
+
+    await this.retryPendingLotteryVerificationNotifications(resultId);
+
+    return { id: resultId, platformVerifiedAt: verifiedAt };
+  }
+
+  @Cron('*/5 * * * *')
+  async retryPendingLotteryVerificationNotificationsCron(): Promise<void> {
+    await this.runCronWithLock('verification-notifications', () => this.retryPendingLotteryVerificationNotifications());
+  }
+
+  async retryPendingLotteryVerificationNotifications(resultId?: string): Promise<void> {
+    const pending = await this.db
+      .select({
+        id: surveyLotteryResults.id,
+        surveyId: surveyLotteryResults.surveyId,
+        surveyorId: surveys.surveyorId,
+        respondentId: surveyLotteryResults.respondentId,
+        title: surveys.title,
+        prize: surveyLotteryResults.prize,
+      })
+      .from(surveyLotteryResults)
+      .innerJoin(surveys, eq(surveyLotteryResults.surveyId, surveys.id))
+      .where(and(
+        isNotNull(surveyLotteryResults.platformVerifiedAt),
+        isNull(surveyLotteryResults.platformVerifiedNotifiedAt),
+        resultId ? eq(surveyLotteryResults.id, resultId) : undefined,
+      ));
+
+    for (const row of pending) {
+      try {
+        await this.notifications.create({
+          userId: row.respondentId,
+          type: 'system',
+          title: `「${row.title}」獎品履約已由平台核驗`,
+          body: `您抽中的「${row.prize}」已完成平台履約核驗。若實際未收到獎品，請聯絡平台客服。`,
+          metadata: { surveyId: row.surveyId, lottery: true, platformVerified: true },
+        });
+        await this.notifications.create({
+          userId: row.surveyorId,
+          type: 'system',
+          title: `「${row.title}」抽獎履約已核驗`,
+          body: '平台已完成一筆中獎者履約核驗，感謝您履行抽獎回饋義務。',
+          metadata: { surveyId: row.surveyId, lottery: true, platformVerified: true },
+        });
+        await this.db
+          .update(surveyLotteryResults)
+          .set({ platformVerifiedNotifiedAt: new Date() })
+          .where(and(
+            eq(surveyLotteryResults.id, row.id),
+            isNull(surveyLotteryResults.platformVerifiedNotifiedAt),
+          ));
+      } catch (err) {
+        this.logger.warn(`Lottery platform verification notification retry pending: result=${row.id} reason=${String(err)}`);
+      }
+    }
+  }
+
+  async interveneLotteryIssue(resultId: string, adminId: string, note: string) {
+    const platformInterventionNote = note.trim();
+    if (platformInterventionNote.length < 5 || platformInterventionNote.length > 500) {
+      throw new BadRequestException('平台介入說明需為 5 至 500 字');
+    }
+    const [result] = await this.db
+      .select({
+        id: surveyLotteryResults.id,
+        surveyId: surveyLotteryResults.surveyId,
+        surveyorId: surveys.surveyorId,
+        respondentId: surveyLotteryResults.respondentId,
+        title: surveys.title,
+        prize: surveyLotteryResults.prize,
+        isWinner: surveyLotteryResults.isWinner,
+        recipientStatus: surveyLotteryResults.recipientStatus,
+        drawnAt: surveys.lotteryDrawnAt,
+        platformVerifiedAt: surveyLotteryResults.platformVerifiedAt,
+        platformIntervenedAt: surveyLotteryResults.platformIntervenedAt,
+        platformInterventionNotifiedAt: surveyLotteryResults.platformInterventionNotifiedAt,
+      })
+      .from(surveyLotteryResults)
+      .innerJoin(surveys, eq(surveyLotteryResults.surveyId, surveys.id))
+      .where(eq(surveyLotteryResults.id, resultId))
+      .limit(1);
+
+    if (!result || !result.isWinner) throw new NotFoundException('查無中獎履約紀錄');
+    const isOverdue = !!result.drawnAt
+      && !result.platformVerifiedAt
+      && Date.now() > result.drawnAt.getTime() + 7 * 24 * 60 * 60_000;
+    if (result.recipientStatus !== 'issue_reported' && !isOverdue) {
+      throw new NotFoundException('中獎者尚未回報問題且履約期限尚未逾期');
+    }
+    if (result.platformIntervenedAt && !result.platformInterventionNotifiedAt) {
+      await this.retryPendingLotteryInterventionNotifications(resultId);
+      const [pending] = await this.db
+        .select({ platformInterventionNotifiedAt: surveyLotteryResults.platformInterventionNotifiedAt })
+        .from(surveyLotteryResults)
+        .where(eq(surveyLotteryResults.id, resultId))
+        .limit(1);
+      if (!pending?.platformInterventionNotifiedAt) {
+        throw new ConflictException('前次平台介入通知仍待補送，請稍後再新增處理紀錄');
+      }
+    }
+
+    const platformIntervenedAt = new Date();
+    const intervention = {
+      intervenedAt: platformIntervenedAt.toISOString(),
+      adminId,
+      reason: result.recipientStatus === 'issue_reported' ? 'winner_issue' : 'fulfillment_overdue',
+      note: platformInterventionNote,
+    };
+    const claimed = await this.db
+      .update(surveyLotteryResults)
+      .set({
+        platformIntervenedAt,
+        platformIntervenedBy: adminId,
+        platformInterventionNote,
+        platformInterventionNotifiedAt: null,
+        platformInterventionHistory: sql`${surveyLotteryResults.platformInterventionHistory} || ${JSON.stringify([intervention])}::jsonb`,
+      })
+      .where(and(
+        eq(surveyLotteryResults.id, resultId),
+        result.platformIntervenedAt
+          ? eq(surveyLotteryResults.platformIntervenedAt, result.platformIntervenedAt)
+          : isNull(surveyLotteryResults.platformIntervenedAt),
+        result.platformInterventionNotifiedAt
+          ? eq(surveyLotteryResults.platformInterventionNotifiedAt, result.platformInterventionNotifiedAt)
+          : isNull(surveyLotteryResults.platformInterventionNotifiedAt),
+      ))
+      .returning({ id: surveyLotteryResults.id });
+    if (claimed.length === 0) throw new ConflictException('案件已有新的平台介入紀錄，請重新整理後再試');
+
+    await this.retryPendingLotteryInterventionNotifications(resultId);
+
+    return { id: resultId, platformIntervenedAt, platformInterventionNote, intervention };
+  }
+
+  @Cron('*/5 * * * *')
+  async retryPendingLotteryInterventionNotificationsCron(): Promise<void> {
+    await this.runCronWithLock('intervention-notifications', () => this.retryPendingLotteryInterventionNotifications());
+  }
+
+  async retryPendingLotteryInterventionNotifications(resultId?: string): Promise<void> {
+    const pending = await this.db
+      .select({
+        id: surveyLotteryResults.id,
+        surveyId: surveyLotteryResults.surveyId,
+        surveyorId: surveys.surveyorId,
+        respondentId: surveyLotteryResults.respondentId,
+        title: surveys.title,
+        prize: surveyLotteryResults.prize,
+        recipientStatus: surveyLotteryResults.recipientStatus,
+        platformInterventionNote: surveyLotteryResults.platformInterventionNote,
+        platformInterventionHistory: surveyLotteryResults.platformInterventionHistory,
+      })
+      .from(surveyLotteryResults)
+      .innerJoin(surveys, eq(surveyLotteryResults.surveyId, surveys.id))
+      .where(and(
+        isNotNull(surveyLotteryResults.platformIntervenedAt),
+        isNull(surveyLotteryResults.platformInterventionNotifiedAt),
+        resultId ? eq(surveyLotteryResults.id, resultId) : undefined,
+      ));
+
+    for (const row of pending) {
+      if (!row.platformInterventionNote) continue;
+      const latestIntervention = row.platformInterventionHistory[row.platformInterventionHistory.length - 1];
+      const reason = latestIntervention?.reason === 'fulfillment_overdue'
+        ? '案件已超過履約期限'
+        : row.recipientStatus === 'issue_reported'
+        ? '中獎者回報獎品問題'
+        : '案件已超過履約期限';
+      try {
+        await this.notifications.create({
+          userId: row.respondentId,
+          type: 'system',
+          title: `平台已介入「${row.title}」獎品問題`,
+          body: `平台已針對您抽中「${row.prize}」的履約案件開始協助處理：\n${row.platformInterventionNote}`,
+          metadata: { surveyId: row.surveyId, lottery: true, platformIntervened: true },
+        });
+        await this.notifications.create({
+          userId: row.surveyorId,
+          type: 'system',
+          title: `平台已介入「${row.title}」抽獎履約問題`,
+          body: `${reason}，平台處理說明：\n${row.platformInterventionNote}\n請儘速完成交付並請中獎者確認收到。`,
+          metadata: { surveyId: row.surveyId, lottery: true, platformIntervened: true },
+        });
+        await this.db
+          .update(surveyLotteryResults)
+          .set({ platformInterventionNotifiedAt: new Date() })
+          .where(and(
+            eq(surveyLotteryResults.id, row.id),
+            isNull(surveyLotteryResults.platformInterventionNotifiedAt),
+          ));
+      } catch (err) {
+        this.logger.warn(`Lottery platform intervention notification retry pending: result=${row.id} reason=${String(err)}`);
+      }
+    }
+  }
 
   async getPendingSurveys() {
     const rows = await this.db
@@ -39,6 +364,14 @@ export class AdminService {
       .orderBy(surveys.updatedAt);
 
     return rows;
+  }
+
+  private async runCronWithLock(key: string, fn: () => Promise<void>): Promise<void> {
+    if (this.lock) {
+      await this.lock.withLock(`qw:lock:admin-lottery:${key}`, 290_000, fn);
+      return;
+    }
+    await fn();
   }
 
   async getAllSurveys(status?: string) {
@@ -166,15 +499,20 @@ export class AdminService {
       .select({
         id: surveyResponses.id,
         surveyId: surveyResponses.surveyId,
+        surveyTitle: surveys.title,
         respondentId: surveyResponses.respondentId,
         status: surveyResponses.status,
-        antiCheatScore: surveyResponses.antiCheatScore,
-        suspiciousFlags: surveyResponses.suspiciousFlags,
+        antiCheatScore: sql<number>`COALESCE(${surveyResponses.antiCheatScore}, 0)::int`,
+        suspiciousFlags: sql<string[]>`COALESCE(${surveyResponses.suspiciousFlags}, '[]'::jsonb)`,
         fillDurationSeconds: surveyResponses.fillDurationSeconds,
         submittedAt: surveyResponses.submittedAt,
       })
       .from(surveyResponses)
-      .where(gte(surveyResponses.antiCheatScore, minScore))
+      .innerJoin(surveys, eq(surveyResponses.surveyId, surveys.id))
+      .where(or(
+        gte(surveyResponses.antiCheatScore, minScore),
+        eq(surveyResponses.status, 'pending_review'),
+      ))
       .orderBy(desc(surveyResponses.antiCheatScore))
       .limit(100);
 
@@ -182,10 +520,60 @@ export class AdminService {
   }
 
   async rejectResponse(responseId: string) {
-    await this.db
-      .update(surveyResponses)
-      .set({ status: 'rejected' })
-      .where(eq(surveyResponses.id, responseId));
+    const [response] = await this.db
+      .select({
+        status: surveyResponses.status,
+        surveyId: surveyResponses.surveyId,
+        rewardMode: surveys.rewardMode,
+        lotteryDrawnAt: surveys.lotteryDrawnAt,
+      })
+      .from(surveyResponses)
+      .innerJoin(surveys, eq(surveyResponses.surveyId, surveys.id))
+      .where(eq(surveyResponses.id, responseId))
+      .limit(1);
+    if (!response) throw new NotFoundException('填答不存在');
+    if (response.status === 'rejected') {
+      return { message: '填答已標記為拒絕', responseId };
+    }
+
+    const wasAccepted = ['submitted', 'rewarded'].includes(response.status);
+    if (wasAccepted && response.rewardMode === 'lottery' && response.lotteryDrawnAt) {
+      throw new ConflictException('抽獎已完成，無法改寫參與名單；請改走平台履約介入流程');
+    }
+    if (wasAccepted) {
+      const paidRewards = await this.db
+        .select({ id: transactions.id })
+        .from(transactions)
+        .where(and(
+          eq(transactions.relatedResponseId, responseId),
+          eq(transactions.type, 'reward_in'),
+          eq(transactions.status, 'success'),
+        ))
+        .limit(1);
+      if (paidRewards.length > 0) {
+        throw new ConflictException('獎勵已入帳，需先處理款項追回後才能拒絕填答');
+      }
+    }
+
+    await this.db.transaction(async (tx) => {
+      const rejected = await tx
+        .update(surveyResponses)
+        .set({ status: 'rejected' })
+        .where(eq(surveyResponses.id, responseId))
+        .returning({ id: surveyResponses.id });
+      if (rejected.length === 0 || !wasAccepted) return;
+
+      await tx
+        .update(surveys)
+        .set({
+          completedCount: sql`GREATEST(${surveys.completedCount} - 1, 0)`,
+          status: sql`CASE WHEN ${surveys.status} = 'closed' THEN 'published'::survey_status ELSE ${surveys.status} END`,
+        })
+        .where(and(
+          eq(surveys.id, response.surveyId),
+          response.rewardMode === 'lottery' ? isNull(surveys.lotteryDrawnAt) : undefined,
+        ));
+    });
 
     return { message: '填答已標記為拒絕', responseId };
   }

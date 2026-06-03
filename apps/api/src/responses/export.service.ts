@@ -19,6 +19,38 @@ import {
 import { redactPii } from '../surveys/analysis/anonymizer';
 import { toCsvLine } from '../surveys/export/csv-util';
 
+const SYNTHETIC_YES_NO_OPTIONS = [
+  { id: 'yes', label: '是' },
+  { id: 'no', label: '否' },
+];
+
+const dynamicImport = new Function(
+  'modulePath',
+  'return import(modulePath)',
+) as (modulePath: string) => Promise<unknown>;
+
+type TabularExportQuestion = {
+  id: string;
+  type: string;
+  title: string;
+};
+
+type TabularExportResponse = {
+  id: string;
+  submittedAt: Date | string | null;
+  qualityScore: number | null;
+  status: string;
+  fillDurationSeconds: number | null;
+};
+
+type TabularExportData = {
+  questions: TabularExportQuestion[];
+  responses: TabularExportResponse[];
+  headers: string[];
+  rows: Array<Array<string | number>>;
+  summaryRows: Array<[string, string | number]>;
+};
+
 /**
  * Phase R：問卷資料匯出（PDF stats 報表 + Excel raw responses）
  *
@@ -151,6 +183,7 @@ export class ExportService {
       ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
       : [];
     const optionLabelById = this.buildOptionLabelById(options_);
+    for (const option of SYNTHETIC_YES_NO_OPTIONS) optionLabelById.set(option.id, option.label);
 
     let responses = await this.db
       .select()
@@ -269,7 +302,13 @@ export class ExportService {
     const questionStats = questions.map((q) => {
       const qAnswers = answersByQuestion.get(q.id) ?? [];
       const qOptions = optionsByQuestion.get(q.id) ?? [];
-      const optionCounts = qOptions.map((o) => {
+      const config = typeof q.config === 'object' && q.config !== null && !Array.isArray(q.config)
+        ? q.config as Record<string, unknown>
+        : {};
+      const statOptions = q.type === 'single_choice' && config.variant === 'yes_no'
+        ? SYNTHETIC_YES_NO_OPTIONS
+        : qOptions;
+      const optionCounts = statOptions.map((o) => {
         let count = 0;
         for (const answer of qAnswers) {
           if (Array.isArray(answer.selectedOptionIds) && (answer.selectedOptionIds as string[]).includes(o.id)) {
@@ -280,11 +319,16 @@ export class ExportService {
       });
       const ratingValues = qAnswers.filter((a) => a.ratingValue != null).map((a) => a.ratingValue!);
       const avgRating = ratingValues.length > 0 ? ratingValues.reduce((s, v) => s + v, 0) / ratingValues.length : null;
+      const responseCount = q.type === 'rating'
+        ? ratingValues.length
+        : q.type === 'single_choice' || q.type === 'multiple_choice'
+          ? qAnswers.filter((answer) => Array.isArray(answer.selectedOptionIds) && answer.selectedOptionIds.length > 0).length
+          : qAnswers.filter((answer) => typeof answer.textAnswer === 'string' && answer.textAnswer.trim().length > 0).length;
       return {
         questionId: q.id,
         type: q.type,
         title: q.title,
-        responseCount: qAnswers.length,
+        responseCount,
         optionCounts,
         avgRating,
       };
@@ -369,6 +413,7 @@ export class ExportService {
       : [];
     const optionLabels: OptionLabelMap = {};
     for (const o of optionRows) optionLabels[o.id] = o.label;
+    for (const option of SYNTHETIC_YES_NO_OPTIONS) optionLabels[option.id] = option.label;
 
     const minScore = exportOpts.minQualityScore ?? 70;
     const TEXT_TYPES = new Set<string>(['text', 'matrix']);
@@ -527,6 +572,7 @@ export class ExportService {
       : [];
     const optionLabels: OptionLabelMap = {};
     for (const o of optionRows) optionLabels[o.id] = o.label;
+    for (const option of SYNTHETIC_YES_NO_OPTIONS) optionLabels[option.id] = option.label;
 
     const minScore = exportOpts.minQualityScore ?? 70;
     const TEXT_TYPES = new Set<string>(['text', 'matrix']);

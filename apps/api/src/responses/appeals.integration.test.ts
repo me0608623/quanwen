@@ -105,6 +105,8 @@ describe('AppealsService + ReputationService (integration)', () => {
         title       VARCHAR(200) NOT NULL,
         status      survey_status NOT NULL DEFAULT 'draft',
         reward_points INTEGER NOT NULL DEFAULT 0,
+        reward_mode VARCHAR(16) NOT NULL DEFAULT 'fixed',
+        lottery_drawn_at TIMESTAMPTZ,
         deadline_tier       VARCHAR(16) NOT NULL DEFAULT 'standard',
         base_reward_points  INTEGER     NOT NULL DEFAULT 0,
         reward_type  reward_type NOT NULL DEFAULT 'cash',
@@ -324,6 +326,12 @@ describe('AppealsService + ReputationService (integration)', () => {
     expect(rewardIn).toBeTruthy();
     expect(rewardIn?.amount).toBe(80);
     expect(rewardIn?.status).toBe('success');
+
+    const [survey] = await db
+      .select({ completedCount: schema.surveys.completedCount })
+      .from(schema.surveys)
+      .where(eq(schema.surveys.id, SURVEY_ID));
+    expect(survey?.completedCount).toBe(1);
   });
 
   it('6. approveAppeal idempotency：第二次拒絕', async () => {
@@ -398,5 +406,71 @@ describe('AppealsService + ReputationService (integration)', () => {
   it('10. ReputationService.adjust：profile 不存在 → return null', async () => {
     const r = await reputation.adjust('99999999-9999-9999-9999-999999999999', 5, 'ghost');
     expect(r).toBeNull();
+  });
+
+  it('11. approveAppeal：抽獎問卷恢復資格但不補發現金', async () => {
+    const LOTTERY_SURVEY_ID = '33333333-3333-3333-3333-333333333303';
+    const LOTTERY_RESPONSE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa04';
+    await client.exec(`
+      INSERT INTO surveys (id, surveyor_id, title, status, reward_mode, reward_points)
+      VALUES ('${LOTTERY_SURVEY_ID}', '${SURVEYOR_ID}', '抽獎問卷', 'published', 'lottery', 999);
+      INSERT INTO survey_responses (id, survey_id, respondent_id, status, started_at, submitted_at)
+      VALUES ('${LOTTERY_RESPONSE_ID}', '${LOTTERY_SURVEY_ID}', '${RESPONDENT_ID}', 'rejected',
+        NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour');
+    `);
+    const { appeal } = await appeals.createAppeal(
+      LOTTERY_RESPONSE_ID,
+      RESPONDENT_ID,
+      '抽獎資格被誤判，請協助重新審核',
+    );
+
+    await appeals.approveAppeal(appeal!.id, ADMIN_ID, '確認為有效填答');
+
+    const [survey] = await db
+      .select({ completedCount: schema.surveys.completedCount })
+      .from(schema.surveys)
+      .where(eq(schema.surveys.id, LOTTERY_SURVEY_ID));
+    const [response] = await db
+      .select({ status: schema.surveyResponses.status })
+      .from(schema.surveyResponses)
+      .where(eq(schema.surveyResponses.id, LOTTERY_RESPONSE_ID));
+    const rewards = await db
+      .select()
+      .from(schema.transactions)
+      .where(eq(schema.transactions.relatedResponseId, LOTTERY_RESPONSE_ID));
+    expect(survey?.completedCount).toBe(1);
+    expect(response?.status).toBe('rewarded');
+    expect(rewards).toHaveLength(0);
+  });
+
+  it('12. approveAppeal：提前截止但尚未開獎時仍可恢復抽獎資格', async () => {
+    const LOTTERY_SURVEY_ID = '33333333-3333-3333-3333-333333333304';
+    const LOTTERY_RESPONSE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaa05';
+    await client.exec(`
+      INSERT INTO surveys (id, surveyor_id, title, status, reward_mode, reward_points, target_count, completed_count)
+      VALUES ('${LOTTERY_SURVEY_ID}', '${SURVEYOR_ID}', '提前截止抽獎問卷', 'closed', 'lottery', 999, 2, 1);
+      INSERT INTO survey_responses (id, survey_id, respondent_id, status, started_at, submitted_at)
+      VALUES ('${LOTTERY_RESPONSE_ID}', '${LOTTERY_SURVEY_ID}', '${RESPONDENT_ID}', 'rejected',
+        NOW() - INTERVAL '1 hour', NOW() - INTERVAL '1 hour');
+    `);
+    const { appeal } = await appeals.createAppeal(
+      LOTTERY_RESPONSE_ID,
+      RESPONDENT_ID,
+      '提前截止前已完成填答，請恢復抽獎資格',
+    );
+
+    await appeals.approveAppeal(appeal!.id, ADMIN_ID, '確認截止前已完成有效填答');
+
+    const [survey] = await db
+      .select({ completedCount: schema.surveys.completedCount, status: schema.surveys.status })
+      .from(schema.surveys)
+      .where(eq(schema.surveys.id, LOTTERY_SURVEY_ID));
+    const [response] = await db
+      .select({ status: schema.surveyResponses.status })
+      .from(schema.surveyResponses)
+      .where(eq(schema.surveyResponses.id, LOTTERY_RESPONSE_ID));
+    expect(survey?.completedCount).toBe(2);
+    expect(survey?.status).toBe('closed');
+    expect(response?.status).toBe('rewarded');
   });
 });

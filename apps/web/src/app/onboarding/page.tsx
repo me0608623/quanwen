@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useUpdateRespondentProfile, useTags, useMyProfile } from '@/hooks/use-profile';
 import type { RespondentProfile, AgeRange, Gender, Occupation, Industry, Education } from '@/hooks/use-profile';
@@ -51,6 +51,20 @@ export default function OnboardingPage() {
     tagIds: [],
   });
 
+  const savedRef = useRef(false);
+  // 已選任一欄位且尚未送出時，關閉/重整分頁前警告，避免丟失設定
+  const hasContent = Object.values(form).some((v) => (Array.isArray(v) ? v.length > 0 : v !== ''));
+  useEffect(() => {
+    if (!hasContent) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      if (savedRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasContent]);
+
   const set = (field: string) => (e: React.ChangeEvent<HTMLSelectElement>) =>
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
 
@@ -71,6 +85,7 @@ export default function OnboardingPage() {
     ) as Parameters<typeof updateProfile.mutateAsync>[0];
     try {
       await updateProfile.mutateAsync(dto);
+      savedRef.current = true;
       router.push('/tasks');
     } catch {
       // error displayed below submit button via updateProfile.error
@@ -93,6 +108,7 @@ export default function OnboardingPage() {
           <select
             value={form.region}
             onChange={set('region')}
+            aria-label="居住縣市"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">請選擇</option>
@@ -112,6 +128,7 @@ export default function OnboardingPage() {
               value={form.industryOther}
               onChange={(e) => setForm((prev) => ({ ...prev, industryOther: e.target.value }))}
               maxLength={50}
+              aria-label="行業（其他）"
               placeholder="請填寫你的行業（最多 50 字）"
               className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
             />
@@ -176,6 +193,7 @@ function SelectField({
       <select
         value={value}
         onChange={onChange}
+        aria-label={label}
         className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       >
         <option value="">請選擇</option>

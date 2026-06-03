@@ -5,6 +5,7 @@ import { AiInsightsService } from './ai-insights.service';
 import { SurveyorAssistantService } from './surveyor-assistant.service';
 import { PricingService } from './pricing/pricing.service';
 import { SurveySchedulerService } from './survey-scheduler.service';
+import { SurveyLotteryService } from './survey-lottery.service';
 // Phase 1: 模板匯入/匯出
 import { SurveyExportService } from './template-io/survey-export.service';
 import { SurveyImportService } from './template-io/survey-import.service';
@@ -33,6 +34,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     SurveyorAssistantService,
     PricingService,
     SurveySchedulerService,
+    SurveyLotteryService,
     SurveyExportService,
     SurveyImportService,
     ExcelTemplateService,
@@ -43,6 +45,6 @@ import { NotificationsModule } from '../notifications/notifications.module';
     PdfImportService,
     SurveyCakeImportService,
   ],
-  exports: [SurveysService, AiInsightsService],
+  exports: [SurveysService, AiInsightsService, SurveyLotteryService],
 })
 export class SurveysModule {}

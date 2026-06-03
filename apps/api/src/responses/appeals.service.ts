@@ -7,7 +7,7 @@ import {
   BadRequestException,
   ConflictException,
 } from '@nestjs/common';
-import { eq, desc } from 'drizzle-orm';
+import { and, eq, desc, inArray, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -124,6 +124,8 @@ export class AppealsService {
         qualityScore: surveyResponses.qualityScore,
         surveyTitle: surveys.title,
         rewardPoints: surveys.rewardPoints,
+        rewardMode: surveys.rewardMode,
+        lotteryPrize: surveys.lotteryPrize,
       })
       .from(responseAppeals)
       .innerJoin(surveyResponses, eq(responseAppeals.responseId, surveyResponses.id))
@@ -133,7 +135,7 @@ export class AppealsService {
       .limit(200);
   }
 
-  /** Admin：通過申訴 — 改判 response 為 submitted、補發獎勵、reputation +5 */
+  /** Admin：通過申訴 — 補回配額、恢復有效填答、補發固定獎勵、reputation +5 */
   async approveAppeal(appealId: string, adminId: string, adminNote?: string) {
     const appeal = await this.loadAppealForResolve(appealId);
 
@@ -151,22 +153,71 @@ export class AppealsService {
     const resp = respRows[0];
     if (!resp) throw new NotFoundException('填答紀錄不存在');
 
+    if (resp.status !== 'rejected') {
+      throw new ConflictException('填答已不是退件狀態，無法重複恢復資格');
+    }
+
     const surveyRows = await this.db
-      .select({ id: surveys.id, rewardPoints: surveys.rewardPoints, surveyorId: surveys.surveyorId, title: surveys.title })
+      .select({
+        id: surveys.id,
+        rewardPoints: surveys.rewardPoints,
+        rewardMode: surveys.rewardMode,
+        lotteryDrawnAt: surveys.lotteryDrawnAt,
+        surveyorId: surveys.surveyorId,
+        title: surveys.title,
+      })
       .from(surveys)
       .where(eq(surveys.id, resp.surveyId))
       .limit(1);
     const survey = surveyRows[0];
     if (!survey) throw new NotFoundException('問卷不存在');
+    if (survey.rewardMode === 'lottery' && survey.lotteryDrawnAt) {
+      throw new ConflictException('抽獎已完成，無法再補入參與名單');
+    }
 
-    // 改 response status
-    await this.db
-      .update(surveyResponses)
-      .set({ status: 'rewarded' })
-      .where(eq(surveyResponses.id, resp.id));
+    const now = new Date();
+    await this.db.transaction(async (tx) => {
+      const quota = await tx
+        .update(surveys)
+        .set({ completedCount: sql`${surveys.completedCount} + 1` })
+        .where(and(
+          eq(surveys.id, survey.id),
+          survey.rewardMode === 'lottery'
+            ? inArray(surveys.status, ['published', 'closed'])
+            : eq(surveys.status, 'published'),
+          sql`${surveys.completedCount} < ${surveys.targetCount}`,
+        ))
+        .returning({ completedCount: surveys.completedCount, targetCount: surveys.targetCount });
+      if (quota.length === 0) {
+        throw new ConflictException('問卷已達配額或不再開放，無法恢復此填答資格');
+      }
+      if (quota[0].completedCount >= quota[0].targetCount) {
+        await tx
+          .update(surveys)
+          .set({ status: 'closed' })
+          .where(eq(surveys.id, survey.id));
+      }
+
+      await tx
+        .update(surveyResponses)
+        .set({ status: 'rewarded' })
+        .where(eq(surveyResponses.id, resp.id));
+
+      const resolved = await tx
+        .update(responseAppeals)
+        .set({
+          status: 'approved',
+          adminNote: adminNote?.slice(0, 500) ?? null,
+          resolvedBy: adminId,
+          resolvedAt: now,
+        })
+        .where(and(eq(responseAppeals.id, appealId), eq(responseAppeals.status, 'pending')))
+        .returning({ id: responseAppeals.id });
+      if (resolved.length === 0) throw new ConflictException('此申訴已被其他管理員處理');
+    });
 
     // 2) 補發獎勵（透過 wallet service）
-    if (survey.rewardPoints > 0) {
+    if (survey.rewardMode === 'fixed' && survey.rewardPoints > 0) {
       try {
         await this.wallet.issueReward({
           surveyId: survey.id,
@@ -183,28 +234,24 @@ export class AppealsService {
     // 3) reputation +5（補償被誤判，走 ReputationService 寫歷史）
     await this.reputation.adjust(resp.respondentId, 5, '申訴通過補償');
 
-    // 4) 標記申訴 approved
-    const now = new Date();
-    await this.db
-      .update(responseAppeals)
-      .set({
-        status: 'approved',
-        adminNote: adminNote?.slice(0, 500) ?? null,
-        resolvedBy: adminId,
-        resolvedAt: now,
-      })
-      .where(eq(responseAppeals.id, appealId));
-
     // 5) 通知受試者
+    const resultMessage = survey.rewardMode === 'lottery'
+      ? '您的申訴已通過，抽獎資格已恢復，信譽分 +5。'
+      : `您的申訴已通過，獎勵 NT$${survey.rewardPoints} 已補發，信譽分 +5。`;
     await this.notifications.create({
       userId: resp.respondentId,
       type: 'system',
       title: `申訴成功：「${survey.title}」`,
-      body: `您的申訴已通過，獎勵 NT$${survey.rewardPoints} 已補發，信譽分 +5。${adminNote ? `\n管理員說明：${adminNote}` : ''}`,
+      body: `${resultMessage}${adminNote ? `\n管理員說明：${adminNote}` : ''}`,
       metadata: { appealId, responseId: resp.id },
     });
 
-    return { message: '申訴已通過，獎勵與信譽分已補發', appealId };
+    return {
+      message: survey.rewardMode === 'lottery'
+        ? '申訴已通過，抽獎資格與信譽分已恢復'
+        : '申訴已通過，獎勵與信譽分已補發',
+      appealId,
+    };
   }
 
   /** Admin：駁回申訴 */

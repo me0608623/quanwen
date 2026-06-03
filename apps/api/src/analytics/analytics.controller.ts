@@ -1,4 +1,4 @@
-import { Controller, Get, Param, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
+import { Body, Controller, Get, Param, Patch, Query, Req, UseGuards, BadRequestException } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AnalyticsService } from './analytics.service';
 import type { Request } from 'express';
@@ -28,6 +28,53 @@ export class AnalyticsController {
   }
 
   /**
+   * GET /surveys/:id/analytics/scale-reliability
+   * 取得評分量表的 Cronbach's alpha 信度與逐題平均
+   */
+  @Get(':id/analytics/scale-reliability')
+  async getScaleReliability(
+    @Param('id') surveyId: string,
+    @Req() req: Request,
+    @Query('questionIds') questionIds?: string,
+    @Query('reverseQuestionIds') reverseQuestionIds?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.analytics.getScaleReliability(
+      surveyId,
+      user.id,
+      questionIds?.split(',').map((id) => id.trim()).filter(Boolean),
+      reverseQuestionIds?.split(',').map((id) => id.trim()).filter(Boolean),
+    );
+  }
+
+  /**
+   * PATCH /surveys/:id/analytics/scale-settings
+   * 保存量表反向題設定，後續分析預設沿用
+   */
+  @Patch(':id/analytics/scale-settings')
+  async updateScaleSettings(
+    @Param('id') surveyId: string,
+    @Req() req: Request,
+    @Body() body: { questionIds?: unknown; reverseQuestionIds?: unknown },
+  ) {
+    if (
+      !Array.isArray(body.questionIds)
+      || body.questionIds.some((id) => typeof id !== 'string')
+      || !Array.isArray(body.reverseQuestionIds)
+      || body.reverseQuestionIds.some((id) => typeof id !== 'string')
+    ) {
+      throw new BadRequestException('questionIds 與 reverseQuestionIds 必須是題目 ID 陣列');
+    }
+    const user = req.user as AuthenticatedUser;
+    return this.analytics.updateScaleSettings(
+      surveyId,
+      user.id,
+      [...new Set(body.questionIds)],
+      [...new Set(body.reverseQuestionIds)],
+    );
+  }
+
+  /**
    * GET /surveys/:id/analytics/cross-tab?questionA=xxx&questionB=yyy
    * 兩個單選題的交叉分析表 + Cramér's V
    */
@@ -39,7 +86,7 @@ export class AnalyticsController {
     @Query('questionB') questionB?: string,
   ) {
     if (!questionA || !questionB) {
-      throw new BadRequestException('必須提供 questionA 和 questionId 參數');
+      throw new BadRequestException('必須提供 questionA 和 questionB 參數');
     }
     const user = req.user as AuthenticatedUser;
     return this.analytics.getCrossTab(surveyId, user.id, questionA, questionB);
@@ -91,6 +138,6 @@ export class AnalyticsController {
     @Query('k') k?: string,
   ) {
     const user = req.user as AuthenticatedUser;
-    return this.analytics.getSegmentation(surveyId, user.id, k ? parseInt(k, 10) : 3);
+    return this.analytics.getSegmentation(surveyId, user.id, k === undefined ? 3 : Number(k));
   }
 }

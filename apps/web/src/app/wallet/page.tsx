@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Coins, Banknote, TrendingUp, Clock } from 'lucide-react';
 import {
@@ -16,6 +16,10 @@ import {
 import { useMe } from '@/hooks/use-auth';
 import { cn } from '@/lib/cn';
 import { EarningsChart } from '@/components/wallet/earnings-chart';
+import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { useEscapeKey } from '@/components/ui/use-escape-key';
+import { useLockBodyScroll } from '@/components/ui/use-lock-body-scroll';
+import { useFocusTrap } from '@/components/ui/use-focus-trap';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
@@ -40,11 +44,11 @@ const TX_STATUS_LABELS: Record<string, string> = {
 };
 
 const TX_STATUS_COLORS: Record<string, string> = {
-  pending: 'text-yellow-600',
-  processing: 'text-blue-600',
-  success: 'text-green-600',
+  pending: 'text-yellow-700',
+  processing: 'text-blue-700',
+  success: 'text-green-700',
   failed: 'text-red-600',
-  cancelled: 'text-slate-400',
+  cancelled: 'text-slate-500',
 };
 
 function isCreditType(type: string) {
@@ -54,6 +58,10 @@ function isCreditType(type: string) {
 // ─── 儲值 Dialog ────────────────────────────────────────────────────────────
 
 function DepositDialog({ onClose }: { onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(onClose);
+  useLockBodyScroll();
+  useFocusTrap(dialogRef);
   const [amount, setAmount] = useState('');
   const mockDeposit = useMockDeposit();
   const ecpayDeposit = useEcpayDeposit();
@@ -71,8 +79,15 @@ function DepositDialog({ onClose }: { onClose: () => void }) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="儲值"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl"
+      >
         <h3 className="mb-4 text-base font-semibold">{IS_DEV ? '儲值（開發模式）' : '儲值'}</h3>
         <div className="mb-3 flex flex-wrap gap-2">
           {presets.map((p) => (
@@ -94,9 +109,11 @@ function DepositDialog({ onClose }: { onClose: () => void }) {
           type="number"
           min={100}
           max={100000}
+          autoFocus
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           placeholder="自訂金額（最小 100）"
+          aria-label="儲值金額"
           className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
         />
         {(mockDeposit.error || ecpayDeposit.error) && (
@@ -127,6 +144,10 @@ function DepositDialog({ onClose }: { onClose: () => void }) {
 // ─── 提領 Dialog ─────────────────────────────────────────────────────────────
 
 function WithdrawDialog({ maxAmount, onClose }: { maxAmount: number; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  useEscapeKey(onClose);
+  useLockBodyScroll();
+  useFocusTrap(dialogRef);
   const [form, setForm] = useState({ amount: '', bankCode: '', bankAccount: '', accountName: '' });
   const withdraw = useRequestWithdrawal();
   const update = (field: string, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
@@ -139,8 +160,15 @@ function WithdrawDialog({ maxAmount, onClose }: { maxAmount: number; onClose: ()
     form.accountName.length >= 2;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label="申請提領"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl"
+      >
         <h3 className="mb-4 text-base font-semibold">申請提領</h3>
         <div className="space-y-3">
           {[
@@ -156,6 +184,7 @@ function WithdrawDialog({ maxAmount, onClose }: { maxAmount: number; onClose: ()
                 value={form[field as keyof typeof form]}
                 onChange={(e) => update(field, e.target.value)}
                 placeholder={placeholder}
+                aria-label={label}
                 className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
             </div>
@@ -228,6 +257,7 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
 // ─── 交易列表 ────────────────────────────────────────────────────────────────
 
 function TxList({ txns }: { txns: { id: string; type: string; amount: number; status: string; note: string | null; createdAt: string }[] }) {
+  const [filter, setFilter] = useState<'all' | 'credit' | 'debit'>('all');
   if (txns.length === 0) {
     return (
       <div className="rounded-lg border-2 border-dashed border-border p-8 text-center">
@@ -235,9 +265,31 @@ function TxList({ txns }: { txns: { id: string; type: string; amount: number; st
       </div>
     );
   }
+  const shown = txns.filter(
+    (t) => filter === 'all' || (filter === 'credit' ? isCreditType(t.type) : !isCreditType(t.type)),
+  );
   return (
     <div className="space-y-2">
-      {txns.map((tx) => (
+      <div className="flex gap-1">
+        {([['all', '全部'], ['credit', '收入'], ['debit', '支出']] as const).map(([k, l]) => (
+          <button
+            key={k}
+            onClick={() => setFilter(k)}
+            className={cn(
+              'rounded-md px-2.5 py-1 text-xs font-medium transition-colors',
+              filter === k ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/70',
+            )}
+          >
+            {l}
+          </button>
+        ))}
+      </div>
+      {shown.length === 0 ? (
+        <p className="rounded-lg border border-dashed border-border p-4 text-center text-xs text-muted-foreground">
+          沒有符合的交易
+        </p>
+      ) : (
+        shown.map((tx) => (
         <div key={tx.id} className="flex items-center justify-between rounded-lg border border-border bg-card px-4 py-3">
           <div className="min-w-0 flex-1">
             <p className="text-sm font-medium">{TX_TYPE_LABELS[tx.type] ?? tx.type}</p>
@@ -245,7 +297,7 @@ function TxList({ txns }: { txns: { id: string; type: string; amount: number; st
             <p className="mt-0.5 text-xs text-muted-foreground">{new Date(tx.createdAt).toLocaleString('zh-TW')}</p>
           </div>
           <div className="ml-4 shrink-0 text-right">
-            <p className={cn('text-sm font-semibold tabular-nums', isCreditType(tx.type) ? 'text-green-600' : 'text-foreground')}>
+            <p className={cn('text-sm font-semibold tabular-nums', isCreditType(tx.type) ? 'text-green-700' : 'text-foreground')}>
               {isCreditType(tx.type) ? '+' : '-'}
               {tx.type === 'points_in' || tx.type === 'points_spend'
                 ? `${tx.amount.toLocaleString()} 積分`
@@ -256,7 +308,8 @@ function TxList({ txns }: { txns: { id: string; type: string; amount: number; st
             </p>
           </div>
         </div>
-      ))}
+        ))
+      )}
     </div>
   );
 }
@@ -287,11 +340,24 @@ function WalletContent() {
   const isSurveyor = me?.role === 'surveyor';
   const isRespondent = me?.role === 'respondent';
 
-  if (isLoading) return <main className="mx-auto max-w-xl px-4 py-10"><p className="text-sm text-muted-foreground">載入中…</p></main>;
-  if (isError) return <main className="mx-auto max-w-xl px-4 py-10"><p className="text-sm text-destructive">載入失敗，請重新整理頁面。</p></main>;
+  if (isLoading) return <main className="mx-auto max-w-xl px-4 py-10"><LoadingSpinner /></main>;
+  if (isError) return (
+    <main className="mx-auto max-w-xl px-4 py-10">
+      <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-6 text-center">
+        <p className="text-sm text-destructive">錢包載入失敗。</p>
+        <button
+          onClick={() => refetch()}
+          className="mt-2 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+        >
+          重試
+        </button>
+      </div>
+    </main>
+  );
 
   return (
     <main className="mx-auto max-w-xl space-y-6 px-4 py-10">
+      <h1 className="sr-only">我的錢包</h1>
       {banner && <div className="rounded-md bg-green-50 px-4 py-3 text-sm text-green-800">{banner}</div>}
       {showDeposit && <DepositDialog onClose={() => { setShowDeposit(false); refetch(); refetchTxns(); }} />}
       {showWithdraw && <WithdrawDialog maxAmount={wallet?.cashBalance ?? 0} onClose={() => setShowWithdraw(false)} />}
@@ -382,13 +448,13 @@ function TabButton({ active, onClick, icon, label, badge }: {
       onClick={onClick}
       className={cn(
         'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all',
-        active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700',
+        active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-800',
       )}
     >
       {icon}
       {label}
       {badge && (
-        <span className={cn('rounded-full px-1.5 py-0.5 text-[11px] font-bold', active ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-500')}>
+        <span className={cn('rounded-full px-1.5 py-0.5 text-[11px] font-bold', active ? 'bg-amber-100 text-amber-700' : 'bg-slate-200 text-slate-700')}>
           {badge}
         </span>
       )}
@@ -398,7 +464,7 @@ function TabButton({ active, onClick, icon, label, badge }: {
 
 export default function WalletPage() {
   return (
-    <Suspense fallback={<main className="mx-auto max-w-xl px-4 py-10"><p className="text-sm text-muted-foreground">載入中…</p></main>}>
+    <Suspense fallback={<main className="mx-auto max-w-xl px-4 py-10"><LoadingSpinner /></main>}>
       <WalletContent />
     </Suspense>
   );
