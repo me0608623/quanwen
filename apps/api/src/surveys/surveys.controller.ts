@@ -16,6 +16,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { Throttle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import { SurveysService } from './surveys.service';
 import { SurveyLotteryService } from './survey-lottery.service';
@@ -134,6 +135,18 @@ export class SurveysController {
     return this.surveyLottery.fulfill(id, user.id, dto.note);
   }
 
+  @Post(':id/lottery/winners/:resultId/fulfill')
+  @HttpCode(HttpStatus.OK)
+  fulfillLotteryWinner(
+    @Param('id') id: string,
+    @Param('resultId') resultId: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(FulfillLotterySchema)) dto: FulfillLotteryDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.fulfillWinner(id, resultId, user.id, dto.note);
+  }
+
   // ─── GET /surveys/:id ──────────────────────────────────────────────────────
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: Request) {
@@ -243,6 +256,7 @@ export class SurveysController {
    * 匯入 v1 JSON,建立新問卷(status=draft);AI 審核要等呼叫 /publish 才會跑。
    * Body 為 raw JSON,由 SurveyImportService 內部用 Zod 驗證,失敗回 422 結構化錯誤。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import')
   @HttpCode(HttpStatus.CREATED)
   async importJson(@Req() req: Request, @Body() body: unknown) {
@@ -268,6 +282,7 @@ export class SurveysController {
    * 上傳填好的 Excel 樣板 → 解析為 v1 → 走 importer 落 DB(status=draft)。
    * 檔案上限 5MB;multer memory storage。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/xlsx')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
@@ -294,6 +309,7 @@ export class SurveysController {
    * URL 路徑走 SSRF 防護白名單;HTML 路徑供離線/需登入 forms 的 fallback。
    * 不支援題型(date/time/file_upload 等)會列入 warnings 但不擋整份匯入。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/google-forms')
   @HttpCode(HttpStatus.CREATED)
   async importGoogleForms(
@@ -312,6 +328,7 @@ export class SurveysController {
    * 上傳 CSV 檔案（Google Sheets 匯出或手動建立）→ 解析為 v1 → 落 DB。
    * CSV 欄位與 Excel 模板 Questions sheet 同結構。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/csv')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
@@ -335,6 +352,7 @@ export class SurveysController {
    *   { "url": "https://docs.google.com/spreadsheets/d/{ID}/edit", "gid": "0" }
    * 試算表需設為「知道連結的人都能查看」或「發布到網路」。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/google-sheets')
   @HttpCode(HttpStatus.CREATED)
   async importGoogleSheets(
@@ -360,6 +378,7 @@ export class SurveysController {
    * 支援表格式、純文字、帶選項符號的問卷 PDF。
    * 掃描圖片式 PDF 無法解析（需含可選取文字）。
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/pdf')
   @HttpCode(HttpStatus.CREATED)
   @UseInterceptors(
@@ -383,6 +402,7 @@ export class SurveysController {
    *   - { "json": { ... } }   — 直接貼上 SurveyCake 匯出的 JSON
    *   - { "url": "https://www.surveycake.com/s/..." } — 從公開連結匯入
    */
+  @Throttle({ short: { ttl: 1000, limit: 2 }, medium: { ttl: 60_000, limit: 20 } })
   @Post('import/surveycake')
   @HttpCode(HttpStatus.CREATED)
   async importSurveyCake(

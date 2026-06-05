@@ -153,18 +153,25 @@ function initSentry() {
 initSentry();
 
 async function bootstrap() {
+  // 關掉 Nest 預設 bodyParser(預設 json limit 100kb),改自行註冊較大上限。
+  // Google Forms 匯入的 { html } 路徑會收到整份 viewform HTML(常 >100kb),
+  // DTO 允許至 5MB,故 body limit 設 6mb 留餘裕;否則 body-parser 會在進到
+  // ZodValidationPipe 之前就丟 PayloadTooLargeError(回 500 而非預期的 413/422)。
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
+    bodyParser: false,
   });
 
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
 
-  // Enable URL-encoded body parsing (needed for Apple Sign In form_post callback)
+  // Body parsing(json + urlencoded);urlencoded 為 Apple Sign In form_post callback 所需。
   // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const express = require('express');
   const expressApp = app.getHttpAdapter().getInstance() as { use: (...args: unknown[]) => void };
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
-  expressApp.use(require('express').urlencoded({ extended: true }));
+  const BODY_LIMIT = '6mb';
+  expressApp.use(express.json({ limit: BODY_LIMIT }));
+  expressApp.use(express.urlencoded({ extended: true, limit: BODY_LIMIT }));
 
   type RequestWithContext = Request & { requestId?: string };
 

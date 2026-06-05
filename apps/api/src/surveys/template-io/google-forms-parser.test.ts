@@ -41,10 +41,13 @@ const linearScale = (id: number, title: string, max: number) => [
   [[null, Array.from({ length: max }, (_, i) => [String(i + 1)]), null,
     [[`min`], [`max`]], 1]],
 ];
-const grid = (id: number, title: string, rows: string[], cols: string[]) => [
+// 真實 Google Forms grid row 結構(對齊 viewform FB_PUBLIC_LOAD_DATA_):
+//   row[0]=rowId, row[1]=cols [["c1"],["c2"]], row[2]=required, row[3]=[rowTitle](陣列!),
+//   row[11]=[checkboxFlag](陣列, 0=radio 1=checkbox)
+const grid = (id: number, title: string, rows: string[], cols: string[], checkbox = false) => [
   id, title, null, 7,
-  rows.map((r) => [
-    id + Math.random(), cols.map((c) => [c]), null, r, null, null, null, 0,
+  rows.map((r, i) => [
+    id * 1000 + i, cols.map((c) => [c]), 1, [r], null, null, null, null, null, null, null, [checkbox ? 1 : 0],
   ]),
 ];
 const dateField = (id: number, title: string) => [id, title, null, 9, [[null, null, null, null, 1]]];
@@ -139,6 +142,26 @@ describe('google-forms-parser', () => {
       expect(cfg.rows).toEqual(['品質', '價格']);
       expect(cfg.cols).toEqual(['差', '普通', '好']);
       expect(cfg.cellType).toBe('radio');
+    });
+
+    it('4g. checkbox grid(type 7, flag=1)→ matrix cellType=checkbox', () => {
+      const data = formData('Q', [grid(1, '頻率', ['娛樂', '學習'], ['低', '高'], true)]);
+      const { body, skipped } = mapFormToV1(data);
+      expect(skipped).toHaveLength(0);
+      expect(body.questions[0].type).toBe('matrix');
+      const cfg = body.questions[0].config as { rows: string[]; cols: string[]; cellType: string };
+      expect(cfg.rows).toEqual(['娛樂', '學習']);
+      expect(cfg.cols).toEqual(['低', '高']);
+      expect(cfg.cellType).toBe('checkbox');
+    });
+
+    it('10. 超過 50 題 → 截斷前 50 題 + 其餘列入 skipped(不整份失敗)', () => {
+      const items = Array.from({ length: 55 }, (_, i) => radio(i + 1, `Q${i + 1}`, ['A', 'B']));
+      const data = formData('大問卷', items);
+      const { body, skipped } = mapFormToV1(data);
+      expect(body.questions).toHaveLength(50);
+      const truncated = skipped.filter((s) => /超過.*50|題數上限/.test(s.reason));
+      expect(truncated).toHaveLength(5);
     });
 
     it('5. 不支援題型 date(9)/ file_upload(13)→ 列入 skipped', () => {

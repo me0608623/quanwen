@@ -46,6 +46,9 @@ const UNSUPPORTED_TYPE_NAMES: Record<number, string> = {
 
 const DECORATIVE_TYPES = new Set([6, 8]); // section title / break — 裝飾,不算題目,不列入 skipped
 
+/** 單份問卷題數上限,需與 quanwen-survey-v1.schema.ts 的 questions.max(50) 一致 */
+const MAX_QUESTIONS = 50;
+
 export interface SkippedQuestion {
   index: number;
   type: string;
@@ -169,6 +172,17 @@ export function mapFormToV1(data: unknown): GoogleFormsMapResult {
 
     const mapped = mapOne(item, idx, itemTitle);
     if (mapped.ok) {
+      // 題數上限:v1 schema questions.max(50)。超過的軟跳過 + warning,
+      // 與「不支援題型軟跳過」一致,不讓整份匯入硬失敗。
+      if (questions.length >= MAX_QUESTIONS) {
+        skipped.push({
+          index: idx,
+          type: mapped.question.type,
+          title: itemTitle,
+          reason: `超過單份問卷 ${MAX_QUESTIONS} 題上限,已略過`,
+        });
+        continue;
+      }
       questions.push({ ...mapped.question, sortOrder: questions.length });
     } else {
       skipped.push(mapped.skipped);
@@ -331,14 +345,20 @@ function mapGrid(
 
   for (const r of innerArr) {
     if (!Array.isArray(r)) continue;
-    // row title 一般 != item title。Google Forms 的 grid row title 在 row[3] 或更深處;不同版本不一
-    // 但通常每 row 是「子題目」,而題目主標在 item.title。row[0]=ID,row[1]=cols,row[3]=row title
-    const rowTitle = stringAt(r as unknown[], 3) ?? '';
+    const row = r as unknown[];
+    // row title 在真實 Google Forms viewform 結構是 row[3] = ["列標題"](陣列,標題在 [0]);
+    // 舊版/部分版本可能直接是字串。兩者都支援。
+    const rowTitleRaw = row[3];
+    const rowTitle = Array.isArray(rowTitleRaw)
+      ? stringAt(rowTitleRaw, 0) ?? ''
+      : typeof rowTitleRaw === 'string'
+        ? rowTitleRaw
+        : '';
     if (rowTitle) rows.push(rowTitle.slice(0, 200));
 
-    // 第一個 row 的 cols 當作整份 grid 的欄
+    // 第一個 row 的 cols 當作整份 grid 的欄(row[1] = [["c1"],["c2"],...])
     if (cols === null) {
-      const colsRaw = (r as unknown[])[1];
+      const colsRaw = row[1];
       if (Array.isArray(colsRaw)) {
         cols = colsRaw
           .map((c) => (Array.isArray(c) ? stringAt(c as unknown[], 0) : null))
@@ -347,10 +367,14 @@ function mapGrid(
       }
     }
 
-    // checkbox grid flag — 不同位置都試一次;預設 radio
-    // 慣例:row[7] 有 [...] 內含某個 1/0 表 checkbox
-    const r11 = (r as unknown[])[7] ?? (r as unknown[])[11];
-    if (typeof r11 === 'number' && r11 === 1) cellType = 'checkbox';
+    // checkbox grid flag — 真實結構在 row[11] = [0|1](陣列, 1=checkbox);
+    // 部分版本在 row[7]。取陣列首元素判斷;預設 radio。
+    const flagArr = Array.isArray(row[11])
+      ? (row[11] as unknown[])
+      : Array.isArray(row[7])
+        ? (row[7] as unknown[])
+        : [];
+    if (numberAt(flagArr, 0) === 1) cellType = 'checkbox';
   }
 
   if (!cols || cols.length === 0 || rows.length === 0) {
