@@ -6,6 +6,7 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { randomUUID } from 'crypto';
 import { eq, desc, inArray } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
@@ -69,6 +70,9 @@ export class SurveysService {
     const expiresAt = dto.expiresAt ? new Date(dto.expiresAt) : tierExpiresAt(tier);
 
     let survey = {} as typeof surveys.$inferSelect;
+    let assembledQuestions: Array<
+      typeof surveyQuestions.$inferSelect & { options: Array<typeof questionOptions.$inferSelect> }
+    > = [];
     await this.db.transaction(async (tx) => {
       const inserted = await tx
         .insert(surveys)
@@ -109,7 +113,7 @@ export class SurveysService {
       survey = inserted[0];
 
       if (dto.questions?.length) {
-        await this.replaceQuestionsInTx(tx, survey.id, dto.questions);
+        assembledQuestions = await this.replaceQuestionsInTx(tx, survey.id, dto.questions);
       }
     });
 
@@ -146,9 +150,14 @@ export class SurveysService {
           })),
         );
       });
+
+      // logicRules 為罕見路徑;直接 re-fetch 確保 logicRules 與整體 shape 正確。
+      return this.findOneDetailed(survey.id, surveyorId);
     }
 
-    return this.findOneDetailed(survey.id, surveyorId);
+    // 一般路徑(含所有匯入):用 transaction 內已知資料組回傳,免 findOneDetailed 的 4 次查詢。
+    // shape 與 findOneDetailed 一致由 create-batch-insert.integration.test.ts 的 deepEqual 把關。
+    return { ...survey, questions: assembledQuestions, logicRules: [] };
   }
 
   async findMine(surveyorId: string) {
@@ -1123,42 +1132,56 @@ export class SurveysService {
     });
   }
 
+  /**
+   * 刪除舊題並批次插入新題 + 選項,回傳組裝好的題目(含 options,依 sortOrder 排序),
+   * shape 與 findOneDetailed 的 questions 欄位一致,供 create() 免 re-fetch 直接組回傳。
+   *
+   * 效能:原本逐題 INSERT(+ 逐題選項 INSERT)= O(Q) round-trip;改為題目一次、
+   * 選項一次,共 2 次。為了在插入前就能連結 question↔options,id 於 app 端用
+   * randomUUID 產生(欄位本身 defaultRandom,顯式給值合法)。
+   */
   private async replaceQuestionsInTx(
     tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0],
     surveyId: string,
     questionDtos: SurveyQuestionDto[],
-  ) {
+  ): Promise<Array<typeof surveyQuestions.$inferSelect & { options: Array<typeof questionOptions.$inferSelect> }>> {
     await tx
       .delete(surveyQuestions)
       .where(eq(surveyQuestions.surveyId, surveyId));
 
-    for (const qDto of questionDtos) {
-      const inserted = await tx
-        .insert(surveyQuestions)
-        .values({
-          surveyId,
-          type: qDto.type,
-          title: qDto.title,
-          description: qDto.description,
-          sortOrder: qDto.sortOrder ?? 0,
-          isRequired: qDto.isRequired ?? true,
-          // QUA-279: 題目圖片
-          imageUrl: qDto.imageUrl,
-          config: qDto.config,
-        })
-        .returning({ id: surveyQuestions.id });
+    if (!questionDtos.length) return [];
 
-      const questionId = inserted[0].id;
+    const qValues = questionDtos.map((qDto) => ({
+      id: randomUUID(),
+      surveyId,
+      type: qDto.type,
+      title: qDto.title,
+      description: qDto.description,
+      sortOrder: qDto.sortOrder ?? 0,
+      isRequired: qDto.isRequired ?? true,
+      // QUA-279: 題目圖片
+      imageUrl: qDto.imageUrl,
+      config: qDto.config,
+    }));
 
-      if (qDto.options?.length) {
-        await tx.insert(questionOptions).values(
-          qDto.options.map((o, i) => ({
-            questionId,
-            label: o.label,
-            sortOrder: o.sortOrder ?? i,
-          })),
-        );
-      }
-    }
+    const insertedQs = await tx.insert(surveyQuestions).values(qValues).returning();
+
+    const optValues = questionDtos.flatMap((qDto, qi) =>
+      (qDto.options ?? []).map((o, i) => ({
+        questionId: qValues[qi].id,
+        label: o.label,
+        sortOrder: o.sortOrder ?? i,
+      })),
+    );
+
+    const insertedOpts = optValues.length
+      ? await tx.insert(questionOptions).values(optValues).returning()
+      : [];
+
+    // 組裝成 findOneDetailed 的 questions shape:依 sortOrder 排序,選項依 sortOrder 巢狀。
+    const optsBySort = [...insertedOpts].sort((a, b) => a.sortOrder - b.sortOrder);
+    return [...insertedQs]
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+      .map((q) => ({ ...q, options: optsBySort.filter((o) => o.questionId === q.id) }));
   }
 }
