@@ -162,6 +162,12 @@ async function bootstrap() {
     bodyParser: false,
   });
 
+  // 反向代理感知:本服務部署在 Cloudflare Tunnel / web proxy 之後,
+  // 開啟 trust proxy 後 express 才會用 X-Forwarded-For 的真實 client IP
+  // 填 req.ip / req.ips。限流(ClientIpThrottlerGuard)才能正確按使用者分桶,
+  // 而非把所有人歸到同一個內網 gateway IP。api 僅經內部 proxy 對外,故信任代理鏈。
+  (app.getHttpAdapter().getInstance() as { set: (k: string, v: unknown) => void }).set('trust proxy', true);
+
   // Global exception filter
   app.useGlobalFilters(new GlobalExceptionFilter());
 
