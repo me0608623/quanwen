@@ -233,12 +233,16 @@ export class SurveysController {
   // ═══════════════════════════════════════════════════════════════════════════
 
   /**
-   * GET /surveys/:id/export.json
-   * 匯出問卷模板為 QuanWenSurvey v1 JSON。
+   * GET /surveys/:id/export.template.json
+   * 匯出問卷模板為 QuanWenSurvey v1 JSON(可再經 /surveys/import 重匯入)。
    * 非本人問卷 → 403(由 surveysService.findOneDetailed 內擲出)。
+   *
+   * 路徑歷史:原為 `:id/export.json`,與 ResponsesController 的同名路由
+   * (結果資料匯出)衝突,被後者遮蔽導致本模板匯出長期無法觸及。改用
+   * `export.template.json` 區隔;結果匯出維持 `export.json`(前端 stats 頁使用)。
    */
-  @Get(':id/export.json')
-  async exportJson(
+  @Get(':id/export.template.json')
+  async exportTemplateJson(
     @Param('id') id: string,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
@@ -246,7 +250,8 @@ export class SurveysController {
     const user = req.user as AuthenticatedUser;
     const payload = await this.exportService.exportAsJson(id, user.id);
     const filename = SurveyExportService.safeFilename(payload.survey.title);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    // safeFilename 保留 CJK;需 RFC 5987 編碼,直接塞中文進 header 會 ERR_INVALID_CHAR。
+    res.setHeader('Content-Disposition', SurveyExportService.contentDisposition(filename));
     res.setHeader('Content-Type', 'application/json; charset=utf-8');
     return payload;
   }

@@ -78,4 +78,18 @@ export class SurveyExportService {
     const base = cleaned.slice(0, 60) || 'survey';
     return `${base}.quanwen.v1.json`;
   }
+
+  /**
+   * 組 RFC 6266 / 5987 的 Content-Disposition(attachment)值。
+   *
+   * safeFilename 會保留 CJK,但 HTTP header 是 latin-1/ASCII,中文直接塞會丟
+   * `ERR_INVALID_CHAR`。故同時給:
+   *  - `filename="..."` ASCII fallback(非 ASCII 換成 _),給舊瀏覽器
+   *  - `filename*=UTF-8''<percent-encoded>` 給現代瀏覽器(正確顯示中文)
+   */
+  static contentDisposition(filename: string): string {
+    const asciiFallback = filename.replace(/[^\x20-\x7E]/g, '_').replace(/"/g, '');
+    const encoded = encodeURIComponent(filename);
+    return `attachment; filename="${asciiFallback}"; filename*=UTF-8''${encoded}`;
+  }
 }
