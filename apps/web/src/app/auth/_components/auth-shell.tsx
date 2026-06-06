@@ -164,6 +164,11 @@ export function AuthShell({
           </div>
 
           <div className="relative z-10 max-w-[520px]">
+            {/* 深色襯底 halo：避免白字標題疊在懸浮白卡上看不清 */}
+            <div
+              aria-hidden
+              className="pointer-events-none absolute -left-6 -top-8 -z-10 h-[360px] w-[min(620px,118%)] rounded-[2.5rem] bg-[radial-gradient(120%_100%_at_18%_30%,rgba(4,12,24,0.82),rgba(4,12,24,0.5)_46%,transparent_74%)] blur-[6px]"
+            />
             {isSurveyor && (
               <div className="mb-7 inline-flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium backdrop-blur-sm">
                 <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--aw-accent)]" />
