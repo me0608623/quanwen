@@ -26,9 +26,14 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
 
   return (
     <section className="rounded-lg border border-border p-5">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
+      <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-2">
         🧩 回應者分群分析（K-means）
       </h2>
+      <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
+        自動把作答模式相似的填答者分成幾個族群，幫你看出「不同類型的受眾各是什麼樣子」——
+        例如哪一群偏好什麼選項、哪一群評分普遍偏低。選擇群數（k）後按「分群」即可；
+        群數建議從 3 開始嘗試，分得太細每群人數會太少。分群依據為評分題分數與選擇題作答組合。
+      </p>
 
       <div className="flex items-end gap-3 mb-4">
         <div className="w-24">
@@ -63,7 +68,13 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
         <p className="text-xs text-red-600">分群失敗，請稍後再試</p>
       )}
 
-      {data && !isLoading && (
+      {data && !isLoading && data.segments.length === 0 && (
+        <div className="rounded-md border border-dashed border-border p-4 text-xs text-muted-foreground">
+          目前無法分群：此問卷沒有可分群的題型（評分題／單選題／多選題），或還沒有任何已提交的填答。
+        </div>
+      )}
+
+      {data && !isLoading && data.segments.length > 0 && (
         <div className="space-y-4">
           <p className="text-xs text-muted-foreground">
             共 {data.totalRespondents} 位回應者，分為 {data.segments.length} 群
@@ -104,6 +115,22 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
                     </li>
                   ))}
                 </ul>
+                {seg.choiceProfiles && Object.keys(seg.choiceProfiles).length > 0 && (
+                  <ul className="space-y-1.5 border-t border-border pt-2">
+                    {Object.values(seg.choiceProfiles).map((p, j) => (
+                      <li key={j} className="text-xs">
+                        <p className="text-muted-foreground truncate">{p.questionTitle}</p>
+                        <p className="mt-0.5 flex flex-wrap gap-1">
+                          {p.topOptions.map((o, m) => (
+                            <span key={m} className="rounded bg-muted px-1.5 py-0.5 font-medium">
+                              {o.label} {Math.round(o.pct * 100)}%
+                            </span>
+                          ))}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             ))}
           </div>

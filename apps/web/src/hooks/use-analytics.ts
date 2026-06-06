@@ -147,6 +147,10 @@ export interface SegmentationResult {
       relativeAvg: number | null;
       answeredCount: number;
     }>;
+    choiceProfiles: Record<string, {
+      questionTitle: string;
+      topOptions: { label: string; pct: number }[];
+    }>;
   }[];
   totalRespondents: number;
   normalizedToCommonScale: boolean;

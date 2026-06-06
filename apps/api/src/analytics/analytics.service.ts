@@ -709,7 +709,9 @@ export class AnalyticsService {
 
   /**
    * 分群分析：根據回答者作答特徵自動分群
-   * 使用簡單的 K-means（k=2~3）在評分題上分群
+   * 使用簡單的 K-means 在「評分題（標準化 0-1）+ 選擇題（one-hot 編碼）」混合特徵向量上分群。
+   * 2026-06-06 擴充：原本只支援評分題，純選擇題問卷會回空結果（看起來像壞掉）；
+   * 現在選擇題每個選項展開成一個 0/1 維度，各群輸出「選項輪廓」（choiceProfiles）。
    */
   async getSegmentation(
     surveyId: string,
@@ -728,6 +730,10 @@ export class AnalyticsService {
         relativeAvg: number | null;
         answeredCount: number;
       }>;
+      choiceProfiles: Record<string, {
+        questionTitle: string;
+        topOptions: { label: string; pct: number }[];
+      }>;
     }[];
     totalRespondents: number;
     normalizedToCommonScale: boolean;
@@ -737,54 +743,92 @@ export class AnalyticsService {
       throw new BadRequestException('分群數 k 必須是 2 至 10 的整數');
     }
 
-    // 取得所有評分題
-    const ratingQuestions = await this.db
+    // 取得可分群題型：評分題 + 單/多選題
+    const allQuestions = await this.db
       .select()
       .from(surveyQuestions)
       .where(
         and(
           eq(surveyQuestions.surveyId, surveyId),
-          eq(surveyQuestions.type, 'rating'),
+          inArray(surveyQuestions.type, ['rating', 'single_choice', 'multiple_choice']),
         ),
-      );
+      )
+      .orderBy(surveyQuestions.sortOrder);
 
-    if (ratingQuestions.length === 0) {
+    const ratingQuestions = allQuestions.filter((q) => q.type === 'rating');
+    const choiceQuestions = allQuestions.filter((q) => q.type !== 'rating');
+
+    if (allQuestions.length === 0) {
       return { segments: [], totalRespondents: 0, normalizedToCommonScale: true };
     }
 
-    const qIds = ratingQuestions.map((q: { id: string }) => q.id);
+    // 選擇題選項（one-hot 維度）
+    const choiceQIds = choiceQuestions.map((q) => q.id);
+    const choiceOptions = choiceQIds.length > 0
+      ? await this.db
+          .select()
+          .from(questionOptions)
+          .where(inArray(questionOptions.questionId, choiceQIds))
+          .orderBy(questionOptions.questionId, questionOptions.sortOrder)
+      : [];
+    // optionId -> one-hot 維度索引（接在評分維度之後）
+    const optionDimIndex = new Map<string, number>();
+    for (const opt of choiceOptions) {
+      optionDimIndex.set(opt.id, ratingQuestions.length + optionDimIndex.size);
+    }
+    const optionById = new Map(choiceOptions.map((o) => [o.id, o]));
 
-    // 取得所有評分回答
+    const qIds = ratingQuestions.map((q: { id: string }) => q.id);
+    const allQIds = [...qIds, ...choiceQIds];
+
+    // 取得所有可分群回答（評分值 + 選擇題選項）
     const allAnswers = await this.db
       .select({
         responseId: responseAnswers.responseId,
         questionId: responseAnswers.questionId,
         value: responseAnswers.ratingValue,
+        selectedOptionIds: responseAnswers.selectedOptionIds,
       })
       .from(responseAnswers)
       .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
       .where(
         and(
           eq(surveyResponses.surveyId, surveyId),
-          inArray(responseAnswers.questionId, qIds),
+          inArray(responseAnswers.questionId, allQIds),
           inArray(surveyResponses.status, ['submitted', 'rewarded']),
         ),
       );
 
-    // 構建 responseId -> vector
+    // 構建 responseId -> vector（評分維度 NaN = 未答；one-hot 維度 0 = 未選）
+    const dim = ratingQuestions.length + optionDimIndex.size;
     const vectors = new Map<string, number[]>();
     const responseIds: string[] = [];
 
-    for (const a of allAnswers) {
-      if (a.value === null) continue;
-      if (!vectors.has(a.responseId)) {
-        vectors.set(a.responseId, new Array(qIds.length).fill(NaN));
-        responseIds.push(a.responseId);
+    const ensureVector = (responseId: string) => {
+      if (!vectors.has(responseId)) {
+        const v = new Array(dim).fill(0);
+        for (let d = 0; d < ratingQuestions.length; d++) v[d] = NaN;
+        vectors.set(responseId, v);
+        responseIds.push(responseId);
       }
+      return vectors.get(responseId)!;
+    };
+
+    for (const a of allAnswers) {
       const qIdx = qIds.indexOf(a.questionId);
       if (qIdx !== -1) {
+        if (a.value === null) continue;
         const { min, max } = ratingScaleRange(ratingQuestions[qIdx].config);
-        vectors.get(a.responseId)![qIdx] = normalizeScaleValue(a.value, min, max);
+        ensureVector(a.responseId)[qIdx] = normalizeScaleValue(a.value, min, max);
+        continue;
+      }
+      // 選擇題：one-hot
+      const selected = Array.isArray(a.selectedOptionIds) ? (a.selectedOptionIds as string[]) : [];
+      if (selected.length === 0) continue;
+      const v = ensureVector(a.responseId);
+      for (const optId of selected) {
+        const dimIdx = optionDimIndex.get(optId);
+        if (dimIdx !== undefined) v[dimIdx] = 1;
       }
     }
 
@@ -792,10 +836,9 @@ export class AnalyticsService {
       k = Math.max(2, responseIds.length);
     }
 
-    // 只保留有至少一個有效值的 responses，並用均值填 NaN
-    const dim = qIds.length;
+    // 評分維度用均值填 NaN（one-hot 維度本來就是 0/1，不需填補）
     const colMeans: number[] = [];
-    for (let d = 0; d < dim; d++) {
+    for (let d = 0; d < ratingQuestions.length; d++) {
       const vals = responseIds
         .map((rid: string) => vectors.get(rid)![d])
         .filter((v: number) => !isNaN(v));
@@ -805,6 +848,10 @@ export class AnalyticsService {
     const matrix: number[][] = responseIds.map((rid: string) =>
       vectors.get(rid)!.map((v: number, d: number) => (isNaN(v) ? colMeans[d] : v)),
     );
+
+    if (responseIds.length === 0) {
+      return { segments: [], totalRespondents: 0, normalizedToCommonScale: true };
+    }
 
     // K-means (simple, k iterations max 20)
     const actualK = Math.min(k, responseIds.length);
@@ -845,9 +892,17 @@ export class AnalyticsService {
       }
     }
 
+    // 全體各選項選取率（用於找出各群「最有區辨力」的選項當標籤）
+    const overallOptionPct = new Map<string, number>();
+    for (const [optId, dimIdx] of optionDimIndex) {
+      const sum = matrix.reduce((s: number, row: number[]) => s + row[dimIdx], 0);
+      overallOptionPct.set(optId, matrix.length > 0 ? sum / matrix.length : 0);
+    }
+
     // Build result
     const segments = centroids.map((centroid: number[], c: number) => {
       const members = responseIds.filter((_: string, i: number) => assignments[i] === c);
+      const memberRows = matrix.filter((_: number[], i: number) => assignments[i] === c);
       const avgRatings: Record<string, {
         questionTitle: string;
         avg: number | null;
@@ -856,7 +911,7 @@ export class AnalyticsService {
         relativeAvg: number | null;
         answeredCount: number;
       }> = {};
-      for (let d = 0; d < dim; d++) {
+      for (let d = 0; d < ratingQuestions.length; d++) {
         const { min, max } = ratingScaleRange(ratingQuestions[d].config);
         const observedValues = responseIds
           .filter((_: string, index: number) => assignments[index] === c)
@@ -876,14 +931,54 @@ export class AnalyticsService {
         };
       }
 
-      // Centroids use normalized values so mixed scales receive equal weight.
-      const overallAvg = centroid.reduce((s: number, v: number) => s + v, 0) / dim;
-      const label =
-        overallAvg >= 0.7 ? `高分群（相對 ${Math.round(overallAvg * 100)}%）` :
-        overallAvg >= 0.4 ? `中分群（相對 ${Math.round(overallAvg * 100)}%）` :
-        `低分群（相對 ${Math.round(overallAvg * 100)}%）`;
+      // 各群選項輪廓：每個選擇題列出本群選取率最高的前 2 個選項
+      const choiceProfiles: Record<string, {
+        questionTitle: string;
+        topOptions: { label: string; pct: number }[];
+      }> = {};
+      let distinctiveLabel: string | null = null;
+      let distinctiveLift = 0;
+      for (const q of choiceQuestions) {
+        const opts = choiceOptions.filter((o) => o.questionId === q.id);
+        const ranked = opts
+          .map((o) => {
+            const dimIdx = optionDimIndex.get(o.id)!;
+            const pct = memberRows.length > 0
+              ? memberRows.reduce((s: number, row: number[]) => s + row[dimIdx], 0) / memberRows.length
+              : 0;
+            return { label: o.label, pct: Math.round(pct * 1000) / 1000, lift: pct - (overallOptionPct.get(o.id) ?? 0) };
+          })
+          .sort((a, b) => b.pct - a.pct);
+        choiceProfiles[q.id] = {
+          questionTitle: q.title,
+          topOptions: ranked.slice(0, 2).map(({ label, pct }) => ({ label, pct })),
+        };
+        // 區辨力 = 本群選取率 − 全體選取率，取最大者當群標籤
+        for (const r of ranked) {
+          if (r.lift > distinctiveLift) {
+            distinctiveLift = r.lift;
+            distinctiveLabel = r.label;
+          }
+        }
+      }
 
-      return { segmentId: `segment-${c + 1}`, label, count: members.length, avgRatings };
+      // 群標籤：有評分題 → 沿用高/中/低分群；純選擇題 → 用最有區辨力的選項
+      let label: string;
+      if (ratingQuestions.length > 0) {
+        const ratingCentroid = centroid.slice(0, ratingQuestions.length);
+        const overallAvg = ratingCentroid.reduce((s: number, v: number) => s + v, 0) / ratingQuestions.length;
+        label =
+          overallAvg >= 0.7 ? `高分群（相對 ${Math.round(overallAvg * 100)}%）` :
+          overallAvg >= 0.4 ? `中分群（相對 ${Math.round(overallAvg * 100)}%）` :
+          `低分群（相對 ${Math.round(overallAvg * 100)}%）`;
+      } else if (distinctiveLabel) {
+        const short = distinctiveLabel.length > 12 ? `${distinctiveLabel.slice(0, 12)}…` : distinctiveLabel;
+        label = `群 ${c + 1}・傾向「${short}」`;
+      } else {
+        label = `群 ${c + 1}`;
+      }
+
+      return { segmentId: `segment-${c + 1}`, label, count: members.length, avgRatings, choiceProfiles };
     });
 
     return {
