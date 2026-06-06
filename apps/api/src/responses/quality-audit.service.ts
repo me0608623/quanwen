@@ -60,6 +60,43 @@ const WEIGHTS = {
   timing: 0.05,
 };
 
+/**
+ * 三段裁決 + 動態容錯救回（純函式，可單測）。
+ *
+ * 基本規則：<50 rejected、50-79 suspicious、>=80 passed；LLM 建議可往嚴格方向覆寫。
+ * 救回規則：避免「分數略低但開放題回答具實質價值」被二分法直接判死 —
+ * 40-49 邊緣分 + 文字品質訊號高（>=70）+ LLM 沒有明確建議拒絕
+ * → 降級為 suspicious（不發獎、進人工/申訴流程），而非直接 rejected。
+ */
+export function resolveQualityVerdict(
+  finalScore: number,
+  llmRecommendation: 'approve' | 'manual_review' | 'reject' | null,
+  signalScores: { textQuality: number },
+): { status: 'passed' | 'suspicious' | 'rejected'; rescueFlag: string | null } {
+  let status: 'passed' | 'suspicious' | 'rejected';
+  if (llmRecommendation === 'reject' || finalScore < 50) {
+    status = 'rejected';
+  } else if (llmRecommendation === 'manual_review' || finalScore < 80) {
+    status = 'suspicious';
+  } else {
+    status = 'passed';
+  }
+
+  if (
+    status === 'rejected' &&
+    llmRecommendation !== 'reject' &&
+    finalScore >= 40 &&
+    signalScores.textQuality >= 70
+  ) {
+    return {
+      status: 'suspicious',
+      rescueFlag: '邊緣分數但開放題回答具實質內容，轉人工複核（未直接判定無效）',
+    };
+  }
+
+  return { status, rescueFlag: null };
+}
+
 export function calculateReversePairConsistency(
   pairs: Array<{ a: number; b: number; minRating: number; maxRating: number }>,
 ): number | null {
@@ -171,29 +208,8 @@ export class QualityAuditService {
       ? Math.round(behaviorScore * 0.4 + llmScore * 0.6)
       : Math.round(behaviorScore);
 
-    let status: 'passed' | 'suspicious' | 'rejected';
-    if (llmRecommendation === 'reject' || finalScore < 50) {
-      status = 'rejected';
-    } else if (llmRecommendation === 'manual_review' || finalScore < 80) {
-      status = 'suspicious';
-    } else {
-      status = 'passed';
-    }
-
-    const flags = [...legacy.flags];
-
-    // ── 動態容錯救回：避免「分數略低但開放題回答具實質價值」被二分法直接判死 ──
-    // 條件：40-49 邊緣分 + 文字品質訊號高（≥70）+ LLM 沒有明確建議拒絕
-    // → 降級為 suspicious（不發獎、進人工/申訴流程），而非直接 rejected。
-    if (
-      status === 'rejected' &&
-      llmRecommendation !== 'reject' &&
-      finalScore >= 40 &&
-      signalScores.textQuality >= 70
-    ) {
-      status = 'suspicious';
-      flags.push('邊緣分數但開放題回答具實質內容，轉人工複核（未直接判定無效）');
-    }
+    const { status, rescueFlag } = resolveQualityVerdict(finalScore, llmRecommendation, signalScores);
+    const flags = rescueFlag ? [...legacy.flags, rescueFlag] : [...legacy.flags];
 
     return {
       behaviorScore,

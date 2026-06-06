@@ -94,6 +94,55 @@ export default function TasksPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
+      {/* 申訴 modal */}
+      {appealTarget && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          onClick={() => setAppealTarget(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold mb-1">申訴填答審核結果</h3>
+            <p className="text-sm text-muted-foreground mb-3 truncate">{appealTarget.surveyTitle}</p>
+            <p className="mb-3 rounded-md bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+              請說明你認為審核結果有誤的原因（例如：開放題是依親身經驗認真作答、填答快是因為對主題熟悉）。
+              管理員人工複審通過後會補發獎勵並回復信譽分。每筆填答僅能申訴一次。
+            </p>
+            <textarea
+              className="h-28 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              placeholder="申訴理由（至少 5 字）"
+              value={appealReason}
+              onChange={(e) => setAppealReason(e.target.value)}
+            />
+            {createAppeal.error ? (
+              <p className="mt-2 text-sm text-destructive">申訴送出失敗，請稍後再試</p>
+            ) : null}
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setAppealTarget(null)}
+                className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
+              >
+                取消
+              </button>
+              <button
+                onClick={() =>
+                  createAppeal.mutate(
+                    { responseId: appealTarget.responseId, reason: appealReason.trim() },
+                    { onSuccess: () => setAppealTarget(null) },
+                  )
+                }
+                disabled={appealReason.trim().length < 5 || createAppeal.isPending}
+                className="rounded-md bg-[#126b8a] px-4 py-2 text-sm font-medium text-white hover:bg-[#0f5d78] disabled:opacity-50"
+              >
+                {createAppeal.isPending ? '送出中…' : '送出申訴'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="mb-6">
         <h1 className="text-2xl font-bold">填問卷賺獎勵</h1>
@@ -813,6 +862,43 @@ function Kpi({
         {suffix && <span className="ml-0.5 text-sm font-normal text-muted-foreground">{suffix}</span>}
       </p>
       {extra && <p className="mt-0.5 text-xs text-muted-foreground">{extra}</p>}
+    </div>
+  );
+}
+
+/** 品質審核扣分明細（被拒/可疑填答的透明化說明） */
+function QualityBreakdownDetail({ breakdown }: { breakdown: MyResponseRecord['qualityBreakdown'] }) {
+  if (!breakdown) return null;
+  const s = breakdown.signalScores;
+  const rows: Array<{ label: string; score: number | null | undefined; hint: string }> = [
+    { label: '填答時間', score: s?.timing, hint: '過快或過慢都會扣分' },
+    { label: '注意力檢核', score: s?.attentionCheck, hint: '檢核題答錯會大幅扣分' },
+    { label: '前後一致性', score: s?.reverseConsistency, hint: '相似題答案互相矛盾會扣分' },
+    { label: '文字回答品質', score: s?.textQuality, hint: '開放題太短、無關或像複製貼上會扣分' },
+    { label: '選項作答模式', score: s?.choicePattern, hint: '全選同一選項、規律亂點會扣分' },
+  ];
+  return (
+    <div className="mt-2 rounded-lg border border-border bg-muted/30 p-3 text-xs space-y-1.5">
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-2">
+          <span className="text-muted-foreground" title={row.hint}>{row.label}</span>
+          {row.score === null || row.score === undefined ? (
+            <span className="text-muted-foreground">不適用</span>
+          ) : (
+            <span className={`font-semibold ${row.score < 50 ? 'text-red-600' : row.score < 80 ? 'text-amber-700' : 'text-emerald-700'}`}>
+              {row.score} 分
+            </span>
+          )}
+        </div>
+      ))}
+      {breakdown.llmReasoning && (
+        <p className="border-t border-border pt-1.5 text-muted-foreground">
+          AI 複評意見：{breakdown.llmReasoning}
+        </p>
+      )}
+      <p className="border-t border-border pt-1.5 text-muted-foreground">
+        各項為 0-100 分訊號，依權重加總成品質分。若你認為判定有誤，可使用「我要申訴」由管理員人工複審。
+      </p>
     </div>
   );
 }
