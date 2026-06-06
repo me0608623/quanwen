@@ -207,7 +207,7 @@ export default function NewSurveyPage() {
               )}
             </div>
             <p className="text-xs text-slate-600">
-              站內出題，平台媒合受試者來填寫。需要預算鎖定 + AI 審核。
+              站內出題，平台媒合受試者來填寫。發布即上架；需要預算鎖定 + AI 品質掃描。
             </p>
           </button>
 
@@ -594,7 +594,7 @@ export default function NewSurveyPage() {
                 </p>
                 {!aiReviewEnabled && (
                   <p className="mt-1.5 rounded bg-amber-50 px-2 py-1 text-xs text-amber-700">
-                    ⚠️ 關閉後問卷會直接上架、不過 AI 審核，填答品質需自行把關。
+                    ⚠️ 關閉後將不執行 AI 品質掃描與填答品質審核，填答品質需自行把關。
                   </p>
                 )}
               </div>

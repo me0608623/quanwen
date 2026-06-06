@@ -160,14 +160,14 @@ export function SurveyEditorShell({
             {previewOpen ? '隱藏預覽' : '預覽'}
           </button>
 
-          {canEdit && dirty && (
+          {canEdit && (
             <button
               type="button"
               onClick={onSave}
-              disabled={savePending}
+              disabled={savePending || !dirty}
               className="rounded-md border border-primary px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
             >
-              {savePending ? '儲存中…' : '儲存草稿'}
+              {savePending ? '儲存中…' : dirty ? '儲存草稿' : '已儲存'}
             </button>
           )}
 

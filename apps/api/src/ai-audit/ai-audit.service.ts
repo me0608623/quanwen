@@ -99,8 +99,11 @@ export class AiAuditService {
   }
 
   /**
-   * 非同步審核問卷品質（fire-and-forget，呼叫後立即回傳）
-   * 審核完成後自動更新 survey.status → published / rejected
+   * 非同步問卷品質掃描（fire-and-forget，呼叫後立即回傳）
+   *
+   * 2026-06-06 改版：發布即上架（publish 直接設 published），本方法降級為 advisory：
+   * - status === 'published'（新流程）：只記錄 aiScore + 低分時通知建立者改善，不改狀態。
+   * - status === 'pending_review'（舊資料相容）：維持原自動 published / rejected 行為。
    */
   async auditSurveyAsync(surveyId: string): Promise<void> {
     const surveyRows = await this.db
@@ -110,19 +113,43 @@ export class AiAuditService {
       .limit(1);
 
     const survey = surveyRows[0];
-    if (!survey || survey.status !== 'pending_review') return;
+    if (!survey || (survey.status !== 'pending_review' && survey.status !== 'published')) return;
 
     let result: AuditResult;
     try {
       result = await this.evaluateSurvey(surveyId);
     } catch (err) {
-      this.logger.error(`問卷 ${surveyId} AI 審核失敗，自動通過`, err);
+      this.logger.error(`問卷 ${surveyId} AI 品質掃描失敗，自動通過`, err);
       result = { score: 70, passed: true, issues: [], suggestion: '' };
     }
 
-    const newStatus = result.passed ? 'published' : 'rejected';
     const now = new Date();
 
+    if (survey.status === 'published') {
+      // Advisory 模式：只落分數，不動上架狀態
+      await this.db
+        .update(surveys)
+        .set({ aiScore: result.score, updatedAt: now })
+        .where(eq(surveys.id, surveyId));
+
+      if (!result.passed) {
+        const issuesText = result.issues.join('；') || '不符合品質標準';
+        await this.notifications.create({
+          userId: survey.surveyorId,
+          type: 'system',
+          title: `問卷「${survey.title}」AI 品質提醒`,
+          body: `AI 品質評分 ${result.score} 分（偏低）。問卷仍維持上架，但建議改善：${issuesText}。${result.suggestion ? `建議：${result.suggestion}` : ''}`,
+          metadata: { surveyId, aiScore: result.score, advisory: true },
+        });
+        this.logger.warn(`問卷 ${surveyId} 品質掃描偏低（score: ${result.score}），已通知建立者（不影響上架）`);
+      } else {
+        this.logger.log(`問卷 ${surveyId} 品質掃描完成（score: ${result.score}）`);
+      }
+      return;
+    }
+
+    // ── 以下為 pending_review 舊資料相容路徑（自動 published / rejected）──
+    const newStatus = result.passed ? 'published' : 'rejected';
     const rejectReason = result.passed ? null : (result.issues.join('；') || '不符合品質標準');
 
     await this.db

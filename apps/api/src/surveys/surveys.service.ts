@@ -404,14 +404,16 @@ export class SurveysService {
       return { message: '問卷已直接上架（未開啟 AI 審核）', surveyId };
     }
 
+    // 2026-06-06 改版：發布即上架，不再卡 pending_review 等 AI 過審。
+    // AI 審核降級為「發布後品質掃描」（advisory）：低分只通知建立者改善，不擋發布、不自動下架。
     await this.db
       .update(surveys)
-      .set({ status: 'pending_review', updatedAt: new Date() })
+      .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
       .where(eq(surveys.id, surveyId));
 
-    // Fire-and-forget AI 審核（不阻塞回應）
+    // Fire-and-forget 發布後 AI 品質掃描（不阻塞回應、不影響上架狀態）
     this.aiAudit.auditSurveyAsync(surveyId).catch((err) =>
-      this.logger.error(`AI 審核 fire-and-forget 錯誤 surveyId=${surveyId}`, err),
+      this.logger.error(`AI 品質掃描 fire-and-forget 錯誤 surveyId=${surveyId}`, err),
     );
 
     // Fire-and-forget 預算鎖定
@@ -419,7 +421,7 @@ export class SurveysService {
       this.logger.error(`預算鎖定失敗 surveyId=${surveyId}`, err),
     );
 
-    return { message: '問卷已送出審核，AI 將在稍後完成評分', surveyId };
+    return { message: '問卷已上架，AI 品質掃描將於稍後完成', surveyId };
   }
 
   async remove(surveyId: string, surveyorId: string) {

@@ -746,12 +746,12 @@ export default function SurveyDetailPage() {
             >
               <h2 className="text-base font-semibold text-foreground">確認發布問卷</h2>
               <p className="mt-1 text-xs text-muted-foreground">
-                發布後問卷將進入審核，通過後開放填答。
+                發布後問卷將立即上架開放填答；AI 會在背景進行品質掃描並提供改善建議。
               </p>
 
               {scheduledPublishAt && new Date(scheduledPublishAt).getTime() > Date.now() && (
                 <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
-                  🕒 此問卷已排程於 {new Date(scheduledPublishAt).toLocaleString('zh-TW')} 自動發布。立即發布將略過排程、馬上送審。
+                  🕒 此問卷已排程於 {new Date(scheduledPublishAt).toLocaleString('zh-TW')} 自動發布。立即發布將略過排程、馬上上架。
                 </p>
               )}
 
