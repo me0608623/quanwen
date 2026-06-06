@@ -20,6 +20,7 @@ process.env.PII_KDF_SALT = 'phase-z-salt';
 import * as schema from '../db/schema';
 import { CryptoService } from '../common/crypto.service';
 import { PointShopService } from './point-shop.service';
+import { VoucherIssuerService } from './voucher-issuer.service';
 
 const USER_ID = '11111111-1111-1111-1111-111111111111';
 const ITEM_711_50 = '77777777-7777-7777-7777-777777777701';
@@ -142,7 +143,8 @@ describe('PointShopService.redeem (integration)', () => {
     db = drizzle(client, { schema });
     crypto = new CryptoService();
     const notifications = { create: async () => undefined } as never;
-    service = new PointShopService(db as never, crypto, notifications);
+    const voucherIssuer = new VoucherIssuerService();
+    service = new PointShopService(db as never, crypto, notifications, voucherIssuer);
   });
 
   afterAll(async () => {

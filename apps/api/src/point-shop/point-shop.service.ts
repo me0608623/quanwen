@@ -7,7 +7,6 @@ import {
   ConflictException,
 } from '@nestjs/common';
 import { eq, desc, and, sql } from 'drizzle-orm';
-import { randomBytes } from 'crypto';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -19,6 +18,7 @@ import {
 } from '../db/schema';
 import { CryptoService } from '../common/crypto.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { VoucherIssuerService } from './voucher-issuer.service';
 
 /**
  * Phase Q：積分商城
@@ -42,6 +42,7 @@ export class PointShopService {
     @Inject(DB) private readonly db: AppDb,
     private readonly crypto: CryptoService,
     private readonly notifications: NotificationsService,
+    private readonly voucherIssuer: VoucherIssuerService,
   ) {}
 
   /** 列出商品（active + 有庫存）*/
@@ -79,12 +80,18 @@ export class PointShopService {
       );
     }
 
-    // 產生 PIN（demo: 16 chars hex；prod 接禮券供應商 API）
-    const pinPlain = this.generatePin();
-    const pinCipher = this.crypto.encrypt(pinPlain);
+    // 發券（demo: 隨機 PIN；VOUCHER_PROVIDER=http 時打真實供應商 API）。
+    // 在扣點交易「之前」發券：HTTP provider 失敗會丟例外，直接中止、不扣點。
+    // 邊界 race（發券成功但下方扣點因併發失敗）→ 記 error log 供人工對帳作廢。
+    const issued = await this.voucherIssuer.issue({
+      itemName: item.name,
+      faceValue: item.faceValue,
+      category: item.category,
+    });
+    const pinCipher = this.crypto.encrypt(issued.code);
 
-    // 兌換有效期 6 個月
-    const expiresAt = new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
+    // 兌換有效期：供應商指定優先，否則平台預設 6 個月
+    const expiresAt = issued.expiresAt ?? new Date(Date.now() + 180 * 24 * 60 * 60 * 1000);
 
     const redemptionId = await this.db.transaction(async (tx) => {
       // 1. 原子扣積分（WHERE points_balance >= cost 保護併發）
@@ -98,6 +105,10 @@ export class PointShopService {
         .where(and(eq(wallets.userId, userId), sql`points_balance >= ${item.costPoints}`))
         .returning({ id: wallets.id });
       if (updated.length === 0) {
+        // 邊界：券已發出但扣點失敗（併發）。記下供應商序號供人工作廢/對帳。
+        if (issued.providerRef) {
+          this.logger.error(`Orphan voucher issued but points deduction failed: user=${userId} item=${item.id} providerRef=${issued.providerRef}`);
+        }
         throw new BadRequestException('積分扣除失敗（可能餘額已被其他交易扣掉）');
       }
 
@@ -112,7 +123,7 @@ export class PointShopService {
           note: `兌換：${item.name}`,
           relatedSurveyId: null,
           completedAt: new Date(),
-          metadata: { itemId: item.id, itemName: item.name, faceValueNTD: item.faceValue },
+          metadata: { itemId: item.id, itemName: item.name, faceValueNTD: item.faceValue, voucherRef: issued.providerRef },
         })
         .returning({ id: transactions.id });
 
@@ -220,11 +231,5 @@ export class PointShopService {
       .where(eq(pointRedemptions.id, redemptionId));
 
     return { message: '已標記為使用' };
-  }
-
-  /** 產生隨機 PIN（4 段 4 位數字格式 — 模擬禮券常見樣式）*/
-  private generatePin(): string {
-    const seg = () => Math.floor(parseInt(randomBytes(2).toString('hex'), 16) % 10000).toString().padStart(4, '0');
-    return `${seg()}-${seg()}-${seg()}-${seg()}`;
   }
 }
