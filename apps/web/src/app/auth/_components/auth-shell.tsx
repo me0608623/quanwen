@@ -146,6 +146,7 @@ export function AuthShell({
             <RespondentParticlesScene reduceMotion={motionLite || motionMinimal} />
             <RespondentFlowScene immersive={immersive} reduceMotion={motionLite || motionMinimal} />
           </div>
+          <div className="pointer-events-none absolute inset-0 z-[3] bg-[linear-gradient(90deg,rgba(2,8,23,0.42)_0%,rgba(2,8,23,0.26)_38%,rgba(2,8,23,0.06)_68%,transparent_100%)]" />
 
           <div className="relative z-10 flex items-center justify-between">
             <Link href="/" className="flex items-center gap-3 transition-opacity hover:opacity-85">
@@ -172,7 +173,7 @@ export function AuthShell({
 
             {variant === "full" ? (
               <>
-                <h1 className={cn("mb-5 text-4xl font-extrabold leading-[1.12] tracking-tight lg:text-[44px]", !motionMinimal && "animate-[qwen-content-rise_760ms_cubic-bezier(0.16,1,0.3,1)]")}>
+                <h1 className={cn("mb-5 text-4xl font-extrabold leading-[1.12] tracking-tight drop-shadow-[0_8px_22px_rgba(2,8,23,0.45)] [text-shadow:0_2px_10px_rgba(2,8,23,0.55),0_1px_2px_rgba(2,8,23,0.7)] lg:text-[44px]", !motionMinimal && "animate-[qwen-content-rise_760ms_cubic-bezier(0.16,1,0.3,1)]")}>
                   {isSurveyor ? (
                     <>
                       更快找到對的人，
@@ -187,7 +188,7 @@ export function AuthShell({
                     </>
                   )}
                 </h1>
-                <p className={cn("mb-8 text-base leading-relaxed text-white/85", !motionMinimal && "animate-[qwen-content-rise_900ms_cubic-bezier(0.16,1,0.3,1)]")}>
+                <p className={cn("mb-8 text-base leading-relaxed text-white/90 drop-shadow-[0_5px_14px_rgba(2,8,23,0.38)] [text-shadow:0_1px_6px_rgba(2,8,23,0.5)]", !motionMinimal && "animate-[qwen-content-rise_900ms_cubic-bezier(0.16,1,0.3,1)]")}>
                   {isSurveyor ? (
                     <>
                       從招募、審核到回饋，一個平台完成。
