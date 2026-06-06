@@ -182,6 +182,15 @@ export { DB_TOKEN as DB };
               label       VARCHAR(300) NOT NULL,
               sort_order  INTEGER      NOT NULL DEFAULT 0
             );
+
+            CREATE TABLE survey_ai_reports (
+              id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+              survey_id    UUID         NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+              report_type  VARCHAR(16)  NOT NULL,
+              payload      JSONB        NOT NULL,
+              generated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+            );
+            CREATE UNIQUE INDEX survey_ai_reports_survey_type_uq ON survey_ai_reports(survey_id, report_type);
           `);
 
           // Sprint 4: survey_responses + response_answers
@@ -346,6 +355,23 @@ export { DB_TOKEN as DB };
               resolved_by   UUID          REFERENCES users(id) ON DELETE SET NULL,
               created_at    TIMESTAMPTZ   NOT NULL DEFAULT NOW(),
               resolved_at   TIMESTAMPTZ
+            );
+          `);
+
+          // 匯入失敗申訴
+          await client.exec(`
+            CREATE TABLE import_appeals (
+              id                 UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+              requester_id       UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              survey_url         TEXT        NOT NULL,
+              title              VARCHAR(200),
+              note               VARCHAR(1000),
+              status             VARCHAR(16) NOT NULL DEFAULT 'pending',
+              admin_note         VARCHAR(500),
+              resolved_survey_id UUID        REFERENCES surveys(id) ON DELETE SET NULL,
+              resolved_by        UUID        REFERENCES users(id) ON DELETE SET NULL,
+              created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              resolved_at        TIMESTAMPTZ
             );
           `);
 

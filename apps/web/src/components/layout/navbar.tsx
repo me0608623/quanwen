@@ -37,6 +37,7 @@ const USER_TABS = [
   { href: '/mutual',    label: '互惠',   matches: ['/mutual'] },
   { href: '/spin',      label: '🎡 轉盤', matches: ['/spin'] },
   { href: '/dashboard/shop', label: '🛍️ 商店', matches: ['/dashboard/shop'] },
+  { href: '/guide',     label: '📖 使用說明', matches: ['/guide'] },
 ] as const;
 
 // admin 專屬 nav
@@ -198,6 +199,7 @@ export function Navbar() {
                       <p className="text-xs text-muted-foreground truncate">{me.email}</p>
                     </div>
                     <Link href="/profile" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">個人資料</Link>
+                    <Link href="/guide" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">📖 使用說明</Link>
                     <Link href="/wallet" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">錢包</Link>
                     <Link href="/settings/accounts" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">帳號設定</Link>
                     <Link href="/settings/security" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">安全</Link>
@@ -275,6 +277,9 @@ export function Navbar() {
             )}
             <Link href="/profile" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
               個人資料
+            </Link>
+            <Link href="/guide" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
+              📖 使用說明
             </Link>
             <Link href="/settings/accounts" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
               帳號設定

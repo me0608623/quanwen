@@ -2,6 +2,8 @@
 
 import { useCallback, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { extractApiError } from '@/lib/extract-error';
+import { useSubmitImportAppeal } from '@/hooks/use-import-appeals';
 import {
   useImportJson,
   useImportXlsx,
@@ -131,7 +133,107 @@ export default function SurveyImportPage() {
 
       {/* Success result */}
       {result && <ImportResultCard result={result} onEdit={() => router.push(`/dashboard/surveys/${result.id}`)} />}
+
+      {/* 匯入失敗申訴 */}
+      <ImportAppealSection highlight={!!error} />
     </main>
+  );
+}
+
+// ─── 匯入失敗申訴 ──────────────────────────────────────────────────────────────
+
+function ImportAppealSection({ highlight }: { highlight: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [surveyUrl, setSurveyUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [note, setNote] = useState('');
+  const [done, setDone] = useState(false);
+  const submit = useSubmitImportAppeal();
+
+  if (done) {
+    return (
+      <div className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+        <p className="font-semibold">✅ 申訴已送出</p>
+        <p className="mt-1">管理員會盡快協助匯入，完成後你會收到通知，並可在「我的問卷」看到草稿。</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`rounded-lg border p-4 ${highlight ? 'border-amber-300 bg-amber-50' : 'border-border bg-muted/30'}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">匯入失敗了？讓我們幫你匯入</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            貼上你的問卷連結（Google 表單等），送出申訴後管理員會直接幫你匯入成草稿。
+          </p>
+        </div>
+        {!open && (
+          <button
+            type="button"
+            onClick={() => setOpen(true)}
+            className="shrink-0 rounded-md border border-input bg-background px-3 py-2 text-sm font-medium hover:bg-accent"
+          >
+            匯入失敗申訴
+          </button>
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-3 space-y-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium">問卷連結 *</label>
+            <input
+              type="url"
+              value={surveyUrl}
+              onChange={(e) => setSurveyUrl(e.target.value)}
+              placeholder="https://forms.gle/..."
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">問卷主題（選填）</label>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="例：手機品牌使用習慣調查"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium">說明（選填）</label>
+            <textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              rows={2}
+              placeholder="匯入時遇到什麼問題、或有什麼要請管理員注意的"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              disabled={!surveyUrl.trim() || submit.isPending}
+              onClick={async () => {
+                try {
+                  await submit.mutateAsync({ surveyUrl: surveyUrl.trim(), title: title.trim() || undefined, note: note.trim() || undefined });
+                  setDone(true);
+                } catch (err) {
+                  alert(extractApiError(err, '送出失敗，請稍後再試'));
+                }
+              }}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+            >
+              {submit.isPending ? '送出中…' : '送出申訴'}
+            </button>
+            <button type="button" onClick={() => setOpen(false)} className="text-sm text-muted-foreground hover:underline">
+              取消
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -177,7 +279,7 @@ function CsvImportPanel({
     if (!file) return;
     importCsv.mutate(file, {
       onSuccess: (r) => onSuccess(r),
-      onError: (err) => onError(err instanceof Error ? err.message : 'CSV 匯入失敗'),
+      onError: (err) => onError(extractApiError(err, 'CSV 匯入失敗')),
     });
   };
 
@@ -279,7 +381,7 @@ function ExcelImportPanel({
     if (!file) return;
     importXlsx.mutate(file, {
       onSuccess: (r) => onSuccess(r),
-      onError: (err) => onError(err instanceof Error ? err.message : 'Excel 匯入失敗'),
+      onError: (err) => onError(extractApiError(err, 'Excel 匯入失敗')),
     });
   };
 
@@ -399,7 +501,7 @@ function JsonImportPanel({
       importJson.mutate(parsed, {
         onSuccess: (r) => onSuccess(r),
         onError: (err) =>
-          onError(err instanceof Error ? err.message : 'JSON 匯入失敗'),
+          onError(extractApiError(err, 'JSON 匯入失敗')),
       });
     } catch {
       onError('JSON 格式錯誤，請檢查語法');
@@ -487,7 +589,7 @@ function GoogleFormsImportPanel({
         {
           onSuccess: (r) => onSuccess(r),
           onError: (err) =>
-            onError(err instanceof Error ? err.message : 'Google Forms 匯入失敗'),
+            onError(extractApiError(err, 'Google Forms 匯入失敗')),
         },
       );
     } else {
@@ -500,7 +602,7 @@ function GoogleFormsImportPanel({
         {
           onSuccess: (r) => onSuccess(r),
           onError: (err) =>
-            onError(err instanceof Error ? err.message : 'Google Forms 匯入失敗'),
+            onError(extractApiError(err, 'Google Forms 匯入失敗')),
         },
       );
     }
@@ -609,7 +711,7 @@ function GoogleSheetsImportPanel({
       {
         onSuccess: (r) => onSuccess(r),
         onError: (err) =>
-          onError(err instanceof Error ? err.message : 'Google Sheets 匯入失敗'),
+          onError(extractApiError(err, 'Google Sheets 匯入失敗')),
       },
     );
   };
@@ -776,7 +878,7 @@ function PdfImportPanel({
     if (!file) return;
     importPdf.mutate(file, {
       onSuccess: (r) => onSuccess(r),
-      onError: (err) => onError(err instanceof Error ? err.message : 'PDF 匯入失敗'),
+      onError: (err) => onError(extractApiError(err, 'PDF 匯入失敗')),
     });
   };
 
@@ -877,7 +979,7 @@ function SurveyCakeImportPanel({
         {
           onSuccess: (r) => onSuccess(r),
           onError: (err) =>
-            onError(err instanceof Error ? err.message : 'SurveyCake 匯入失敗'),
+            onError(extractApiError(err, 'SurveyCake 匯入失敗')),
         },
       );
     } else {
@@ -892,7 +994,7 @@ function SurveyCakeImportPanel({
           {
             onSuccess: (r) => onSuccess(r),
             onError: (err) =>
-              onError(err instanceof Error ? err.message : 'SurveyCake 匯入失敗'),
+              onError(extractApiError(err, 'SurveyCake 匯入失敗')),
           },
         );
       } catch {

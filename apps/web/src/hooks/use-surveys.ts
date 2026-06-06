@@ -53,27 +53,43 @@ export function useAiUsage(enabled = true) {
 }
 
 /**
- * 取得問卷 AI 洞察報告（lazy：要 enabled 才會 fetch）
- * @param reportType simple = 精簡摘要；detailed = 詳細報告（逐題 + 交叉 + 方法）
+ * 讀取已保存的 AI 分析報告（DB 持久化，不耗 AI 額度）。
+ * 未生成過 → report 為 null。
  */
-export function useSurveyAiInsights(
-  surveyId: string,
-  enabled = false,
-  reportType: ReportType = 'simple',
-) {
-  return useQuery<SurveyAiInsights>({
-    queryKey: ['surveys', surveyId, 'ai-insights', reportType],
+export function useSavedAiInsights(surveyId: string, reportType: ReportType = 'simple') {
+  return useQuery<{ report: SurveyAiInsights | null; generatedAt?: string }>({
+    queryKey: ['surveys', surveyId, 'ai-insights-saved', reportType],
     queryFn: async () => {
-      const { data } = await api.post<SurveyAiInsights>(
+      const { data } = await api.get<{ report: SurveyAiInsights | null; generatedAt?: string }>(
+        '/ai/analyze-responses/saved',
+        { params: { surveyId, reportType } },
+      );
+      return data;
+    },
+    enabled: !!surveyId,
+    staleTime: 60 * 1000,
+  });
+}
+
+/** 生成（或重新生成）AI 分析報告 — 耗 1 次 AI 額度，成功後後端會持久化 */
+export function useGenerateAiInsights(surveyId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (reportType: ReportType) => {
+      const { data } = await api.post<SurveyAiInsights & { generatedAt?: string }>(
         '/ai/analyze-responses',
         { surveyId, reportType },
         { timeout: 120_000 },
       );
       return data;
     },
-    enabled: enabled && !!surveyId,
-    staleTime: 5 * 60 * 1000, // 5 min — LLM 結果不會頻繁變動
-    retry: 0,
+    onSuccess: (data, reportType) => {
+      queryClient.setQueryData(['surveys', surveyId, 'ai-insights-saved', reportType], {
+        report: data,
+        generatedAt: data.generatedAt,
+      });
+      queryClient.invalidateQueries({ queryKey: ['user', 'ai-usage'] });
+    },
   });
 }
 

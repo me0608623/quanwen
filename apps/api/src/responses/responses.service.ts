@@ -286,6 +286,9 @@ export class ResponsesService {
     // ── 0. Phase 5.5: 停權檢查 ───────────────────────────────────────────────
     await this.assertNotSuspended(respondentId);
 
+    // ── 0.5: 防刷頻率限制（每小時 / 每日填答上限）─────────────────────────────
+    await this.assertSubmissionRateLimit(respondentId);
+
     // ── 1. 確認問卷上架 ──────────────────────────────────────────────────────
     const surveyRows = await this.db
       .select({
@@ -520,6 +523,12 @@ export class ResponsesService {
       fillDurationSeconds,
       dto.behaviorLog,
     );
+
+    // 機器人 / 爬蟲偵測：短時間內多筆極快填答 → 暫時封禁並擋下本次提交
+    const banned = await this.detectBotBurstAndBan(respondentId, antiCheatResult.score);
+    if (banned) {
+      throw new BadRequestException('系統偵測到疑似自動化快速填答，已暫停您的填答 24 小時以維護問卷品質。');
+    }
 
     // 極度可疑（score >= 80）→ 直接標記 rejected，不計入配額
     // Phase 1: openText 字數 > 10 時先進 pending_review（待人工覆核，不先發獎勵）
@@ -1028,6 +1037,99 @@ export class ResponsesService {
     if (newTotal % 10 === 0) {
       await this.reputation.adjust(respondentId, 1, `完成 ${newTotal} 份問卷`);
     }
+  }
+
+  // ─── 防刷：每小時 / 每日填答上限 ───────────────────────────────────────────
+  // 真人不可能短時間填大量問卷；超過上限直接擋下，避免刷點數。
+  private static readonly MAX_SUBMISSIONS_PER_HOUR = 12;
+  private static readonly MAX_SUBMISSIONS_PER_DAY = 40;
+
+  private async assertSubmissionRateLimit(respondentId: string) {
+    const [hourRow] = await this.db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.respondentId, respondentId),
+          inArray(surveyResponses.status, ['submitted', 'pending_review', 'rewarded', 'rejected']),
+          sql`${surveyResponses.submittedAt} >= NOW() - interval '1 hour'`,
+        ),
+      );
+    if ((hourRow?.c ?? 0) >= ResponsesService.MAX_SUBMISSIONS_PER_HOUR) {
+      throw new BadRequestException(
+        `本小時填答已達上限（${ResponsesService.MAX_SUBMISSIONS_PER_HOUR} 份），請稍後再試。這是維持問卷品質的防濫用機制。`,
+      );
+    }
+    const [dayRow] = await this.db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.respondentId, respondentId),
+          inArray(surveyResponses.status, ['submitted', 'pending_review', 'rewarded', 'rejected']),
+          sql`${surveyResponses.submittedAt} >= NOW() - interval '1 day'`,
+        ),
+      );
+    if ((dayRow?.c ?? 0) >= ResponsesService.MAX_SUBMISSIONS_PER_DAY) {
+      throw new BadRequestException(
+        `今日填答已達上限（${ResponsesService.MAX_SUBMISSIONS_PER_DAY} 份），請明天再來。`,
+      );
+    }
+  }
+
+  /** 暫時封禁受試者（防機器人 / 防濫用）。寫 respondentProfiles.suspendedUntil + 通知。 */
+  private async suspendRespondent(respondentId: string, durationMs: number, reason: string) {
+    const suspendedUntil = new Date(Date.now() + durationMs);
+    const profileRows = await this.db
+      .select({ id: respondentProfiles.id })
+      .from(respondentProfiles)
+      .where(eq(respondentProfiles.userId, respondentId))
+      .limit(1);
+    if (profileRows[0]) {
+      await this.db
+        .update(respondentProfiles)
+        .set({ suspendedUntil, suspendedReason: reason, updatedAt: new Date() })
+        .where(eq(respondentProfiles.id, profileRows[0].id));
+    }
+    await this.notifications
+      .create({
+        userId: respondentId,
+        type: 'system',
+        title: '帳號已暫停填答',
+        body: `${reason}。期間無法填答，過後自動恢復。`,
+        metadata: { suspendedUntil: suspendedUntil.toISOString() },
+      })
+      .catch(() => undefined);
+    this.logger.warn(`受試者 ${respondentId} 暫時封禁：${reason}`);
+  }
+
+  /**
+   * 機器人 / 爬蟲偵測：若短時間內多筆「填答時間極短」的提交（anti-cheat 高分），
+   * 視為自動化刷填 → 暫時封禁。回傳 true 表示已封禁（呼叫端應拒絕本次提交）。
+   */
+  private async detectBotBurstAndBan(respondentId: string, currentAntiCheatScore: number): Promise<boolean> {
+    // 本次非極快 → 不觸發
+    if (currentAntiCheatScore < 50) return false;
+    const [row] = await this.db
+      .select({ c: sql<number>`count(*)::int` })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.respondentId, respondentId),
+          sql`${surveyResponses.antiCheatScore} >= 50`,
+          sql`${surveyResponses.submittedAt} >= NOW() - interval '30 minutes'`,
+        ),
+      );
+    // 含本次：最近 30 分鐘已有 >=2 筆極快 → 連同本次第 3 筆，判定為機器人
+    if ((row?.c ?? 0) >= 2) {
+      await this.suspendRespondent(
+        respondentId,
+        24 * 60 * 60 * 1000,
+        '系統偵測到疑似自動化／機器人快速填答，暫停填答 24 小時',
+      );
+      return true;
+    }
+    return false;
   }
 
   // ─── Phase 5.5：停權檢查（過期會自動清除）─────────────────────────────────

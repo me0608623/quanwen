@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { SurveysController } from './surveys.controller';
 import { SurveysService } from './surveys.service';
 import { AiInsightsService } from './ai-insights.service';
+import { AiReportStoreService } from './ai-report-store.service';
 import { SurveyorAssistantService } from './surveyor-assistant.service';
 import { PricingService } from './pricing/pricing.service';
 import { SurveySchedulerService } from './survey-scheduler.service';
@@ -44,7 +45,8 @@ import { NotificationsModule } from '../notifications/notifications.module';
     GoogleSheetsImportService,
     PdfImportService,
     SurveyCakeImportService,
+    AiReportStoreService,
   ],
-  exports: [SurveysService, AiInsightsService, SurveyLotteryService],
+  exports: [SurveysService, AiInsightsService, SurveyLotteryService, AiReportStoreService],
 })
 export class SurveysModule {}

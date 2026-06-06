@@ -17,6 +17,7 @@ import { KycModule } from './kyc/kyc.module';
 import { PointShopModule } from './point-shop/point-shop.module';
 import { MutualModule } from './mutual/mutual.module';
 import { SpinModule } from './spin/spin.module';
+import { ImportAppealsModule } from './surveys/import-appeals.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { AiModule } from './ai/ai.module';
 import { UploadModule } from './common/upload/upload.module';
@@ -47,6 +48,7 @@ import { ScheduleModule } from '@nestjs/schedule';
     PointShopModule,
     MutualModule,
     SpinModule,
+    ImportAppealsModule,
     AnalyticsModule,
     AiModule,
     UploadModule,

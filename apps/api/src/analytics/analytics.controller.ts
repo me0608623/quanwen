@@ -140,4 +140,45 @@ export class AnalyticsController {
     const user = req.user as AuthenticatedUser;
     return this.analytics.getSegmentation(surveyId, user.id, k === undefined ? 3 : Number(k));
   }
+
+  /**
+   * GET /surveys/:id/analytics/group-comparison?ratingQuestionId=xxx&groupQuestionId=yyy
+   * 差異性分析：依單選題分組比較評分題平均（t 檢定 / 單因子 ANOVA）
+   */
+  @Get(':id/analytics/group-comparison')
+  async getGroupComparison(
+    @Param('id') surveyId: string,
+    @Req() req: Request,
+    @Query('ratingQuestionId') ratingQuestionId?: string,
+    @Query('groupQuestionId') groupQuestionId?: string,
+  ) {
+    if (!ratingQuestionId || !groupQuestionId) {
+      throw new BadRequestException('必須提供 ratingQuestionId 和 groupQuestionId 參數');
+    }
+    const user = req.user as AuthenticatedUser;
+    return this.analytics.getGroupComparison(surveyId, user.id, ratingQuestionId, groupQuestionId);
+  }
+
+  /**
+   * GET /surveys/:id/analytics/regression?dependentId=xxx&independentIds=a,b,c
+   * 複迴歸：以多個評分題預測一個評分題
+   */
+  @Get(':id/analytics/regression')
+  async getRegression(
+    @Param('id') surveyId: string,
+    @Req() req: Request,
+    @Query('dependentId') dependentId?: string,
+    @Query('independentIds') independentIds?: string,
+  ) {
+    if (!dependentId || !independentIds) {
+      throw new BadRequestException('必須提供 dependentId 和 independentIds 參數');
+    }
+    const user = req.user as AuthenticatedUser;
+    return this.analytics.getRegression(
+      surveyId,
+      user.id,
+      dependentId,
+      independentIds.split(',').map((id) => id.trim()).filter(Boolean),
+    );
+  }
 }

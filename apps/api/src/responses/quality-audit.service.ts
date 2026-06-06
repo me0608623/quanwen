@@ -180,6 +180,21 @@ export class QualityAuditService {
       status = 'passed';
     }
 
+    const flags = [...legacy.flags];
+
+    // ── 動態容錯救回：避免「分數略低但開放題回答具實質價值」被二分法直接判死 ──
+    // 條件：40-49 邊緣分 + 文字品質訊號高（≥70）+ LLM 沒有明確建議拒絕
+    // → 降級為 suspicious（不發獎、進人工/申訴流程），而非直接 rejected。
+    if (
+      status === 'rejected' &&
+      llmRecommendation !== 'reject' &&
+      finalScore >= 40 &&
+      signalScores.textQuality >= 70
+    ) {
+      status = 'suspicious';
+      flags.push('邊緣分數但開放題回答具實質內容，轉人工複核（未直接判定無效）');
+    }
+
     return {
       behaviorScore,
       signalScores,
@@ -188,7 +203,7 @@ export class QualityAuditService {
       llmEvidence,
       finalScore,
       status,
-      flags: legacy.flags,
+      flags,
     };
   }
 

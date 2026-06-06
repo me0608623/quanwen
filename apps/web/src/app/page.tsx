@@ -230,6 +230,50 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
+            防刷機制，杜絕灌水賺點數
+          </h2>
+          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
+            獎勵只發給認真填答的人。多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本、填答方公平競爭。
+          </p>
+          <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">⏱️</p>
+              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">填答頻率上限</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
+                每人每小時、每日填答數量設有上限，真人正常使用綽綽有餘，但擋下短時間瘋狂刷量。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">⚡</p>
+              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">填太快即時警告</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
+                填答過快會在作答中跳出提醒；時間明顯不足以認真閱讀的填答會被判定無效、不發獎勵。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">🤖</p>
+              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">機器人偵測封禁</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
+                偵測到自動化／爬蟲式的連續快速填答，系統會自動暫停該帳號填答一段時間。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">📉</p>
+              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">信譽分與停權</h3>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
+                品質不佳會扣信譽分、降低接案優先權；連續退件則暫停接案，逼退灌水帳號。
+              </p>
+            </article>
+          </div>
+          <p className="mt-6 text-xs text-[var(--q-muted)]">
+            搭配 AI 三層品質審核（行為訊號 → 邏輯檢核 → AI 灰區裁決），從「填答行為」到「答案內容」雙重把關。
+          </p>
+        </div>
+      </section>
+
       <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)] py-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-muted)]">

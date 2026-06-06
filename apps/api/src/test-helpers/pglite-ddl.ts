@@ -124,6 +124,15 @@ export const SURVEYS_DDL = `
     label       VARCHAR(300) NOT NULL,
     sort_order  INTEGER      NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE survey_ai_reports (
+    id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    survey_id    UUID         NOT NULL REFERENCES surveys(id) ON DELETE CASCADE,
+    report_type  VARCHAR(16)  NOT NULL,
+    payload      JSONB        NOT NULL,
+    generated_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+  );
+  CREATE UNIQUE INDEX survey_ai_reports_survey_type_uq ON survey_ai_reports(survey_id, report_type);
 `;
 
 export const RESPONSES_DDL = `

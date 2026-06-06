@@ -178,6 +178,14 @@ export function detectIntervention(log: Partial<BehaviorLog>): {
   type: 'too_fast' | 'window_switching' | 'paste_open_question' | 'idle';
   message: string;
 } | null {
+  // 填答過快：已作答 ≥2 題且平均每題 < 2 秒 → 提醒（過快會被判定為無效填答，連續異常可能暫停接案）
+  const answeredCount = log.perQuestionTimeMs ? Object.keys(log.perQuestionTimeMs).length : 0;
+  if (answeredCount >= 2 && log.totalDurationMs && log.totalDurationMs / answeredCount < 2000) {
+    return {
+      type: 'too_fast',
+      message: '填答速度過快，請仔細閱讀題目認真作答。過快填答會被系統判定為無效，連續異常可能被暫停接案。',
+    };
+  }
   if (log.pasteEventCount && log.pasteEventCount > 2) {
     return {
       type: 'paste_open_question',

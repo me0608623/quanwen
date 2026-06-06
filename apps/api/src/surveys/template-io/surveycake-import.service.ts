@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { V1_SCHEMA_TAG, type QuanWenSurveyV1 } from './quanwen-survey-v1.schema';
 import { SurveyImportService, type ImportResult } from './survey-import.service';
+import { parseSurveyCakeNative } from './surveycake-native-parser';
 
 /**
  * SurveyCake 問卷匯入服務
@@ -136,6 +137,13 @@ export class SurveyCakeImportService {
       );
     }
 
+    // 主路徑:/s/{svid} 填答頁是 SPA,題目 JSON 在固定靜態路徑 s3/json/{svid}.json
+    const svidMatch = /^\/s\/([A-Za-z0-9_-]{1,32})\/?$/.exec(parsedUrl.pathname);
+    if (svidMatch) {
+      const native = await this.tryImportNative(userId, svidMatch[1]);
+      if (native) return native;
+    }
+
     // 嘗試 fetch 頁面
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15_000);
@@ -173,6 +181,60 @@ export class SurveyCakeImportService {
     throw new BadRequestException(
       '無法從 SurveyCake 頁面中提取問卷資料。建議：從 SurveyCake 匯出 JSON 檔案後直接上傳。',
     );
+  }
+
+  /**
+   * 從 SurveyCake 靜態 JSON(s3/json/{svid}.json)匯入原生格式。
+   * 失敗(404 / 非 JSON / 零題)回傳 null,讓呼叫端 fallback 到 HTML 解析路徑。
+   */
+  private async tryImportNative(userId: string, svid: string): Promise<ImportResult | null> {
+    const jsonUrl = `https://www.surveycake.com/s3/json/${svid}.json`;
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+
+    let raw: unknown;
+    try {
+      const res = await fetch(jsonUrl, {
+        signal: controller.signal,
+        headers: { 'User-Agent': 'QuanWen/1.0', Accept: 'application/json' },
+        redirect: 'follow',
+      });
+      if (!res.ok) return null;
+      raw = await res.json();
+    } catch {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+    }
+
+    const parsed = parseSurveyCakeNative(raw);
+    if (parsed.questions.length === 0) return null;
+
+    const v1: QuanWenSurveyV1 = {
+      $schema: V1_SCHEMA_TAG,
+      exportedAt: new Date().toISOString(),
+      platform: { name: 'quanwen', version: 'surveycake-import' },
+      survey: {
+        title: parsed.title,
+        description: parsed.description,
+        type: 'standard',
+        isAnonymous: true,
+        rewardPoints: 0,
+        targetCount: 100,
+        aiReviewEnabled: true,
+        questions: parsed.questions,
+      },
+    };
+
+    const result = await this.importer.importFromJson(userId, v1);
+    this.logger.log(
+      `SurveyCake 原生匯入完成 user=${userId.slice(0, 8)} svid=${svid} ` +
+        `匯入=${result.questionsCount} warnings=${parsed.warnings.length}`,
+    );
+    return {
+      ...result,
+      warnings: [...result.warnings, ...parsed.warnings],
+    };
   }
 
   // ─── 內部方法 ──────────────────────────────────────────────────────────────

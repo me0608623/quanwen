@@ -686,7 +686,7 @@ export class SurveysService {
       '        "title": "題目文字",',
       '        "options": [{"label": "選項 1"}],   // single_choice 才需要',
       '        "correctValue": "正解（option label 或 text 內容）",',
-      '        "kind": "instruction|common_sense|arithmetic",',
+      '        "kind": "instruction|common_sense|arithmetic|situational",',
       '        "reasoning": "為何選這位置 + 為何選這類型"',
       '      }',
       '    }',
@@ -702,14 +702,21 @@ export class SurveysService {
           title: string;
           options?: Array<{ label: string }>;
           correctValue: string;
-          kind: 'instruction' | 'common_sense' | 'arithmetic';
+          kind: 'instruction' | 'common_sense' | 'arithmetic' | 'situational';
           reasoning: string;
         };
       }>;
     }>(
-      '你是台灣資深問卷設計顧問。你的任務是為一份問卷生成「注意力檢核題」，用來偵測受試者是否認真填答。'
-        + '檢核題應該：認真讀就答得對、風格融入原問卷、不要太難或太簡單。'
-        + '量表型問卷適合指令型，開放題多的適合計算型。繁體中文，JSON 回覆。',
+      // v2（2026-06-06）：偏向常識/情境推理型 — 傳統「請選第三個選項」指令題與反向題
+      // 對腳本掛 LLM 代填毫無攔截力（LLM 一樣讀得懂指令）。優先出需要把「本問卷
+      // 主題情境 + 生活常識」結合起來推理的題目，並讓正解依附於前後題脈絡。
+      '你是台灣資深問卷設計顧問。你的任務是為一份問卷生成「注意力檢核題」，用來偵測敷衍亂填與腳本/AI 代填。'
+        + '優先順序：(1) situational 情境推理題 — 把題目綁定本問卷的具體主題情境（例如延續前一題的情境設定），'
+        + '讓沒讀過前文的代填者答錯；(2) common_sense 常識推理題 — 需要台灣在地生活常識的判斷，'
+        + '答案對認真的人顯而易見、對亂點的人是 1/N 機率；(3) arithmetic 簡單計算。'
+        + '避免「請選擇第 N 個選項」這類純指令題（機器人也讀得懂指令，攔截力最低）。'
+        + '檢核題應該：認真讀就答得對、風格融入原問卷、不要刁難真人。'
+        + 'correctValue 必須與其中一個 option label 完全一致。繁體中文，JSON 回覆。',
       prompt,
       { temperature: 0.4 },
     );

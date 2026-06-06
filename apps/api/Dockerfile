@@ -34,6 +34,8 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
+# 中文字型（PDF 報表用，避免亂碼）
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/assets ./apps/api/assets
 COPY --from=builder --chown=nestjs:nodejs /app/packages ./packages
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/package.json ./apps/api/package.json
 WORKDIR /app/apps/api

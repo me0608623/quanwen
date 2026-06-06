@@ -189,6 +189,96 @@ export function useCorrelation(
   });
 }
 
+export interface GroupComparisonResult {
+  ratingQuestion: { id: string; title: string };
+  groupQuestion: { id: string; title: string };
+  groups: Array<{ optionId: string; label: string; n: number; mean: number | null; stddev: number }>;
+  test: {
+    type: 't' | 'anova';
+    statistic: number;
+    df1: number;
+    df2: number | null;
+    p: number;
+    effectSize: number | null;
+    effectSizeLabel: string | null;
+  } | null;
+  interpretation: string;
+}
+
+export interface RegressionResult {
+  dependent: { id: string; title: string };
+  predictors: Array<{
+    id: string;
+    title: string;
+    coefficient: number | null;
+    standardizedBeta: number | null;
+    tStat: number | null;
+    p: number | null;
+  }>;
+  intercept: number | null;
+  rSquared: number | null;
+  adjustedRSquared: number | null;
+  n: number;
+  interpretation: string;
+}
+
+export interface StatisticsInterpretation {
+  interpretation: string;
+  caveats: string[];
+  generatedAt: string;
+}
+
+export function useGroupComparison(
+  surveyId: string,
+  ratingQuestionId?: string,
+  groupQuestionId?: string,
+  enabled = true,
+) {
+  return useQuery<GroupComparisonResult>({
+    queryKey: ['analytics', surveyId, 'group-comparison', ratingQuestionId, groupQuestionId],
+    queryFn: async () => {
+      const { data } = await api.get(`/surveys/${surveyId}/analytics/group-comparison`, {
+        params: { ratingQuestionId, groupQuestionId },
+      });
+      return data;
+    },
+    enabled: enabled && !!surveyId && !!ratingQuestionId && !!groupQuestionId,
+    staleTime: 60_000,
+  });
+}
+
+export function useRegression(
+  surveyId: string,
+  dependentId?: string,
+  independentIds: string[] = [],
+  enabled = true,
+) {
+  return useQuery<RegressionResult>({
+    queryKey: ['analytics', surveyId, 'regression', dependentId, independentIds],
+    queryFn: async () => {
+      const { data } = await api.get(`/surveys/${surveyId}/analytics/regression`, {
+        params: { dependentId, independentIds: independentIds.join(',') },
+      });
+      return data;
+    },
+    enabled: enabled && !!surveyId && !!dependentId && independentIds.length > 0,
+    staleTime: 60_000,
+  });
+}
+
+type InterpretPayload =
+  | { surveyId: string; analysisType: 'group_comparison'; ratingQuestionId: string; groupQuestionId: string }
+  | { surveyId: string; analysisType: 'regression'; dependentId: string; independentIds: string[] };
+
+export function useInterpretStatistics() {
+  return useMutation<StatisticsInterpretation, unknown, InterpretPayload>({
+    mutationFn: async (payload) => {
+      const { data } = await api.post('/ai/interpret-statistics', payload);
+      return data;
+    },
+  });
+}
+
 export function useSegmentation(surveyId: string, k = 3, enabled = true) {
   return useQuery<SegmentationResult>({
     queryKey: ['analytics', surveyId, 'segmentation', k],

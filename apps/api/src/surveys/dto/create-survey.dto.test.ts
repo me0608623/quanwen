@@ -123,3 +123,39 @@ describe('CreateSurveySchema — question nullish + schedule/reward round-trip',
     expect(r.success).toBe(false);
   });
 });
+
+describe('SurveyQuestionSchema — option count limit', () => {
+  // 回歸:Google Forms 匯入台灣 22 縣市單選題曾被 max(20) 擋下(400)
+  const makeOptions = (n: number) =>
+    Array.from({ length: n }, (_, i) => ({ label: `選項${i + 1}`, sortOrder: i }));
+
+  it('accepts 22 options (台灣縣市)', () => {
+    const r = CreateSurveySchema.safeParse({
+      ...BASE_SURVEY,
+      questions: [
+        { type: 'single_choice', title: '縣市', sortOrder: 0, isRequired: true, options: makeOptions(22) },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('accepts up to 50 options', () => {
+    const r = CreateSurveySchema.safeParse({
+      ...BASE_SURVEY,
+      questions: [
+        { type: 'single_choice', title: '長清單', sortOrder: 0, isRequired: true, options: makeOptions(50) },
+      ],
+    });
+    expect(r.success).toBe(true);
+  });
+
+  it('rejects 51 options', () => {
+    const r = CreateSurveySchema.safeParse({
+      ...BASE_SURVEY,
+      questions: [
+        { type: 'single_choice', title: '太多', sortOrder: 0, isRequired: true, options: makeOptions(51) },
+      ],
+    });
+    expect(r.success).toBe(false);
+  });
+});

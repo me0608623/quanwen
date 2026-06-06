@@ -9,6 +9,7 @@ import {
   timestamp,
   jsonb,
   index,
+  uniqueIndex,
 } from 'drizzle-orm/pg-core';
 import { users } from './users';
 
@@ -185,6 +186,25 @@ export const questionOptions = pgTable(
   },
   (t) => ({
     questionIdx: index('question_options_question_idx').on(t.questionId),
+  }),
+);
+
+// ─── AI 分析報告(持久化) ──────────────────────────────────────────────────────
+// AI 洞察報告生成成本高(LLM token + 每日額度),生成後落 DB,
+// 切換報告類型 / 重新整理 / 服務重啟都不會遺失;「重新生成」才覆寫。
+
+export const surveyAiReports = pgTable(
+  'survey_ai_reports',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    surveyId: uuid('survey_id').notNull().references(() => surveys.id, { onDelete: 'cascade' }),
+    // simple | detailed
+    reportType: varchar('report_type', { length: 16 }).notNull(),
+    payload: jsonb('payload').notNull(),
+    generatedAt: timestamp('generated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    surveyTypeUq: uniqueIndex('survey_ai_reports_survey_type_uq').on(t.surveyId, t.reportType),
   }),
 );
 

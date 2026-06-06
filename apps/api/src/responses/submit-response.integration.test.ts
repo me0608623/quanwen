@@ -771,3 +771,80 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
     });
   });
 });
+
+describe('ResponsesService.submitResponse 防刷頻率限制 + 機器人封禁', () => {
+  let client: PGlite;
+  let db: ReturnType<typeof drizzle<typeof schema>>;
+  let service: ResponsesService;
+
+  const RID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
+  const SID_OWNER = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb';
+
+  function makeService(antiCheatScore: number) {
+    const antiCheat = { evaluate: () => ({ score: antiCheatScore, flags: [] }) } as unknown as AntiCheatService;
+    const wallet = { issueReward: vi.fn(async () => undefined) } as unknown as WalletService;
+    const notifications = { create: vi.fn(async () => undefined), sendRespondentThankYou: vi.fn(async () => undefined) } as unknown as NotificationsService;
+    const qualityAudit = { audit: async () => ({ finalScore: 90, status: 'passed', flags: [], signalScores: {}, llmScore: null, llmReasoning: null, llmEvidence: [], behaviorScore: 90 }) } as unknown as QualityAuditService;
+    const reputation = { adjust: async () => undefined } as unknown as ReputationService;
+    const spin = { grantChance: async () => undefined } as unknown as SpinService;
+    return new ResponsesService(db as unknown as AppDb, antiCheat, wallet, notifications, qualityAudit, reputation, spin);
+  }
+
+  beforeAll(async () => {
+    client = new PGlite();
+    await client.exec(FULL_SCHEMA_DDL);
+    await client.exec(`
+      INSERT INTO users (id, email, role, display_name) VALUES
+        ('${RID}', 'farm@test.local', 'respondent', 'Farmer'),
+        ('${SID_OWNER}', 'owner2@test.local', 'surveyor', 'Owner');
+      INSERT INTO respondent_profiles (user_id) VALUES ('${RID}');
+    `);
+    // 建 14 份已上架問卷（各 1 題），id 用序號
+    for (let i = 0; i < 14; i++) {
+      const sid = `cccccccc-cccc-cccc-cccc-0000000000${String(i).padStart(2, '0')}`;
+      const qid = `dddddddd-dddd-dddd-dddd-0000000000${String(i).padStart(2, '0')}`;
+      await client.exec(`
+        INSERT INTO surveys (id, surveyor_id, title, status, reward_points, target_count, completed_count, published_at)
+        VALUES ('${sid}', '${SID_OWNER}', 'S${i}', 'published', 10, 100, 0, NOW());
+        INSERT INTO survey_questions (id, survey_id, type, title, sort_order, is_required)
+        VALUES ('${qid}', '${sid}', 'text', 'Q', 0, true);
+      `);
+    }
+    db = drizzle(client, { schema });
+  });
+
+  afterAll(async () => { await client?.close(); });
+
+  it('超過每小時上限（12 份）→ 第 13 份被擋下', async () => {
+    service = makeService(10);
+    // 直接塞 12 筆「最近一小時內」的已提交回答（surveys 0-11）
+    for (let i = 0; i < 12; i++) {
+      const sid = `cccccccc-cccc-cccc-cccc-0000000000${String(i).padStart(2, '0')}`;
+      await client.exec(`INSERT INTO survey_responses (survey_id, respondent_id, status, submitted_at) VALUES ('${sid}', '${RID}', 'submitted', NOW());`);
+    }
+    // 第 13 份（survey 12）→ 應觸發每小時上限
+    const sid12 = 'cccccccc-cccc-cccc-cccc-000000000012';
+    await expect(
+      service.submitResponse(sid12, RID, { answers: [{ questionId: 'dddddddd-dddd-dddd-dddd-000000000012', selectedOptionIds: ['x'] }] }),
+    ).rejects.toThrow(/本小時填答已達上限/);
+  });
+
+  it('短時間多筆極快填答（anti-cheat>=50）→ 機器人封禁，擋下提交', async () => {
+    // 清掉上一測試的回答，改塞 2 筆「最近 30 分鐘、anti_cheat_score>=50」
+    await client.exec(`DELETE FROM survey_responses WHERE respondent_id='${RID}';`);
+    await client.exec(`UPDATE respondent_profiles SET suspended_until=NULL WHERE user_id='${RID}';`);
+    for (let i = 0; i < 2; i++) {
+      const sid = `cccccccc-cccc-cccc-cccc-0000000000${String(i).padStart(2, '0')}`;
+      await client.exec(`INSERT INTO survey_responses (survey_id, respondent_id, status, submitted_at, anti_cheat_score) VALUES ('${sid}', '${RID}', 'rejected', NOW(), 60);`);
+    }
+    // 本次也極快（score 60）→ 第 3 筆觸發封禁
+    service = makeService(60);
+    const sid13 = 'cccccccc-cccc-cccc-cccc-000000000013';
+    await expect(
+      service.submitResponse(sid13, RID, { answers: [{ questionId: 'dddddddd-dddd-dddd-dddd-000000000013', textAnswer: '這是一段足夠長的回答內容用於測試' }] }),
+    ).rejects.toThrow(/自動化|機器人|暫停/);
+    // 確認已寫入 suspended_until
+    const prof = await db.select().from(schema.respondentProfiles).where(eq(schema.respondentProfiles.userId, RID));
+    expect(prof[0].suspendedUntil).toBeTruthy();
+  });
+});

@@ -2,6 +2,7 @@ import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } fro
 import { eq, and, inArray, desc, gt } from 'drizzle-orm';
 import { Writable } from 'stream';
 import { once } from 'events';
+import * as path from 'path';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -67,90 +68,118 @@ export class ExportService {
     const survey = await this.assertOwnedSurvey(surveyId, surveyorId);
     const stats = await this.computeStats(surveyId);
 
-    // pdfmake 0.3.8: module exports an already-instantiated singleton with .createPdf()
+    // pdfmake 0.3.x: module exports an already-instantiated singleton with .createPdf()
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pdfMake = require('pdfmake');
-    // 用 PDF standard 14 fonts（無中文 — demo 用，prod 需 embed Noto Sans TC .ttf）
+    // 嵌入 Noto Sans TC（繁體中文）字型，解決中文亂碼。
+    // 字型放 apps/api/assets/fonts；__dirname 在 dist 與 src 下都解析到 apps/api/..
+    const fontDir = path.join(__dirname, '..', '..', 'assets', 'fonts');
     pdfMake.fonts = {
-      Roboto: {
-        normal: 'Helvetica',
-        bold: 'Helvetica-Bold',
-        italics: 'Helvetica-Oblique',
-        bolditalics: 'Helvetica-BoldOblique',
+      NotoTC: {
+        normal: path.join(fontDir, 'NotoSansTC-Regular.ttf'),
+        bold: path.join(fontDir, 'NotoSansTC-Bold.ttf'),
+        italics: path.join(fontDir, 'NotoSansTC-Regular.ttf'),
+        bolditalics: path.join(fontDir, 'NotoSansTC-Bold.ttf'),
       },
     };
 
+    // 水平長條圖（用 pdfmake canvas 繪製，無需外部繪圖庫）
+    const BAR_MAX_W = 230;
+    type BarItem = { label: string; value: number; color: string };
+    const barChart = (items: BarItem[]) => {
+      const max = Math.max(1, ...items.map((i) => i.value));
+      return {
+        table: {
+          widths: [140, '*'] as (number | string)[],
+          body: items.map((it) => [
+            { text: it.label, fontSize: 9, margin: [0, 3, 0, 0] as [number, number, number, number] },
+            {
+              columns: [
+                {
+                  width: 'auto' as const,
+                  canvas: [
+                    { type: 'rect' as const, x: 0, y: 2, w: Math.max(2, (it.value / max) * BAR_MAX_W), h: 11, r: 2, color: it.color },
+                  ],
+                },
+                { width: 'auto' as const, text: ` ${it.value}`, fontSize: 9, bold: true, margin: [5, 2, 0, 0] as [number, number, number, number] },
+              ],
+            },
+          ]),
+        },
+        layout: 'noBorders',
+        margin: [0, 4, 0, 14] as [number, number, number, number],
+      };
+    };
+
+    const typeLabel: Record<string, string> = {
+      single_choice: '單選題',
+      multiple_choice: '多選題',
+      text: '文字題',
+      rating: '評分題',
+      matrix: '矩陣題',
+    };
+    const palette = ['#0F2A5C', '#126b8a', '#0a8f8f', '#f59e0b', '#fb7185', '#a78bfa', '#34d399', '#94a3b8'];
+
     const docDefinition = {
       info: {
-        title: `Survey Report — ${survey.title}`,
-        author: 'QuanWen',
-        subject: 'Survey Statistics Report',
+        title: `問卷報表 — ${survey.title}`,
+        author: 'QuanWen 券問',
+        subject: '問卷統計報表',
       },
       content: [
-        { text: `Survey Report`, style: 'header' },
+        { text: '問卷統計報表', style: 'header' },
         { text: survey.title, style: 'subheader', margin: [0, 0, 0, 4] as [number, number, number, number] },
         survey.description ? { text: survey.description, italics: true, color: '#666', margin: [0, 0, 0, 12] as [number, number, number, number] } : null,
         {
           columns: [
-            { text: `Published: ${survey.publishedAt ? new Date(survey.publishedAt).toLocaleDateString('en-US') : '-'}`, fontSize: 9, color: '#666' },
-            { text: `Generated: ${new Date().toLocaleString('en-US')}`, fontSize: 9, color: '#666', alignment: 'right' as const },
+            { text: `發布日期：${survey.publishedAt ? new Date(survey.publishedAt).toLocaleDateString('zh-TW') : '-'}`, fontSize: 9, color: '#666' },
+            { text: `產出時間：${new Date().toLocaleString('zh-TW')}`, fontSize: 9, color: '#666', alignment: 'right' as const },
           ],
           margin: [0, 0, 0, 16] as [number, number, number, number],
         },
-        { text: 'Summary', style: 'sectionHeader' },
+        { text: '總覽', style: 'sectionHeader' },
         {
           columns: [
-            { stack: [{ text: 'Responses', color: '#666', fontSize: 9 }, { text: `${stats.total}`, fontSize: 22, bold: true }] },
-            { stack: [{ text: 'Target', color: '#666', fontSize: 9 }, { text: `${survey.targetCount}`, fontSize: 22, bold: true, color: '#666' }] },
-            { stack: [{ text: 'Reward (NT$)', color: '#666', fontSize: 9 }, { text: `${survey.rewardPoints}`, fontSize: 22, bold: true, color: '#0F2A5C' }] },
-            { stack: [{ text: 'Avg Quality', color: '#666', fontSize: 9 }, { text: `${stats.avgQuality ?? '-'}`, fontSize: 22, bold: true, color: '#126b8a' }] },
+            { stack: [{ text: '回覆數', color: '#666', fontSize: 9 }, { text: `${stats.total}`, fontSize: 22, bold: true }] },
+            { stack: [{ text: '目標份數', color: '#666', fontSize: 9 }, { text: `${survey.targetCount}`, fontSize: 22, bold: true, color: '#666' }] },
+            { stack: [{ text: '每份獎勵（NT$）', color: '#666', fontSize: 9 }, { text: `${survey.rewardPoints}`, fontSize: 22, bold: true, color: '#0F2A5C' }] },
+            { stack: [{ text: '平均品質分', color: '#666', fontSize: 9 }, { text: `${stats.avgQuality ?? '-'}`, fontSize: 22, bold: true, color: '#126b8a' }] },
           ],
           margin: [0, 0, 0, 16] as [number, number, number, number],
         },
-        { text: 'Quality Distribution (AI audit)', style: 'sectionHeader' },
-        {
-          table: {
-            widths: ['*', 60, 60, 60, 60],
-            body: [
-              [{ text: 'Tier', bold: true }, { text: 'Passed (>=80)', bold: true, alignment: 'right' as const }, { text: 'Suspicious (50-79)', bold: true, alignment: 'right' as const }, { text: 'Rejected (<50)', bold: true, alignment: 'right' as const }, { text: 'Unaudited', bold: true, alignment: 'right' as const }],
-              [{ text: 'Count' }, { text: `${stats.passed}`, alignment: 'right' as const }, { text: `${stats.suspicious}`, alignment: 'right' as const }, { text: `${stats.rejected}`, alignment: 'right' as const }, { text: `${stats.unaudited}`, alignment: 'right' as const }],
-            ],
-          },
-          layout: 'lightHorizontalLines',
-          margin: [0, 0, 0, 16] as [number, number, number, number],
-        },
-        { text: 'Question Breakdown', style: 'sectionHeader' },
+        { text: '品質分布（AI 審核）', style: 'sectionHeader' },
+        barChart([
+          { label: '通過（≥80）', value: stats.passed, color: '#34d399' },
+          { label: '可疑（50–79）', value: stats.suspicious, color: '#f59e0b' },
+          { label: '退件（<50）', value: stats.rejected, color: '#fb7185' },
+          { label: '未審核', value: stats.unaudited, color: '#94a3b8' },
+        ]),
+        { text: '題目分析', style: 'sectionHeader' },
         ...stats.questionStats.map((q, i) => ({
           stack: [
-            { text: `Q${i + 1} [${q.type}]: ${q.title}`, bold: true, margin: [0, 6, 0, 4] as [number, number, number, number] },
+            { text: `Q${i + 1}（${typeLabel[q.type] ?? q.type}）：${q.title}`, bold: true, margin: [0, 8, 0, 4] as [number, number, number, number] },
             q.type === 'single_choice' || q.type === 'multiple_choice'
-              ? {
-                  table: {
-                    widths: ['*', 50],
-                    body: [
-                      [{ text: 'Option', bold: true }, { text: 'Count', bold: true, alignment: 'right' as const }],
-                      ...q.optionCounts.map((o) => [{ text: o.label }, { text: `${o.count}`, alignment: 'right' as const }]),
-                    ],
-                  },
-                  layout: 'lightHorizontalLines',
-                }
+              ? (q.optionCounts.length > 0
+                  ? barChart(q.optionCounts.map((o, idx) => ({ label: o.label, value: o.count, color: palette[idx % palette.length] })))
+                  : { text: '尚無作答', color: '#999', fontSize: 9 })
               : q.type === 'rating'
-              ? { text: `Average: ${q.avgRating?.toFixed(2) ?? '-'}  /  Responses: ${q.responseCount}`, color: '#444' }
-              : { text: `Open text — ${q.responseCount} responses`, color: '#444' },
+              ? { text: `平均評分：${q.avgRating?.toFixed(2) ?? '-'}　/　回覆數：${q.responseCount}`, color: '#444' }
+              : { text: `開放文字題 — 共 ${q.responseCount} 則回覆（完整內容請用 Excel 匯出）`, color: '#444' },
           ],
+          unbreakable: true,
         })),
-        { text: 'Note: This is an AI-generated summary. Detailed raw responses available via Excel export.', fontSize: 8, italics: true, color: '#999', margin: [0, 20, 0, 0] as [number, number, number, number] },
+        { text: '備註：本報表為統計摘要；完整逐筆回覆請使用 Excel 匯出。', fontSize: 8, italics: true, color: '#999', margin: [0, 20, 0, 0] as [number, number, number, number] },
       ].filter(Boolean),
       styles: {
         header: { fontSize: 20, bold: true, color: '#0F2A5C' },
         subheader: { fontSize: 14, bold: true },
-        sectionHeader: { fontSize: 11, bold: true, color: '#126b8a', margin: [0, 8, 0, 6] as [number, number, number, number] },
+        sectionHeader: { fontSize: 11, bold: true, color: '#126b8a', margin: [0, 10, 0, 6] as [number, number, number, number] },
       },
-      defaultStyle: { font: 'Roboto', fontSize: 10 },
+      defaultStyle: { font: 'NotoTC', fontSize: 10 },
       pageMargins: [40, 40, 40, 40] as [number, number, number, number],
     };
 
-    // pdfmake 0.3.8: createPdf(doc) → OutputDocumentServer with async getBuffer()
+    // pdfmake 0.3.x: createPdf(doc) → OutputDocumentServer with async getBuffer()
     const pdfDoc = pdfMake.createPdf(docDefinition);
     return pdfDoc.getBuffer();
   }

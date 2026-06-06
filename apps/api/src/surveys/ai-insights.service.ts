@@ -182,6 +182,50 @@ export class AiInsightsService {
       .filter((b) => b.question && b.insight);
   }
 
+  // ─── 進階統計 AI 解讀 ──────────────────────────────────────────────────────
+
+  /**
+   * 把已算好的進階統計結果（差異性分析 / 迴歸）交給 LLM，產生白話解讀。
+   * 統計數字由後端 deterministic 計算，AI 只負責「翻譯成人話 + 提醒解讀限制」，不重算、不編造。
+   */
+  async interpretStatistics(
+    analysisLabel: string,
+    surveyTitle: string,
+    result: unknown,
+  ): Promise<{ interpretation: string; caveats: string[]; generatedAt: string }> {
+    const fallback = (note: string) => ({
+      interpretation: note,
+      caveats: ['AI 解讀暫時不可用，請直接參考上方統計數字，或稍後重試。'],
+      generatedAt: new Date().toISOString(),
+    });
+    try {
+      const r = await this.zai.jsonChat<{ interpretation: string; caveats: string[] }>(
+        '你是資深問卷統計分析師，為非統計背景的問卷建立者解讀「已經算好的」統計結果。' +
+          '所有數字都是後端精確計算的事實，你不可重算、不可更改、不可編造任何數字。' +
+          '用繁體中文，平實白話，避免艱澀術語（必要時用括號簡短說明）。' +
+          'JSON 必含：interpretation (string，3-5 句白話結論，說明這個結果代表什麼、實務上怎麼看)、' +
+          'caveats (string array，2-4 點解讀注意事項，例如樣本量、相關不等於因果、顯著性的意義)。',
+        [
+          `問卷標題：${surveyTitle}`,
+          `分析類型：${analysisLabel}`,
+          '統計結果（JSON）：',
+          JSON.stringify(result),
+          '',
+          '請用白話解讀這個結果，並列出解讀時該注意的限制。p < 0.05 視為統計顯著。',
+        ].join('\n'),
+        { temperature: 0.3, model: 'glm-4.6' },
+      );
+      return {
+        interpretation: String(r.interpretation ?? '').slice(0, 800) || '無法產生解讀，請參考統計數字。',
+        caveats: (Array.isArray(r.caveats) ? r.caveats.map((c) => String(c)) : []).filter(Boolean).slice(0, 4),
+        generatedAt: new Date().toISOString(),
+      };
+    } catch (err) {
+      this.logger.error('Statistics interpretation failed', err);
+      return fallback('AI 解讀暫時不可用，請直接參考上方統計數字。');
+    }
+  }
+
   // ─── 開放題情緒分析 ──────────────────────────────────────────────────────
 
   async analyzeTextSentiment(

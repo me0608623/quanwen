@@ -97,6 +97,13 @@ export interface MyResponseRecord {
     status: 'passed' | 'suspicious' | 'rejected';
     flags?: string[];
     llmReasoning?: string | null;
+    signalScores?: {
+      timing?: number;
+      attentionCheck?: number | null;
+      reverseConsistency?: number | null;
+      textQuality?: number;
+      choicePattern?: number;
+    };
   } | null;
   suspiciousFlags?: string[] | null;
 }

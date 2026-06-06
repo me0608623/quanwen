@@ -2,6 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, Inject, Logger, No
 import { DB, type AppDb } from '../db';
 import { eq, and, inArray } from 'drizzle-orm';
 import { surveys, surveyQuestions, questionOptions, surveyResponses, responseAnswers } from '../db/schema';
+import { welchTTest, oneWayAnova, multipleLinearRegression } from './stats-math';
 
 /**
  * Analytics Service — 進階問卷統計分析
@@ -78,6 +79,39 @@ export interface ScaleReliabilityResult {
     correctedItemTotalCorrelation: number | null;
     alphaIfDeleted: number | null;
   }>;
+}
+
+export interface GroupComparisonResult {
+  ratingQuestion: { id: string; title: string };
+  groupQuestion: { id: string; title: string };
+  groups: Array<{ optionId: string; label: string; n: number; mean: number | null; stddev: number }>;
+  test: {
+    type: 't' | 'anova';
+    statistic: number;
+    df1: number;
+    df2: number | null;
+    p: number;
+    effectSize: number | null;
+    effectSizeLabel: string | null;
+  } | null;
+  interpretation: string;
+}
+
+export interface RegressionAnalysisResult {
+  dependent: { id: string; title: string };
+  predictors: Array<{
+    id: string;
+    title: string;
+    coefficient: number | null;
+    standardizedBeta: number | null;
+    tStat: number | null;
+    p: number | null;
+  }>;
+  intercept: number | null;
+  rSquared: number | null;
+  adjustedRSquared: number | null;
+  n: number;
+  interpretation: string;
 }
 
 function sampleVariance(values: number[]): number {
@@ -985,6 +1019,204 @@ export class AnalyticsService {
       segments: segments.sort((a, b) => b.count - a.count),
       totalRespondents: responseIds.length,
       normalizedToCommonScale: true,
+    };
+  }
+
+  /**
+   * 差異性分析：以一個單選題分組，比較各組在某評分題的平均差異。
+   * 2 組 → Welch 兩樣本 t 檢定；≥3 組 → 單因子 ANOVA。
+   */
+  async getGroupComparison(
+    surveyId: string,
+    surveyorId: string,
+    ratingQuestionId: string,
+    groupQuestionId: string,
+  ): Promise<GroupComparisonResult> {
+    await this.verifyAccess(surveyId, surveyorId);
+    if (ratingQuestionId === groupQuestionId) {
+      throw new BadRequestException('評分題與分組題必須不同');
+    }
+
+    const [ratingQ, groupQ] = await Promise.all([
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, ratingQuestionId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
+      this.db.select().from(surveyQuestions).where(and(eq(surveyQuestions.id, groupQuestionId), eq(surveyQuestions.surveyId, surveyId))).limit(1),
+    ]);
+    if (!ratingQ[0] || !groupQ[0]) throw new BadRequestException('題目不屬於此問卷');
+    if (ratingQ[0].type !== 'rating') throw new BadRequestException('差異性分析的依變數必須是評分題');
+    if (groupQ[0].type !== 'single_choice') throw new BadRequestException('分組題必須是單選題');
+
+    const persistedOpts = await this.db.select().from(questionOptions).where(eq(questionOptions.questionId, groupQuestionId)).orderBy(questionOptions.sortOrder);
+    const groupOpts = questionConfig(groupQ[0].config).variant === 'yes_no' ? SYNTHETIC_YES_NO_OPTIONS : persistedOpts;
+    const labelById = new Map(groupOpts.map((o: { id: string; label: string }) => [o.id, o.label]));
+
+    const [ratingAnswers, groupAnswers] = await Promise.all([
+      this.db
+        .select({ responseId: responseAnswers.responseId, value: responseAnswers.ratingValue })
+        .from(responseAnswers)
+        .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+        .where(and(eq(surveyResponses.surveyId, surveyId), eq(responseAnswers.questionId, ratingQuestionId), inArray(surveyResponses.status, ['submitted', 'rewarded']))),
+      this.db
+        .select({ responseId: responseAnswers.responseId, selectedOptionIds: responseAnswers.selectedOptionIds })
+        .from(responseAnswers)
+        .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+        .where(and(eq(surveyResponses.surveyId, surveyId), eq(responseAnswers.questionId, groupQuestionId), inArray(surveyResponses.status, ['submitted', 'rewarded']))),
+    ]);
+
+    const ratingByResponse = new Map<string, number>();
+    for (const a of ratingAnswers) if (a.value !== null) ratingByResponse.set(a.responseId, a.value);
+
+    // optionId -> 評分值陣列
+    const valuesByOption = new Map<string, number[]>();
+    for (const g of groupAnswers) {
+      const ids = g.selectedOptionIds as string[] | null;
+      if (!ids || ids.length === 0) continue;
+      const value = ratingByResponse.get(g.responseId);
+      if (value === undefined) continue;
+      const optId = ids[0];
+      const bucket = valuesByOption.get(optId) ?? [];
+      bucket.push(value);
+      valuesByOption.set(optId, bucket);
+    }
+
+    const groups = groupOpts
+      .map((o: { id: string; label: string }) => {
+        const values = valuesByOption.get(o.id) ?? [];
+        const m = values.length > 0 ? values.reduce((s, v) => s + v, 0) / values.length : null;
+        const variance = values.length >= 2
+          ? values.reduce((s, v) => s + (v - (m as number)) ** 2, 0) / (values.length - 1)
+          : 0;
+        return {
+          optionId: o.id,
+          label: labelById.get(o.id) ?? o.id,
+          n: values.length,
+          mean: m === null ? null : Math.round(m * 100) / 100,
+          stddev: Math.round(Math.sqrt(variance) * 100) / 100,
+          values,
+        };
+      })
+      .filter((g) => g.n >= 2);
+
+    const base = {
+      ratingQuestion: { id: ratingQuestionId, title: ratingQ[0].title },
+      groupQuestion: { id: groupQuestionId, title: groupQ[0].title },
+      groups: groups.map(({ values, ...rest }) => rest),
+    };
+
+    if (groups.length < 2) {
+      return { ...base, test: null, interpretation: '有效分組不足（每組至少需 2 筆評分），無法檢定差異' };
+    }
+
+    if (groups.length === 2) {
+      const result = welchTTest(groups[0].values, groups[1].values);
+      if (!result) return { ...base, test: null, interpretation: '資料變異不足，無法計算 t 檢定' };
+      const significant = result.p < 0.05;
+      return {
+        ...base,
+        test: { type: 't', statistic: result.t, df1: result.df, df2: null, p: result.p, effectSize: null, effectSizeLabel: null },
+        interpretation: significant
+          ? `兩組平均差異達統計顯著（t=${result.t}, p=${result.p}）：「${groups[0].label}」平均 ${groups[0].mean}，「${groups[1].label}」平均 ${groups[1].mean}。`
+          : `兩組平均差異未達統計顯著（t=${result.t}, p=${result.p}），尚不能斷定有差異。`,
+      };
+    }
+
+    const result = oneWayAnova(groups.map((g) => g.values));
+    if (!result) return { ...base, test: null, interpretation: '資料變異不足，無法計算變異數分析' };
+    const significant = result.p < 0.05;
+    return {
+      ...base,
+      test: { type: 'anova', statistic: result.f, df1: result.df1, df2: result.df2, p: result.p, effectSize: result.etaSquared, effectSizeLabel: 'η²' },
+      interpretation: significant
+        ? `${groups.length} 組之間平均至少有一組顯著不同（F=${result.f}, p=${result.p}，η²=${result.etaSquared}）。`
+        : `${groups.length} 組之間平均差異未達統計顯著（F=${result.f}, p=${result.p}）。`,
+    };
+  }
+
+  /**
+   * 複迴歸：以多個評分題（自變數）預測一個評分題（應變數），逐筆完整作答配對。
+   */
+  async getRegression(
+    surveyId: string,
+    surveyorId: string,
+    dependentId: string,
+    independentIds: string[],
+  ): Promise<RegressionAnalysisResult> {
+    await this.verifyAccess(surveyId, surveyorId);
+    const uniqueIndependents = [...new Set(independentIds)].filter((id) => id !== dependentId);
+    if (uniqueIndependents.length === 0) throw new BadRequestException('至少需要 1 個自變數，且不可與應變數相同');
+
+    const allIds = [dependentId, ...uniqueIndependents];
+    const questions = await this.db
+      .select({ id: surveyQuestions.id, title: surveyQuestions.title, type: surveyQuestions.type })
+      .from(surveyQuestions)
+      .where(and(eq(surveyQuestions.surveyId, surveyId), inArray(surveyQuestions.id, allIds)));
+    const byId = new Map(questions.map((q) => [q.id, q]));
+    for (const id of allIds) {
+      const q = byId.get(id);
+      if (!q) throw new BadRequestException('題目不屬於此問卷');
+      if (q.type !== 'rating') throw new BadRequestException('迴歸分析僅支援評分題');
+    }
+
+    const answers = await this.db
+      .select({ responseId: responseAnswers.responseId, questionId: responseAnswers.questionId, value: responseAnswers.ratingValue })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .where(and(eq(surveyResponses.surveyId, surveyId), inArray(responseAnswers.questionId, allIds), inArray(surveyResponses.status, ['submitted', 'rewarded'])));
+
+    const byResponse = new Map<string, Map<string, number>>();
+    for (const a of answers) {
+      if (a.value === null) continue;
+      const row = byResponse.get(a.responseId) ?? new Map<string, number>();
+      row.set(a.questionId, a.value);
+      byResponse.set(a.responseId, row);
+    }
+
+    const xRows: number[][] = [];
+    const y: number[] = [];
+    for (const row of byResponse.values()) {
+      if (!allIds.every((id) => row.has(id))) continue;
+      y.push(row.get(dependentId)!);
+      xRows.push(uniqueIndependents.map((id) => row.get(id)!));
+    }
+
+    const predictorMeta = uniqueIndependents.map((id) => ({ id, title: byId.get(id)!.title }));
+    const result = multipleLinearRegression(xRows, y);
+    if (!result) {
+      return {
+        dependent: { id: dependentId, title: byId.get(dependentId)!.title },
+        predictors: predictorMeta.map((p) => ({ ...p, coefficient: null, standardizedBeta: null, tStat: null, p: null })),
+        intercept: null,
+        rSquared: null,
+        adjustedRSquared: null,
+        n: y.length,
+        interpretation: `完整配對樣本不足（目前 ${y.length} 筆，需大於自變數數 + 1），暫時無法估計迴歸。`,
+      };
+    }
+
+    const coefByIndex = new Map(result.coefficients.filter((c) => c.index !== null).map((c) => [c.index as number, c]));
+    const predictors = predictorMeta.map((p, i) => {
+      const c = coefByIndex.get(i);
+      return {
+        ...p,
+        coefficient: c?.coefficient ?? null,
+        standardizedBeta: c?.standardizedBeta ?? null,
+        tStat: c?.tStat ?? null,
+        p: c?.p ?? null,
+      };
+    });
+    const fitLabel = result.rSquared >= 0.5 ? '強' : result.rSquared >= 0.25 ? '中等' : '弱';
+    const sigPredictors = predictors.filter((p) => p.p !== null && p.p < 0.05);
+    return {
+      dependent: { id: dependentId, title: byId.get(dependentId)!.title },
+      predictors,
+      intercept: result.intercept,
+      rSquared: result.rSquared,
+      adjustedRSquared: result.adjustedRSquared,
+      n: result.n,
+      interpretation:
+        `模型解釋了應變數約 ${Math.round(result.rSquared * 100)}% 的變異（R²=${result.rSquared}，調整後 ${result.adjustedRSquared}），整體解釋力${fitLabel}。` +
+        (sigPredictors.length > 0
+          ? `顯著預測變數：${sigPredictors.map((p) => `「${p.title}」(β=${p.standardizedBeta}, p=${p.p})`).join('、')}。`
+          : '目前沒有達統計顯著的預測變數，建議增加樣本或檢視題目。'),
     };
   }
 

@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useAvailableSurveys, useConfirmLotteryReceipt, useLotteryResults, useMyResponses, useReportLotteryIssue, useRespondentAssistant, useTaskCategoryCounts, type LotteryResult, type LotteryWinning } from '@/hooks/use-responses';
+import { useAvailableSurveys, useConfirmLotteryReceipt, useCreateAppeal, useLotteryResults, useMyAppeals, useMyResponses, useReportLotteryIssue, useRespondentAssistant, useTaskCategoryCounts, type LotteryResult, type LotteryWinning, type MyResponseRecord } from '@/hooks/use-responses';
 import { SURVEY_CATEGORY_LABELS, type SurveyCategory } from '@/hooks/use-surveys';
 import { useState, useEffect } from 'react';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
@@ -43,6 +43,12 @@ export default function TasksPage() {
   const { data: catCounts = {} } = useTaskCategoryCounts();
   const { data: history = [], isLoading: historyLoading, isError: historyError } = useMyResponses();
   const { data: lotteryResults = [], isLoading: lotteryResultsLoading } = useLotteryResults();
+  const { data: myAppeals = [] } = useMyAppeals();
+  const createAppeal = useCreateAppeal();
+  const [breakdownOpen, setBreakdownOpen] = useState<string | null>(null);
+  const [appealTarget, setAppealTarget] = useState<MyResponseRecord | null>(null);
+  const [appealReason, setAppealReason] = useState('');
+  const appealedResponseIds = new Set(myAppeals.map((a) => a.responseId));
 
   // 還原/保存任務排序偏好（client-only，避免 hydration 不一致）
   useEffect(() => {
@@ -473,6 +479,35 @@ export default function TasksPage() {
                       可改進：{r.qualityBreakdown.flags.slice(0, 3).join('、')}
                     </p>
                   )}
+                {(r.qualityBreakdown?.status === 'rejected' || r.qualityBreakdown?.status === 'suspicious') && (
+                  <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setBreakdownOpen(breakdownOpen === r.responseId ? null : r.responseId)}
+                      className="text-[11px] font-medium text-[#126b8a] underline-offset-2 hover:underline"
+                    >
+                      {breakdownOpen === r.responseId ? '收合扣分明細' : '查看扣分明細'}
+                    </button>
+                    {r.status === 'rejected' && (
+                      appealedResponseIds.has(r.responseId) ? (
+                        <span className="text-[11px] text-muted-foreground">
+                          已申訴（{myAppeals.find((a) => a.responseId === r.responseId)?.status === 'pending' ? '處理中' : '已處理'}）
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => { setAppealTarget(r); setAppealReason(''); }}
+                          className="rounded border border-[#126b8a] px-2 py-0.5 text-[11px] font-medium text-[#126b8a] hover:bg-[#126b8a]/5"
+                        >
+                          我要申訴
+                        </button>
+                      )
+                    )}
+                  </div>
+                )}
+                {breakdownOpen === r.responseId && (
+                  <QualityBreakdownDetail breakdown={r.qualityBreakdown} />
+                )}
                 {r.rewardMode === 'lottery' && (
                   <p className="mt-1 text-xs font-semibold text-amber-800">
                     {r.lotteryDrawnAt

@@ -16,7 +16,8 @@ export const SurveyQuestionSchema = z.object({
   // QUA-279: 題目圖片 URL（上傳後回傳的路徑）
   imageUrl: z.string().max(500).nullish(),
   config: z.record(z.string(), z.unknown()).optional(),
-  options: z.array(QuestionOptionSchema).max(20).optional(),
+  // 上限 50:台灣縣市 22 個、Google Forms 匯入常見長清單,20 太緊(曾擋下合法匯入)
+  options: z.array(QuestionOptionSchema).max(50).optional(),
 }).superRefine((question, ctx) => {
   if (question.type !== 'rating' || !question.config) return;
   const { maxRating, scaleStart } = question.config;

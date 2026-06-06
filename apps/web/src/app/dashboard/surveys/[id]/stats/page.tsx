@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -18,13 +19,15 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
+import { useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
 import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
 import { CrossTabSection } from '@/components/stats/cross-tab-panel';
 import { NpsSection } from '@/components/stats/nps-gauge';
 import { CorrelationSection } from '@/components/stats/correlation-panel';
+import { GroupComparisonSection } from '@/components/stats/group-comparison-panel';
+import { RegressionSection } from '@/components/stats/regression-panel';
 import { SegmentationSection } from '@/components/stats/segmentation-panel';
 import { AiReportExport } from '@/components/stats/ai-report-export';
 
@@ -427,7 +430,7 @@ export default function SurveyStatsPage() {
         <section className="rounded-xl border border-[#126b8a]/20 bg-[#126b8a]/[0.04] p-4">
           <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#126b8a]">進階量化分析</p>
           <p className="mt-1 text-sm text-slate-600">
-            目前有 {chartQuestions} 題可直接視覺化。你也可以執行交叉分析、NPS、相關性與分群，找出更深層的受訪者差異。
+            目前有 {chartQuestions} 題可直接視覺化。你也可以執行交叉分析、信度（Cronbach&apos;s α）、NPS、相關性、差異性檢定（t / ANOVA）、迴歸與分群，找出更深層的受訪者差異。統計皆由系統精確計算，可加購「AI 白話解讀」（耗 AI 分析額度）。
           </p>
         </section>
         <CrossTabSection questionStats={stats.questionStats} surveyId={id} />
@@ -439,6 +442,12 @@ export default function SurveyStatsPage() {
 
         {/* 相關性分析 */}
         <CorrelationSection questionStats={stats.questionStats} surveyId={id} />
+
+        {/* 差異性分析（t 檢定 / ANOVA） */}
+        <GroupComparisonSection questionStats={stats.questionStats} surveyId={id} />
+
+        {/* 迴歸分析 */}
+        <RegressionSection questionStats={stats.questionStats} surveyId={id} />
 
         {/* 分群分析 */}
         <SegmentationSection surveyId={id} />
@@ -928,6 +937,12 @@ function FreqBadge({ freq }: { freq: 'high' | 'medium' | 'low' }) {
 
 // ─── AI Insights Panel ──────────────────────────────────────────────────────
 
+/** AiQuotaGuard 額度用盡回 403 + message='AI feature limit reached' */
+function isQuotaError(err: unknown): boolean {
+  const resp = (err as { response?: { status?: number; data?: { message?: string } } })?.response;
+  return resp?.status === 403 && resp?.data?.message === 'AI feature limit reached';
+}
+
 function AiInsightsPanel({
   surveyId,
   surveyTitle,
@@ -937,31 +952,29 @@ function AiInsightsPanel({
   surveyTitle: string;
   totalResponses: number;
 }) {
-  const [enabled, setEnabled] = useState(false);
   const [reportType, setReportType] = useState<ReportType>('simple');
   const [presentationOpen, setPresentationOpen] = useState(false);
-  const queryClient = useQueryClient();
-  const { data, isLoading, isFetching, error, refetch } = useSurveyAiInsights(surveyId, enabled, reportType);
+  // 已保存報告(DB 持久化,免費讀取);生成/重新生成才耗額度
+  const { data: saved, isLoading: savedLoading } = useSavedAiInsights(surveyId, reportType);
+  const generate = useGenerateAiInsights(surveyId);
   const { data: usage } = useAiUsage();
 
-  const handleGenerate = () => {
-    if (!enabled) {
-      setEnabled(true);
-    } else {
-      // 已生成過 → 強制重新請求（針對當前 reportType）
-      queryClient.removeQueries({ queryKey: ['surveys', surveyId, 'ai-insights', reportType] });
-      refetch();
-    }
-  };
+  const handleGenerate = () => generate.mutate(reportType);
 
-  // 切換報告類型：啟用後切換會因 queryKey 改變而自動抓對應報告
+  // 切換報告類型:讀取該類型已保存的報告(沒有就顯示「生成報告」提示),不自動耗額度
   const handleSwitchType = (t: ReportType) => {
     if (t === reportType) return;
+    generate.reset();
     setReportType(t);
-    setEnabled(true);
   };
 
-  const busy = isLoading || isFetching;
+  const data = saved?.report ?? undefined;
+  const generatedAt = saved?.generatedAt;
+  const enabled = Boolean(data);
+  const error = generate.error;
+  const busy = generate.isPending || savedLoading;
+  const isLoading = generate.isPending;
+  const isFetching = false;
 
   return (
     <section className="relative overflow-hidden rounded-xl border border-[#126b8a]/30 bg-gradient-to-br from-[#0F2A5C]/[0.03] via-[#126b8a]/[0.04] to-[#8B5CF6]/[0.03] p-5">
@@ -992,6 +1005,9 @@ function AiInsightsPanel({
           {usage.tier.toUpperCase()} 方案 · 今日 AI 分析剩餘{' '}
           {Number.isFinite(usage.remaining.analyzeResponses) ? usage.remaining.analyzeResponses : '∞'}/
           {Number.isFinite(usage.limits.analyzeResponses) ? usage.limits.analyzeResponses : '∞'} 次
+          {generatedAt && (
+            <> · 本報告生成於 {new Date(generatedAt).toLocaleString('zh-TW', { hour12: false })}（已自動保存）</>
+          )}
         </p>
       )}
 
@@ -1039,7 +1055,19 @@ function AiInsightsPanel({
 
       {error && (
         <div className="relative rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-          產生洞察失敗，請稍後再試
+          {isQuotaError(error) ? (
+            <>
+              今日 AI 分析次數已用完（{usage ? `${usage.tier.toUpperCase()} 方案每日 ${
+                Number.isFinite(usage.limits.analyzeResponses) ? usage.limits.analyzeResponses : '∞'
+              } 次` : '已達方案上限'}）。明天會自動重置，或{' '}
+              <Link href="/dashboard/shop" className="font-semibold underline">
+                升級方案
+              </Link>{' '}
+              取得更多次數。
+            </>
+          ) : (
+            '產生洞察失敗，請稍後再試'
+          )}
         </div>
       )}
 

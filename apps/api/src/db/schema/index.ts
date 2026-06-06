@@ -6,6 +6,7 @@ export * from './responses';
 export * from './notifications';
 export * from './wallet';
 export * from './appeals';
+export * from './import-appeals';
 export * from './kyc';
 export * from './point-shop';
 export * from './mutual';
