@@ -126,10 +126,15 @@ export class AiAuditService {
     const now = new Date();
 
     if (survey.status === 'published') {
-      // Advisory 模式：只落分數，不動上架狀態
+      // Advisory 模式：落分數 + 建議文字（aiRejectReason 欄位在新流程語意 = AI 品質建議，
+      // 因為發布即上架後不再有 AI 自動退件），不動上架狀態
+      const adviceParts = [...result.issues];
+      if (result.suggestion) adviceParts.push(`建議：${result.suggestion}`);
+      const adviceText = adviceParts.length > 0 ? adviceParts.join('；') : null;
+
       await this.db
         .update(surveys)
-        .set({ aiScore: result.score, updatedAt: now })
+        .set({ aiScore: result.score, aiRejectReason: adviceText, updatedAt: now })
         .where(eq(surveys.id, surveyId));
 
       if (!result.passed) {

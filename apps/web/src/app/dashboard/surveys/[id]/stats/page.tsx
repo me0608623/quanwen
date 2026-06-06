@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
+import { useSurvey, useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
 import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
@@ -451,6 +451,9 @@ export default function SurveyStatsPage() {
 
         {/* 分群分析 */}
         <SegmentationSection surveyId={id} />
+
+        {/* AI 品質建議（純建議，不影響上架） */}
+        <AiQualityAdviceSection surveyId={id} />
       </div>
 
       {/* 受訪者清單（匿名化 token） */}
@@ -1366,5 +1369,40 @@ function SparkleIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="m12 3-1.9 5.7a2 2 0 0 1-1.4 1.4L3 12l5.7 1.9a2 2 0 0 1 1.4 1.4L12 21l1.9-5.7a2 2 0 0 1 1.4-1.4L21 12l-5.7-1.9a2 2 0 0 1-1.4-1.4z" />
     </svg>
+  );
+}
+
+/** AI 品質建議卡片 — 發布後背景品質掃描的結果（純建議，不影響上架狀態） */
+function AiQualityAdviceSection({ surveyId }: { surveyId: string }) {
+  const { data: survey } = useSurvey(surveyId);
+  if (!survey || typeof survey.aiScore !== 'number') return null;
+
+  const score = survey.aiScore;
+  const tone = score >= 80
+    ? { badge: 'bg-emerald-100 text-emerald-800', label: '品質良好' }
+    : score >= 60
+      ? { badge: 'bg-amber-100 text-amber-800', label: '尚可，可再優化' }
+      : { badge: 'bg-red-100 text-red-700', label: '建議改善' };
+
+  return (
+    <section className="rounded-lg border border-border p-5">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          🤖 AI 品質建議
+        </h2>
+        <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${tone.badge}`}>
+          {score} 分 · {tone.label}
+        </span>
+      </div>
+      {survey.aiRejectReason ? (
+        <p className="text-sm leading-relaxed text-foreground">{survey.aiRejectReason}</p>
+      ) : (
+        <p className="text-sm text-muted-foreground">AI 掃描未發現需要改善的問題。</p>
+      )}
+      <p className="mt-3 border-t border-border pt-2 text-[11px] text-muted-foreground">
+        此為發布後 AI 自動掃描的參考建議，僅供優化問卷品質，不影響問卷上架與填答。
+        修改題目後重新發布可獲得新的評估。
+      </p>
+    </section>
   );
 }
