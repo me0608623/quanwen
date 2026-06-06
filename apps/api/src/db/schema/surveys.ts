@@ -116,6 +116,9 @@ export const surveys = pgTable(
     // QUA-279: 問卷封面圖片（顯示在任務列表卡片背景）
     coverImageUrl: text('cover_image_url'),
 
+    // 歡迎頁（作答第一頁）可插入的多張圖片，依陣列順序顯示於描述之後
+    welcomeImages: jsonb('welcome_images').$type<string[]>(),
+
     // 樣式主題（JSON）：accentColor / backgroundColor / fontFamily，套用到填答頁與預覽
     theme: jsonb('theme'),
 

@@ -19,6 +19,7 @@ import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
 import { ImageUploader } from '@/components/survey-editor/image-uploader';
+import { WelcomeImagesEditor } from '@/components/survey-editor/welcome-images-editor';
 import { QuestionBlockList } from '@/components/survey-editor/question-block-list';
 import { QuestionEditor } from '@/components/survey-editor/question-editor';
 import { RewardsPanel } from '@/components/survey-editor/rewards-panel';
@@ -87,6 +88,7 @@ export default function SurveyDetailPage() {
   const [audience, setAudience] = useState<AudienceCriteria>({});
   const [theme, setTheme] = useState<SurveyTheme>({});
   const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
+  const [welcomeImages, setWelcomeImages] = useState<string[]>([]);
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
@@ -119,11 +121,12 @@ export default function SurveyDetailPage() {
     setAudience(survey.audienceCriteria ?? {});
     setTheme(survey.theme ?? {});
     setCoverImageUrl(survey.coverImageUrl ?? undefined);
+    setWelcomeImages(survey.welcomeImages ?? []);
     setInitialized(true);
   }, [dirty, initialized, router, survey]);
 
   const canEdit = survey?.status === 'draft' || survey?.status === 'rejected';
-  const livePreviewDraft = useDebouncedValue({ title, description, questions, theme }, 350);
+  const livePreviewDraft = useDebouncedValue({ title, description, questions, theme, coverImageUrl }, 350);
 
   // 定價顧問：依題目估算建議單份獎勵（debounced，僅 standard 問卷）
   const pricingAdvice = usePricingAdvice();
@@ -202,7 +205,7 @@ export default function SurveyDetailPage() {
     };
 
     try {
-      await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria, theme, coverImageUrl, ...rewardFields, ...scheduleFields });
+      await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria, theme, coverImageUrl, welcomeImages, ...rewardFields, ...scheduleFields });
       setDirty(false);
     } catch (err) {
       showAxiosError(err, '儲存草稿失敗，請稍後再試。');
@@ -348,8 +351,8 @@ export default function SurveyDetailPage() {
         onDelete={removeQuestion}
         onAdd={addQuestion}
         onDuplicate={duplicateQuestion}
-        selectedIndex={selectedQuestionIndex ?? undefined}
-        onSelect={setSelectedQuestionIndex}
+        selectedIndex={selectedQuestionIndex ?? -1}
+        onSelect={(idx) => setSelectedQuestionIndex(idx === -1 ? null : idx)}
       />
     </div>
   );
@@ -618,7 +621,16 @@ export default function SurveyDetailPage() {
                 setCoverImageUrl(url);
                 markDirty();
               }}
-              label="封面圖片"
+              label="封面圖片（顯示於任務卡片與問卷歡迎頁）"
+            />
+          )}
+          {canEdit && (
+            <WelcomeImagesEditor
+              value={welcomeImages}
+              onChange={(next) => {
+                setWelcomeImages(next);
+                markDirty();
+              }}
             />
           )}
         </section>

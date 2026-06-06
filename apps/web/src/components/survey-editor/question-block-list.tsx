@@ -113,16 +113,24 @@ export function QuestionBlockList({
         問卷結構
       </div>
 
-      {/* Welcome Card block (static) */}
-      <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
+      {/* Welcome Card block — 可點擊回到歡迎頁/AI 面板總覽（selectedIndex === -1） */}
+      <button
+        type="button"
+        onClick={() => onSelect?.(-1)}
+        className={cn(
+          'w-full rounded-md border bg-white px-3 py-2 text-left text-xs transition-all',
+          selectedIndex === -1 ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30',
+        )}
+      >
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">📋</span>
           <span className="font-medium text-foreground">歡迎頁面</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">圖片 · AI 工具</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground truncate">
           {questions.length > 0 ? questions[0].title || '簡介' : '新增題目以開始'}
         </p>
-      </div>
+      </button>
 
       {/* Question blocks (draggable) */}
       {questions.map((q, index) => {

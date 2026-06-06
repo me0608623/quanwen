@@ -97,6 +97,8 @@ export class SurveysService {
           questionShuffleMode: dto.questionShuffleMode ?? 'none',
           // QUA-279: 封面圖片
           coverImageUrl: dto.coverImageUrl,
+          // 歡迎頁多圖
+          welcomeImages: dto.welcomeImages,
           // 樣式主題
           theme: dto.theme,
           // QUA-201: 排程發布 / 自動關閉（建立時可一併設定）
@@ -182,6 +184,7 @@ export class SurveysService {
       isAnonymous: src.isAnonymous,
       questionShuffleMode: src.questionShuffleMode ?? undefined,
       coverImageUrl: src.coverImageUrl ?? undefined,
+      welcomeImages: src.welcomeImages ?? undefined,
       theme: src.theme ?? undefined,
       audienceCriteria: src.audienceCriteria ?? undefined,
       questions: src.questions.map((q) => ({
@@ -320,6 +323,8 @@ export class SurveysService {
     if (surveyFields.questionShuffleMode !== undefined) updateData.questionShuffleMode = surveyFields.questionShuffleMode;
     // QUA-279: Allow updating cover image
     if (surveyFields.coverImageUrl !== undefined) updateData.coverImageUrl = surveyFields.coverImageUrl;
+    // 歡迎頁多圖
+    if (surveyFields.welcomeImages !== undefined) updateData.welcomeImages = surveyFields.welcomeImages;
     if (surveyFields.theme !== undefined) updateData.theme = surveyFields.theme;
 
     // Wrap survey update + question replacement in a single transaction:

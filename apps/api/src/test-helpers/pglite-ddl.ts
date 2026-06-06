@@ -93,6 +93,7 @@ export const SURVEYS_DDL = `
     ai_reject_reason      TEXT,
     question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
     cover_image_url       TEXT,
+    welcome_images        JSONB,
     theme                 JSONB,
     is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
     scheduled_publish_at  TIMESTAMPTZ,

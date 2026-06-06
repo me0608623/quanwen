@@ -201,6 +201,8 @@ export interface Survey {
   audienceCriteria?: AudienceCriteria | null;
   // QUA-279: 封面圖片
   coverImageUrl?: string;
+  // 歡迎頁（作答第一頁）可插入的多張圖片，依序顯示
+  welcomeImages?: string[];
   // QUA-201: Scheduled publish and auto-close
   scheduledPublishAt?: string | null;
   autoCloseAt?: string | null;

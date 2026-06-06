@@ -148,6 +148,7 @@ export { DB_TOKEN as DB };
               ai_reject_reason      TEXT,
               question_shuffle_mode VARCHAR(16)  NOT NULL DEFAULT 'none',
               cover_image_url       TEXT,
+              welcome_images        JSONB,
               theme                 JSONB,
               is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
               created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),

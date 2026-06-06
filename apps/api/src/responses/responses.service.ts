@@ -249,6 +249,10 @@ export class ResponsesService {
       lotteryTermsAcceptedAt: survey.lotteryTermsAcceptedAt,
       isAnonymous: survey.isAnonymous,
       theme: survey.theme,
+      // 問卷歡迎頁橫幅圖（建立者上傳的封面圖，亦顯示於填答歡迎頁）
+      coverImageUrl: survey.coverImageUrl,
+      // 歡迎頁可插入的多張圖片（依序顯示於描述之後）
+      welcomeImages: survey.welcomeImages ?? [],
       alreadySubmitted,
       randomizationSeed: previewSeed,
       questions: questions.map((q) => {

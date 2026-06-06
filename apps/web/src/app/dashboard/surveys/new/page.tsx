@@ -11,6 +11,7 @@ import { PricingAdviceCard } from '@/components/survey-editor/pricing-advice-car
 import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
 import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
 import { ImageUploader } from '@/components/survey-editor/image-uploader';
+import { WelcomeImagesEditor } from '@/components/survey-editor/welcome-images-editor';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 
 function localDateTimeInputValue(date: Date): string {
@@ -45,6 +46,7 @@ export default function NewSurveyPage() {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
+  const [welcomeImages, setWelcomeImages] = useState<string[]>([]);
   const [rewardMode, setRewardMode] = useState<'fixed' | 'lottery'>('fixed');
   const [rewardPoints, setRewardPoints] = useState(0);
   const [lotteryPrize, setLotteryPrize] = useState('');
@@ -133,6 +135,7 @@ export default function NewSurveyPage() {
         title: title || '未命名問卷',
         description: description || undefined,
         coverImageUrl: coverImageUrl || undefined,
+        welcomeImages: welcomeImages.length > 0 ? welcomeImages : undefined,
         type,
         category: category || undefined,
         aiReviewEnabled: type === 'mutual' ? true : aiReviewEnabled,
@@ -286,8 +289,11 @@ export default function NewSurveyPage() {
         <ImageUploader
           value={coverImageUrl}
           onChange={setCoverImageUrl}
-          label="封面圖片（顯示在任務列表卡片）"
+          label="封面圖片（顯示於任務卡片與問卷歡迎頁）"
         />
+
+        {/* 歡迎頁多圖 */}
+        <WelcomeImagesEditor value={welcomeImages} onChange={setWelcomeImages} />
 
         <div>
           <label className="mb-1 block text-sm font-medium">分類（選填）</label>

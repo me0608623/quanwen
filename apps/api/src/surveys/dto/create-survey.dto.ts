@@ -83,6 +83,8 @@ export const CreateSurveyBaseSchema = z.object({
   questionShuffleMode: z.enum(['none', 'all', 'exceptLast']).optional(),
   // QUA-279: 問卷封面圖片（顯示在任務列表卡片背景）
   coverImageUrl: z.string().max(500).optional(),
+  // 歡迎頁（作答第一頁）可插入的多張圖片，依序顯示於描述之後
+  welcomeImages: z.array(z.string().max(500)).max(12).optional(),
   // 樣式主題：填答頁/預覽外觀
   theme: SurveyThemeSchema.optional(),
   audienceCriteria: AudienceCriteriaSchema.optional(),

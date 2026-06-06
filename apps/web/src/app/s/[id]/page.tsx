@@ -8,6 +8,7 @@ import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendere
 import { lotteryDisclosure } from '@/lib/lottery-display';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
 
@@ -99,6 +100,19 @@ export default function PublicSurveyPage() {
       <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
       {survey.description && (
         <p className="mb-2 text-sm text-muted-foreground">{survey.description}</p>
+      )}
+      {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+        <div className="mb-3 space-y-3">
+          {survey.welcomeImages.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${url}-${i}`}
+              src={resolveAssetUrl(url)}
+              alt={`歡迎圖 ${i + 1}`}
+              className="w-full rounded-xl object-contain"
+            />
+          ))}
+        </div>
       )}
       <p className="mb-6 text-xs text-muted-foreground">
         {survey.questions.length} 題
