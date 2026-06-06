@@ -14,7 +14,9 @@ import {
   mutualPairs,
   respondentProfiles,
   surveyorProfiles,
+  pointShopItems,
 } from './schema';
+import { VOUCHER_CATALOG } from './shop-catalog-seed';
 import * as bcrypt from 'bcryptjs';
 
 async function seed() {
@@ -199,6 +201,15 @@ async function seed() {
       });
     }
     console.log('✅ Standard demo surveys 已上架/已存在');
+  }
+
+  // ─── 積分商城：便利商店禮券雛形 ─────────────────────────────────────────────
+  const existingItems = await db.select({ id: pointShopItems.id }).from(pointShopItems).limit(1);
+  if (existingItems.length === 0) {
+    await db.insert(pointShopItems).values(VOUCHER_CATALOG);
+    console.log(`🛒 Seeded ${VOUCHER_CATALOG.length} 便利商店禮券商品`);
+  } else {
+    console.log('🛒 商城商品已存在，跳過');
   }
 
   console.log('✅ Done');

@@ -11,6 +11,26 @@ interface ShopCatalogProps {
   showMyRedemptionsLink?: boolean;
 }
 
+// 尚未取得官方圖片時的暫時版面（圖片之後補上）。依商店配色顯示面額。
+const PLACEHOLDER_STYLE: Record<ShopItem['category'], { wrap: string; tag: string }> = {
+  voucher_711: { wrap: 'from-green-500 to-orange-400', tag: '7-ELEVEN' },
+  voucher_familymart: { wrap: 'from-sky-500 to-emerald-400', tag: 'FamilyMart 全家' },
+  voucher_starbucks: { wrap: 'from-emerald-700 to-emerald-500', tag: 'Starbucks' },
+  voucher_general: { wrap: 'from-slate-500 to-slate-400', tag: '通用禮券' },
+  merchandise: { wrap: 'from-amber-500 to-yellow-400', tag: '商品' },
+};
+
+function VoucherPlaceholder({ category, faceValue }: { category: ShopItem['category']; faceValue: number }) {
+  const s = PLACEHOLDER_STYLE[category];
+  return (
+    <div className={`flex aspect-square w-full flex-col items-center justify-center bg-gradient-to-br ${s.wrap} text-white`}>
+      <span className="text-xs font-semibold uppercase tracking-wide opacity-90">{s.tag}</span>
+      <span className="mt-1 text-4xl font-extrabold tabular-nums">NT${faceValue}</span>
+      <span className="mt-2 text-[10px] opacity-80">禮券圖片即將上架</span>
+    </div>
+  );
+}
+
 export function ShopCatalog({
   compact = false,
   showHeader = true,
@@ -71,6 +91,18 @@ export function ShopCatalog({
           const affordable = pointsBalance >= item.costPoints;
           return (
             <div key={item.id} className="space-y-2 rounded-lg border border-border bg-card p-4">
+              <div className="relative overflow-hidden rounded-md">
+                {item.imageUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={item.imageUrl}
+                    alt={item.name}
+                    className="aspect-square w-full bg-slate-50 object-contain"
+                  />
+                ) : (
+                  <VoucherPlaceholder category={item.category} faceValue={item.faceValue} />
+                )}
+              </div>
               <div className="flex items-start justify-between gap-2">
                 <p className="font-semibold text-slate-900">{item.name}</p>
                 <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${CATEGORY_BADGE[item.category]}`}>
