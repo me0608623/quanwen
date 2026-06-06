@@ -457,6 +457,7 @@ export { DB_TOKEN as DB };
             ALTER TABLE surveys ADD COLUMN category survey_category;
             ALTER TABLE surveys ADD COLUMN ai_review_enabled BOOLEAN NOT NULL DEFAULT true;
             ALTER TABLE surveys ADD COLUMN external_url TEXT;
+            ALTER TABLE surveys ADD COLUMN estimated_minutes INTEGER;
 
             -- respondent_profiles 行業欄位（受眾媒合）
             ALTER TABLE respondent_profiles ADD COLUMN industry industry;
@@ -529,6 +530,36 @@ export { DB_TOKEN as DB };
             CREATE INDEX zai_call_log_created_idx ON zai_call_log(created_at);
             CREATE INDEX zai_call_log_prompt_key_idx ON zai_call_log(prompt_key);
             CREATE INDEX zai_call_log_error_idx ON zai_call_log(error_kind);
+          `);
+
+          // ── 2026-06-06 DDL 漂移補齊（與 Drizzle schema / pglite-ddl.ts 對齊）──
+          // 缺這些會讓 USE_PG_MEM 模式 register 直接 500（users.tier 不存在）、
+          // scheduler cron 每分鐘噴錯（surveys.auto_close_after_n 不存在）。
+          await client.exec(`
+            CREATE TYPE user_tier AS ENUM ('free','vip','vvip');
+            ALTER TABLE users ADD COLUMN tier user_tier NOT NULL DEFAULT 'free';
+
+            -- 問卷排程發布 / 自動截止（SurveySchedulerService）
+            ALTER TABLE surveys ADD COLUMN scheduled_publish_at TIMESTAMPTZ;
+            ALTER TABLE surveys ADD COLUMN auto_close_at TIMESTAMPTZ;
+            ALTER TABLE surveys ADD COLUMN auto_close_after_n INTEGER;
+
+            -- 抽獎平台介入歷史（admin 多次介入紀錄）
+            ALTER TABLE survey_lottery_results
+              ADD COLUMN platform_intervention_history JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+            -- AI 每日用量配額（user-subscription）
+            CREATE TABLE daily_usage (
+              id                        UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id                   UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              usage_date                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              optimize_survey_count     INTEGER     NOT NULL DEFAULT 0,
+              generate_questions_count  INTEGER     NOT NULL DEFAULT 0,
+              analyze_responses_count   INTEGER     NOT NULL DEFAULT 0,
+              created_at                TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+              updated_at                TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX daily_usage_user_date_idx ON daily_usage(user_id, usage_date);
           `);
 
           // QUA-196: Skip Logic / Conditional Branching

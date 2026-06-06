@@ -14,6 +14,14 @@ function StatCard({ label, value, sub }: { label: string; value: number | string
   );
 }
 
+const ADMIN_NAV_LINKS = [
+  { href: '/admin/users', label: '使用者管理' },
+  { href: '/admin/transactions', label: '交易稽核' },
+  { href: '/admin/reconciliation', label: '對帳' },
+  { href: '/admin/ai-usage', label: 'AI 成本' },
+  { href: '/admin/mutual', label: '互惠配對' },
+];
+
 export default function AdminOverviewPage() {
   const { data: stats, isLoading, isError } = usePlatformStats();
 
@@ -28,6 +36,11 @@ export default function AdminOverviewPage() {
         <h1 className="text-2xl font-bold">平台總覽</h1>
         {isError && <p className="text-sm text-destructive">統計資料載入失敗。可以先用下方快捷入口繼續操作。</p>}
         <section className="flex flex-wrap gap-3">
+          {ADMIN_NAV_LINKS.map((link) => (
+            <a key={link.href} href={link.href} className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">
+              {link.label}
+            </a>
+          ))}
           <a href="/admin/surveys" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">問卷審核</a>
           <a href="/admin/responses" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">可疑填答</a>
           <a href="/admin/withdrawals" className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted">提領審核</a>
@@ -112,6 +125,15 @@ export default function AdminOverviewPage() {
 
       {/* 快捷動作 */}
       <section className="flex flex-wrap gap-3">
+        {ADMIN_NAV_LINKS.map((link) => (
+          <a
+            key={link.href}
+            href={link.href}
+            className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted"
+          >
+            {link.label}
+          </a>
+        ))}
         <a
           href="/admin/surveys"
           className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"

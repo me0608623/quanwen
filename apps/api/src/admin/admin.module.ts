@@ -1,6 +1,10 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { AdminController } from './admin.controller';
 import { AdminService } from './admin.service';
+import { AdminUsersController } from './admin-users.controller';
+import { AdminUsersService } from './admin-users.service';
+import { AdminAuditController } from './admin-audit.controller';
+import { AdminAuditService } from './admin-audit.service';
 import { SuspiciousAnalyzerService } from './suspicious-analyzer.service';
 import { PlatformHealthService } from './platform-health.service';
 import { WithdrawalRiskService } from './withdrawal-risk.service';
@@ -22,9 +26,11 @@ import { AiAuditModule } from '../ai-audit/ai-audit.module';
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     forwardRef(() => require('../mutual/mutual.module').MutualModule),
   ],
-  controllers: [AdminController],
+  controllers: [AdminController, AdminUsersController, AdminAuditController],
   providers: [
     AdminService,
+    AdminUsersService,
+    AdminAuditService,
     SuspiciousAnalyzerService,
     PlatformHealthService,
     WithdrawalRiskService,
