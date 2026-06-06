@@ -41,6 +41,20 @@ export interface MutualPair {
   nextAction: MutualNextAction;
 }
 
+export interface MutualPoolItem {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  surveyDescription: string | null;
+  category: string | null;
+  owner: {
+    userId: string;
+    displayName: string;
+    reputationScore: number | null;
+  };
+  createdAt: string;
+}
+
 export interface MutualQuestion {
   id: string;
   surveyId: string;
@@ -128,6 +142,18 @@ export function useMutualPoolStats() {
   });
 }
 
+export function useMutualPool() {
+  return useQuery<MutualPoolItem[]>({
+    queryKey: ['mutual', 'pool'],
+    queryFn: async () => {
+      const { data } = await api.get<MutualPoolItem[]>('/mutual/pool');
+      return data;
+    },
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  });
+}
+
 export interface MutualMyStats {
   total: number;
   byStatus: Partial<Record<MutualStatus, number>>;
@@ -180,6 +206,7 @@ export function useSubmitMutualResponse() {
     onSuccess: (_, payload) => {
       queryClient.invalidateQueries({ queryKey: ['mutual'] });
       queryClient.invalidateQueries({ queryKey: ['mutual', payload.pairId] });
+      queryClient.invalidateQueries({ queryKey: ['spin'] }); // 完成互惠填答 +1 抽獎次數
     },
   });
 }
@@ -189,6 +216,19 @@ export function useReEnqueueMutual() {
   return useMutation({
     mutationFn: async (surveyId: string) => {
       const { data } = await api.post<{ pairId: string }>(`/mutual/re-enqueue/${surveyId}`);
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mutual'] });
+    },
+  });
+}
+
+export function useMatchMutualByCode() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (code: string) => {
+      const { data } = await api.post<{ pairId: string }>('/mutual/match-by-code', { code });
       return data;
     },
     onSuccess: () => {

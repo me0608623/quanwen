@@ -18,7 +18,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
+import { useSurveyTrend, useSurveyAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
 import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
@@ -501,9 +501,11 @@ export default function SurveyStatsPage() {
 
 function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStats }) {
   const [fulfillmentNote, setFulfillmentNote] = useState('');
+  const [winnerNotes, setWinnerNotes] = useState<Record<string, string>>({});
   const { data } = useSurveyLottery(surveyId);
   const draw = useDrawSurveyLottery(surveyId);
   const fulfill = useFulfillSurveyLottery(surveyId);
+  const fulfillWinner = useFulfillSurveyLotteryWinner(surveyId);
   const drawnAt = data?.drawnAt ?? stats.lotteryDrawnAt;
   const canDraw = stats.lotteryDrawMode === 'manual' && stats.totalResponses >= stats.targetCount && !drawnAt;
   const drawModeLabel = stats.lotteryDrawMode === 'scheduled'
@@ -564,10 +566,13 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
           </p>
           {pendingFulfillment && (
             <div className="mt-3 space-y-2">
+              <p className="text-xs text-slate-600">
+                官方送達通道是平台站內通知。電子券可在逐筆說明填入各自兌換碼；實體獎品請填寫領取、寄送或客服聯絡流程，平台會保存這段履約證據。
+              </p>
               <textarea
                 value={fulfillmentNote}
                 onChange={(event) => setFulfillmentNote(event.target.value)}
-                placeholder="例如：請於七日內回覆通知信，客服將協助安排餐券寄送。"
+                placeholder="可選：套用給所有待履約中獎者。例如：請於七日內依通知內容回覆領取資訊，客服將協助安排餐券寄送。"
                 className="min-h-20 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
               />
               <button
@@ -576,7 +581,7 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
                 onClick={() => fulfill.mutate(fulfillmentNote, { onSuccess: () => setFulfillmentNote('') })}
                 className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {fulfill.isPending ? '送出中…' : '通知中獎者兌獎方式'}
+                {fulfill.isPending ? '送出中…' : '套用並通知所有待履約者'}
               </button>
             </div>
           )}
@@ -637,6 +642,30 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
                     ))}
                   </div>
                 )}
+                {winner.fulfillmentStatus === 'pending' && (
+                  <div className="mt-3 space-y-2 rounded-md bg-amber-50 p-2">
+                    <p className="font-semibold text-amber-900">逐筆兌獎通知</p>
+                    <textarea
+                      value={winnerNotes[winner.id] ?? ''}
+                      onChange={(event) => setWinnerNotes((notes) => ({ ...notes, [winner.id]: event.target.value }))}
+                      placeholder="例如：電子餐券序號 ABCD-1234，請於 2026/07/31 前至饗食天堂門市兌換。"
+                      className="min-h-20 w-full rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm"
+                    />
+                    <button
+                      type="button"
+                      disabled={(winnerNotes[winner.id]?.trim().length ?? 0) < 5 || fulfillWinner.isPending}
+                      onClick={() => fulfillWinner.mutate({
+                        resultId: winner.id,
+                        note: winnerNotes[winner.id] ?? '',
+                      }, {
+                        onSuccess: () => setWinnerNotes((notes) => ({ ...notes, [winner.id]: '' })),
+                      })}
+                      className="rounded-lg bg-amber-700 px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
+                    >
+                      {fulfillWinner.isPending ? '送出中…' : '通知這位中獎者'}
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -644,6 +673,7 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
       )}
       {draw.isError && <p className="mt-3 text-xs text-red-600">開獎失敗，請稍後再試。</p>}
       {fulfill.isError && <p className="mt-3 text-xs text-red-600">兌獎說明送出失敗，請稍後再試。</p>}
+      {fulfillWinner.isError && <p className="mt-3 text-xs text-red-600">逐筆兌獎通知送出失敗，請稍後再試。</p>}
     </section>
   );
 }

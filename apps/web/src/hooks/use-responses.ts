@@ -253,6 +253,7 @@ export function useSubmitResponse(surveyId: string) {
       queryClient.invalidateQueries({ queryKey: ['tasks', 'available'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', 'history'] });
       queryClient.invalidateQueries({ queryKey: ['tasks', surveyId] });
+      queryClient.invalidateQueries({ queryKey: ['spin'] }); // 完成填答 +1 抽獎次數
     },
   });
 }

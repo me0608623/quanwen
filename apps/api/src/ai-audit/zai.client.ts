@@ -140,6 +140,8 @@ export class ZaiClient {
   private readonly baseUrl: string;
   private readonly apiKey: string;
   private readonly model: string;
+  /** 例行調用（草稿/建議/洞察）用的便宜模型；關鍵審核仍用 this.model。可用 ZAI_ROUTINE_MODEL 覆寫。 */
+  readonly routineModel: string;
   private readonly timeoutMs: number;
   private readonly maxRetries: number;
   private readonly thinkingDisabled: boolean;
@@ -151,6 +153,7 @@ export class ZaiClient {
     this.baseUrl = process.env.ZAI_BASE_URL ?? 'https://api.z.ai/api/paas/v4';
     this.apiKey = process.env.ZAI_API_KEY ?? '';
     this.model = process.env.ZAI_MODEL ?? 'glm-5.1';
+    this.routineModel = process.env.ZAI_ROUTINE_MODEL ?? 'glm-4.6';
     this.timeoutMs = parseInt(process.env.ZAI_TIMEOUT_MS ?? String(DEFAULT_TIMEOUT_MS), 10);
     this.maxRetries = parseInt(process.env.ZAI_MAX_RETRIES ?? String(DEFAULT_MAX_RETRIES), 10);
     // 預設關閉推理鏈(快 4~5 倍);要恢復深度推理設 ZAI_ENABLE_THINKING=true
@@ -176,9 +179,9 @@ export class ZaiClient {
   }
 
   /** Cache key = sha256(model + temperature + messages + jsonMode)。temperature 影響輸出，必須納入 key */
-  private cacheKey(messages: ZaiMessage[], options: { temperature?: number; jsonMode?: boolean }): string {
+  private cacheKey(messages: ZaiMessage[], options: { temperature?: number; jsonMode?: boolean; model?: string }): string {
     const payload = JSON.stringify({
-      model: this.model,
+      model: options.model ?? this.model,
       temperature: options.temperature ?? 0.3,
       jsonMode: options.jsonMode ?? false,
       messages,
@@ -191,6 +194,11 @@ export class ZaiClient {
     this.cache.clear();
   }
 
+  /** 關鍵審核用的高品質模型（= ZAI_MODEL，預設 glm-5.1）。例行調用不傳則走 routineModel。 */
+  get auditModel(): string {
+    return this.model;
+  }
+
   async chat(
     messages: ZaiMessage[],
     options: {
@@ -199,10 +207,13 @@ export class ZaiClient {
       jsonMode?: boolean;
       cache?: boolean;
       thinking?: 'enabled' | 'disabled';  // 覆寫全域 ZAI_ENABLE_THINKING 設定
+      model?: string;        // per-call 覆寫模型（例行調用傳便宜模型）
       promptKey?: string;     // Phase II.5: telemetry 用
       promptVersion?: string;
     } = {},
   ): Promise<string> {
+    // 預設用便宜的 routineModel；關鍵審核呼叫端傳 model: this.zai.auditModel 維持高品質
+    const reqModel = options.model ?? this.routineModel;
     if (!this.apiKey) {
       const e = new ZaiError('http_401', 'ZAI_API_KEY 未設定', 0);
       this.recordErrorTelemetry(e, options);
@@ -211,7 +222,7 @@ export class ZaiClient {
 
     // Cache lookup（caller 可用 cache:false 旁路）
     const useCache = this.cacheEnabled && options.cache !== false;
-    const cacheK = useCache ? this.cacheKey(messages, options) : null;
+    const cacheK = useCache ? this.cacheKey(messages, { ...options, model: reqModel }) : null;
     if (cacheK) {
       // L1：in-memory（最快）
       const l1Hit = this.cache.get(cacheK);
@@ -235,7 +246,7 @@ export class ZaiClient {
     }
 
     const body: ZaiChatRequest = {
-      model: this.model,
+      model: reqModel,
       messages,
       temperature: options.temperature ?? 0.3,
       max_tokens: options.maxTokens ?? 2048,
@@ -298,7 +309,7 @@ export class ZaiClient {
           const content = choice?.message?.content ?? '';
           const finishReason = choice?.finish_reason ?? 'unknown';
           const telemetry: ZaiTelemetry = {
-            model: this.model,
+            model: reqModel,
             latencyMs: Date.now() - startedAt,
             promptTokens: data.usage?.prompt_tokens ?? 0,
             completionTokens: data.usage?.completion_tokens ?? 0,
@@ -313,7 +324,7 @@ export class ZaiClient {
             ts: Date.now(),
             promptKey: options.promptKey,
             promptVersion: options.promptVersion,
-            model: this.model,
+            model: reqModel,
             totalTokens: telemetry.totalTokens,
             promptTokens: telemetry.promptTokens,
             completionTokens: telemetry.completionTokens,
@@ -430,6 +441,7 @@ export class ZaiClient {
     options: {
       temperature?: number;
       maxTokens?: number;
+      model?: string;        // per-call 覆寫模型（例行調用傳便宜模型）
       promptKey?: string;
       promptVersion?: string;
     } = {},

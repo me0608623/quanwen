@@ -109,7 +109,7 @@ export default function HomePage() {
 
       <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]">
         <div className="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-3 px-4 py-5 text-xs font-medium text-[var(--q-muted)] sm:px-6 lg:px-8">
-          <span>Google · LINE · Apple 登入</span>
+          <span>Google · LINE 登入</span>
           <span>綠界 ECPay 金流託管</span>
           <span>7-11 / 全家 禮券兌換</span>
           <span>應用層 AES-256 個資加密</span>

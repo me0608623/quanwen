@@ -327,6 +327,22 @@ export function useFulfillSurveyLottery(id: string) {
   });
 }
 
+export function useFulfillSurveyLotteryWinner(id: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ resultId, note }: { resultId: string; note: string }) => {
+      const { data } = await api.post<SurveyLotterySummary>(
+        `/surveys/${id}/lottery/winners/${resultId}/fulfill`,
+        { note },
+      );
+      return data;
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(['surveys', id, 'lottery'], data);
+    },
+  });
+}
+
 // ─── Mutations ────────────────────────────────────────────────────────────────
 
 export function useCreateSurvey() {

@@ -51,12 +51,43 @@ export default function SpinPage() {
     }
   };
 
+  // 中獎輕量音效（升調琶音），無需音檔；瀏覽器不支援就靜默略過
+  const playWinChime = () => {
+    try {
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      const ac = new Ctx();
+      [523.25, 659.25, 783.99, 1046.5].forEach((freq, i) => {
+        const osc = ac.createOscillator();
+        const gain = ac.createGain();
+        osc.type = 'triangle';
+        osc.frequency.value = freq;
+        const t = ac.currentTime + i * 0.1;
+        gain.gain.setValueAtTime(0.0001, t);
+        gain.gain.exponentialRampToValueAtTime(0.18, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+        osc.connect(gain).connect(ac.destination);
+        osc.start(t);
+        osc.stop(t + 0.24);
+      });
+      setTimeout(() => ac.close().catch(() => {}), 800);
+    } catch {
+      /* 靜默 */
+    }
+  };
+
   useEffect(() => {
     if (!result || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     if (resultRef.current) {
       gsap.fromTo(resultRef.current, { scale: 0.7, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: 'back.out(1.8)' });
     }
-    if (result.points > 0) fireConfetti();
+    if (result.points > 0) {
+      fireConfetti();
+      playWinChime();
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate?.([40, 60, 120]);
+      }
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [result]);
 
@@ -77,14 +108,17 @@ export default function SpinPage() {
       gsap.to('[data-spin-glow]', { scale: 1.12, opacity: 0.85, duration: 2.2, repeat: -1, yoyo: true, ease: 'sine.inOut' });
       gsap.to('[data-spin-pointer]', { y: 3, duration: 1.1, repeat: -1, yoyo: true, ease: 'sine.inOut' });
       // 中心軸金色 glow 呼吸（動 boxShadow，不碰 transform 以保持置中）
-      gsap.to('[data-spin-hub]', {
-        boxShadow:
-          '0 4px 24px rgba(245,200,90,0.85), 0 0 12px rgba(245,200,90,0.6), inset 0 2px 6px rgba(255,255,255,0.7)',
-        duration: 1.2,
-        repeat: -1,
-        yoyo: true,
-        ease: 'sine.inOut',
-      });
+      // 只在有抽獎次數時呼吸；沒次數維持灰階靜止
+      if (status.canSpin) {
+        gsap.to('[data-spin-hub]', {
+          boxShadow:
+            '0 4px 24px rgba(245,200,90,0.85), 0 0 12px rgba(245,200,90,0.6), inset 0 2px 6px rgba(255,255,255,0.7)',
+          duration: 1.2,
+          repeat: -1,
+          yoyo: true,
+          ease: 'sine.inOut',
+        });
+      }
       gsap.to('.led-dot', {
         opacity: 0.35,
         duration: 0.9,
@@ -103,7 +137,8 @@ export default function SpinPage() {
     setResult(null);
     try {
       const res = await spin.mutateAsync();
-      const idx = segments.findIndex((s) => s.key === res.prizeKey);
+      const found = segments.findIndex((s) => s.key === res.prizeKey);
+      const idx = found < 0 ? 0 : found; // 防呆：後端回傳意外 key 時落點不歪
       const segAngle = 360 / segments.length;
       const delta = 360 * 5 + (360 - (idx * segAngle + segAngle / 2));
       rotationRef.current += delta;
@@ -234,10 +269,21 @@ export default function SpinPage() {
               <circle cx="18" cy="11" r="4.2" fill="#ef4444" stroke="#fff" strokeWidth="0.8" />
             </svg>
 
-            {/* 金色中心軸 */}
-            <div data-spin-hub className="absolute left-1/2 top-1/2 z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-amber-200/90 bg-gradient-to-br from-amber-200 via-yellow-500 to-amber-700 text-[11px] font-black tracking-widest text-amber-950 shadow-[0_4px_16px_rgba(180,134,11,0.4),inset_0_2px_6px_rgba(255,255,255,0.6)] sm:h-20 sm:w-20 sm:text-xs">
-              SPIN
-            </div>
+            {/* 金色中心軸（可點擊觸發轉盤） */}
+            <button
+              data-spin-hub
+              type="button"
+              onClick={handleSpin}
+              disabled={!status?.canSpin || spinning}
+              aria-label={status?.canSpin ? '開始抽獎' : '目前沒有抽獎次數'}
+              className={`absolute left-1/2 top-1/2 z-10 flex h-16 w-16 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 text-[11px] font-black tracking-widest shadow-[0_4px_16px_rgba(180,134,11,0.4),inset_0_2px_6px_rgba(255,255,255,0.6)] transition-transform sm:h-20 sm:w-20 sm:text-xs ${
+                status?.canSpin || spinning
+                  ? 'cursor-pointer border-amber-200/90 bg-gradient-to-br from-amber-200 via-yellow-500 to-amber-700 text-amber-950 hover:scale-105 active:scale-95 disabled:scale-100'
+                  : 'cursor-not-allowed border-slate-300/80 bg-gradient-to-br from-slate-200 via-slate-300 to-slate-400 text-slate-500 shadow-none grayscale'
+              }`}
+            >
+              {spinning ? '轉動中' : status?.canSpin ? 'SPIN' : '沒次數'}
+            </button>
           </div>
 
           {/* 結果 */}

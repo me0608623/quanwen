@@ -10,13 +10,14 @@ import { useFocusTrap } from '@/components/ui/use-focus-trap';
 interface Props {
   title: string;
   description?: string;
+  coverImageUrl?: string;
   questions: SurveyQuestion[];
   theme?: SurveyTheme;
   open: boolean;
   onClose: () => void;
 }
 
-export function SurveyPreviewModal({ title, description, questions, theme, open, onClose }: Props) {
+export function SurveyPreviewModal({ title, description, coverImageUrl, questions, theme, open, onClose }: Props) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useEscapeKey(onClose, open);
   useLockBodyScroll(open);
@@ -42,7 +43,7 @@ export function SurveyPreviewModal({ title, description, questions, theme, open,
             關閉
           </button>
         </div>
-        <SurveyPreviewPlayer title={title} description={description} questions={questions} theme={theme} />
+        <SurveyPreviewPlayer title={title} description={description} coverImageUrl={coverImageUrl} questions={questions} theme={theme} />
       </div>
     </div>
   );

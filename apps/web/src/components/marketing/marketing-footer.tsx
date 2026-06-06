@@ -14,7 +14,6 @@ const footerColumns = [
     title: "公司",
     links: [
       { href: "/about", label: "關於我們" },
-      { href: "/stories", label: "客戶故事" },
       { href: "/contact", label: "聯絡我們" },
     ],
   },

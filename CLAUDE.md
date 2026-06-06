@@ -611,3 +611,84 @@ docker compose -f docker-compose.hub.yml down
 
 - `user1@quanwen.com` / 密碼 `000` — 用於登入 `/dashboard/*` 驗證 UI。
 - 僅限本地 docker dev 環境；勿用於生產。
+- ⚠️ 這些 `000` 測試帳號已於 2026-06-06 從**正式 Neon DB 刪除**（安全）。正式站 admin = `me0608623@gmail.com`（Google 登入）。本機 docker DB 仍保留供開發。
+
+---
+
+# 正式環境部署（LIVE，2026-06-06 起）
+
+> 給其他 session：正式站不再是「本機 Docker + Cloudflare tunnel」，已遷移到雲端、不依賴開發機。
+
+## 架構
+
+| 層 | 服務 | 位置 |
+|----|------|------|
+| 前端 | Vercel | https://quanwen.vercel.app |
+| API | Render（free, Singapore） | https://quanwen-api.onrender.com |
+| DB | Neon serverless Postgres | ap-southeast-1 |
+| Redis | 無（Throttler 自動降級 in-memory） | — |
+
+- Render free 閒置 ~15 分鐘休眠，首個請求冷啟動 ~30-60s。
+- 憑證/IDs：Render service `srv-d8hsdilckfvc73b4r8a0`、owner `tea-d8hrrvb7uimc73a3us9g`；Vercel project `quanwen`（`prj_zBNngjpM7PiVTZj4c7a2EWn8o1Ph`）、team scope `409500476s-projects`。Render API key 與 Vercel token 由使用者保管（Vercel token 在 `/home/aa/.local/share/com.vercel.cli/auth.json`）。
+
+## 更新正式 API（程式碼改動後）
+
+Render 跑的是 **Docker Hub image**（repo 是 private、未連 git），不是 git build：
+```bash
+cd /home/aa/projects/quanwen
+docker compose -f docker-compose.yml -f docker-compose.full.yml build api
+docker tag quanwen-api:latest me0608623/quanwen-api:latest
+docker push me0608623/quanwen-api:latest
+# 觸發 Render 重部署
+curl -s -X POST "https://api.render.com/v1/services/srv-d8hsdilckfvc73b4r8a0/deploys" \
+  -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" -d '{}'
+```
+（Docker Hub 登入：`config.json` 的 `credsStore` 要移除才能存 inline 憑證；`docker login -u me0608623`。）
+
+## 更新正式前端
+
+Vercel 專案**沒連 git**，只能從 **repo 根**用 CLI 部署（從 `apps/web` 跑會連錯專案 + frozen-lockfile 失敗）：
+```bash
+cd /home/aa/projects/quanwen
+vercel --prod --yes --scope 409500476s-projects --token="$VERCEL_TOKEN"
+```
+- 專案設定 `rootDirectory=apps/web`、`installCommand=cd ../.. && pnpm install --no-frozen-lockfile`。
+- `NEXT_PUBLIC_*` 是 build-time 烘進去的 → 改 env 後**必須重部署**。
+
+## Neon DB 操作
+
+```bash
+# schema 同步（db:push 腳本用舊的 push:pg 會 no-op，要用新版）
+cd apps/api && DATABASE_URL='<neon-url>' npx drizzle-kit push
+# 從本機 docker 搬資料到 Neon（會清空 Neon schema 重灌）
+docker exec quanwen_postgres bash -c "psql '<neon>' -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public;' && pg_dump -U quanwen -d quanwen_dev --no-owner --no-privileges | psql '<neon>'"
+```
+- ⚠️ `docker exec` 跑 heredoc/stdin SQL 要加 `-i`，否則 stdin 不進容器、靜默 no-op。
+
+## CORS
+
+- API CORS allowlist = `WEB_URL`（+ `CORS_ORIGINS`），精確比對 origin（`main.ts`）。
+- Render 的 `WEB_URL` 必須含正式前端：`https://quanwen.vercel.app`。
+
+## 第三方登入（OAuth）
+
+由 `NEXT_PUBLIC_OAUTH_PROVIDERS`（Vercel env，逗號分隔）控制前端顯示哪些按鈕；目前 = `google,line`（Apple 隱藏）。
+
+| Provider | 狀態 | callback URL | 後端 env |
+|----------|------|-------------|---------|
+| Google | ✅ 啟用 | `https://quanwen-api.onrender.com/api/v1/auth/google/callback` | `GOOGLE_CLIENT_ID/SECRET/CALLBACK_URL` |
+| LINE | ✅ 啟用 | `https://quanwen-api.onrender.com/api/v1/auth/line/callback` | `LINE_CHANNEL_ID/SECRET`、`LINE_CALLBACK_URL` |
+| Apple | ⏸️ 隱藏（無付費帳號） | `https://quanwen-api.onrender.com/api/v1/auth/apple/callback`（POST） | `APPLE_CLIENT_ID/TEAM_ID/KEY_ID/PRIVATE_KEY/CALLBACK_URL` |
+
+- ⚠️ **Google/LINE 的 passport/strategy 啟動時若 clientID 為空會 crash**（`OAuth2Strategy requires a clientID option`）。未啟用的 provider 要給**非空 placeholder**（如 `placeholder_disabled`）才不會讓 API boot 失敗。LINE/Apple 走 raw fetch、不會 boot crash。
+- 設定/更新 OAuth：PUT `https://api.render.com/v1/services/<svc>/env-vars/<KEY>`（body `{"value":...}`）→ POST `/deploys`；前端按鈕 → 改 Vercel `NEXT_PUBLIC_OAUTH_PROVIDERS` + 重部署。
+
+## 訂閱定價（VIP/VVIP）成本基準
+
+定價邏輯應以**實際 AI API 成本**為基礎。資料來源 `zai_call_log`（記每次 prompt/completion/total tokens）。
+
+- 模型 `glm-5.1`，實測平均一次調用 ≈ **1852 input + 599 output ≈ 2451 tokens**。
+- Z.ai 單價（USD/1M tokens）：glm-5.1 `$1.4 in / $4.4 out`；glm-4.6 `$0.6/$2.2`；glm-4.5-air `$0.2/$1.1`；glm-4.5-flash / 4.7-flash **免費**。
+- 每次調用成本（glm-5.1）≈ **$0.0052 ≈ NT$0.17**。
+- 方案在 `apps/api/src/profile/user-subscription.service.ts` 的 `PLAN_CONFIG`：Free（3 次/日, NT$0）、VIP（50 次/日, NT$890）、VVIP（無限, NT$1990）。
+- VIP 月成本上限（1500 次/月 × $0.0052）≈ **NT$251**（glm-5.1，全用滿時）。最大省錢槓桿 = **改用較便宜模型或 Flash 做例行調用**。

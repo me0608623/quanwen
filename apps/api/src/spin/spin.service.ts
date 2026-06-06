@@ -121,36 +121,44 @@ export class SpinService {
   }
 
   /** 執行轉盤（消耗 1 次抽獎機會）*/
-  async spin(userId: string): Promise<{ prizeKey: string; label: string; pointsWon: number }> {
-    // 先原子扣 1 次：available > 0 才更新，0 列代表沒次數（防併發重複轉）
-    const consumed = await this.db
-      .update(spinChances)
-      .set({
-        available: sql`${spinChances.available} - 1`,
-        spentTotal: sql`${spinChances.spentTotal} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(and(eq(spinChances.userId, userId), gt(spinChances.available, 0)))
-      .returning({ available: spinChances.available });
-
-    if (consumed.length === 0) {
-      throw new BadRequestException('沒有抽獎次數囉，完成一份問卷就能再轉一次！');
-    }
-
+  async spin(
+    userId: string,
+  ): Promise<{ prizeKey: string; label: string; pointsWon: number; availableChances: number }> {
     const seg = this.pickSegment();
 
-    // Record the spin result. grantPoints() is called separately — if it fails,
-    // the spin record exists for reconciliation (chance already consumed above).
-    await this.db.insert(spinRecords).values({
-      userId,
-      prizeKey: seg.key,
-      pointsWon: seg.points,
-      spinDate: this.todayTaipei(),
+    // 單一原子交易：扣次數 + 發點數 + 寫轉盤紀錄全包在一個 transaction，
+    // 任一步失敗整筆 rollback，徹底杜絕「扣了次數卻沒拿到點數」。
+    const remaining = await this.db.transaction(async (tx) => {
+      // 原子扣 1 次：available > 0 才更新，0 列代表沒次數（防併發重複轉）
+      const consumed = await tx
+        .update(spinChances)
+        .set({
+          available: sql`${spinChances.available} - 1`,
+          spentTotal: sql`${spinChances.spentTotal} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(and(eq(spinChances.userId, userId), gt(spinChances.available, 0)))
+        .returning({ available: spinChances.available });
+
+      if (consumed.length === 0) {
+        throw new BadRequestException('沒有抽獎次數囉，完成一份問卷就能再轉一次！');
+      }
+
+      if (seg.points > 0) {
+        await this.wallet.grantPoints(userId, seg.points, `轉盤中獎：${seg.label}`, tx);
+      }
+      await tx.insert(spinRecords).values({
+        userId,
+        prizeKey: seg.key,
+        pointsWon: seg.points,
+        spinDate: this.todayTaipei(),
+      });
+
+      return consumed[0].available;
     });
 
-    // 發積分
+    // 通知為非關鍵路徑，交易已 commit 後才發，失敗不影響結果
     if (seg.points > 0) {
-      await this.wallet.grantPoints(userId, seg.points, `轉盤中獎：${seg.label}`);
       this.notifications
         .create({
           userId,
@@ -163,6 +171,6 @@ export class SpinService {
     }
 
     this.logger.log(`Spin: user=${userId.slice(0, 8)} prize=${seg.key} points=${seg.points}`);
-    return { prizeKey: seg.key, label: seg.label, pointsWon: seg.points };
+    return { prizeKey: seg.key, label: seg.label, pointsWon: seg.points, availableChances: remaining };
   }
 }

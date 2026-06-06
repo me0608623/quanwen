@@ -135,4 +135,28 @@ describe('SpinService (integration)', () => {
     const total = SPIN_SEGMENTS.reduce((sum, s) => sum + s.weight, 0);
     expect(total).toBe(100);
   });
+
+  it('7. 發點數失敗 → 整筆 rollback（次數不扣、無紀錄）', async () => {
+    await service.grantChance(U1, 1);
+
+    const failingWallet = {
+      grantPoints: async () => {
+        throw new Error('wallet boom');
+      },
+    } as unknown as WalletService;
+    const notifications = { create: async () => undefined } as unknown as NotificationsService;
+    const failingService = new SpinService(db as unknown as AppDb, failingWallet, notifications);
+    // 強制抽到有點數的格子，確保一定走到 grantPoints（避開 zero 格隨機性）
+    const jackpot = SPIN_SEGMENTS.find((s) => s.key === 'jackpot')!;
+    (failingService as unknown as { pickSegment: () => typeof jackpot }).pickSegment = () => jackpot;
+
+    await expect(failingService.spin(U1)).rejects.toThrow('wallet boom');
+
+    // 交易 rollback：次數退回、spentTotal 不變、無轉盤紀錄
+    const after = await service.getStatus(U1);
+    expect(after.availableChances).toBe(1);
+    expect(after.spentTotal).toBe(0);
+    const rows = await db.select().from(schema.spinRecords).where(eq(schema.spinRecords.userId, U1));
+    expect(rows.length).toBe(0);
+  });
 });

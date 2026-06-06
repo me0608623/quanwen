@@ -6,7 +6,6 @@ const connectors = [
   "綠界 ECPay（金流託管）",
   "Google 登入",
   "LINE 登入",
-  "Apple 登入",
   "7-11 ibon 禮券",
   "全家 FamiPort 禮券",
   "AI 品質引擎",

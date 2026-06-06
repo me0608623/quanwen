@@ -78,7 +78,7 @@ export default function NewSurveyPage() {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasContent]);
-  const livePreviewDraft = useDebouncedValue({ title, description, questions }, 300);
+  const livePreviewDraft = useDebouncedValue({ title, description, questions, coverImageUrl }, 300);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
   const pricingAdvice = usePricingAdvice();
@@ -584,6 +584,7 @@ export default function NewSurveyPage() {
         <SurveyPreviewPlayer
           title={livePreviewDraft.title}
           description={livePreviewDraft.description}
+          coverImageUrl={livePreviewDraft.coverImageUrl}
           questions={livePreviewDraft.questions}
         />
       </section>

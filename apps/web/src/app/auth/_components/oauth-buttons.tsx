@@ -10,6 +10,13 @@ type Provider = "google" | "apple" | "line";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1";
 
+// 只顯示已設定憑證的 provider（逗號分隔）。未設則全開（本機開發行為不變）。
+const ENABLED_PROVIDERS = (process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ?? "google,apple,line")
+  .split(",")
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+const isEnabled = (p: Provider) => ENABLED_PROVIDERS.includes(p);
+
 interface OAuthButtonsProps {
   intent?: "login" | "register";
   role?: "respondent" | "surveyor";
@@ -42,30 +49,36 @@ export function OAuthButtons({ intent = "login", role }: OAuthButtonsProps) {
   return (
     <>
       <div className="flex flex-col gap-2.5">
-        <OAuthButton
-          provider="google"
-          icon={<GoogleLogo size={18} />}
-          label={labels.google}
-          onClick={() => handleClick("google")}
-          isLoading={activeProvider === "google"}
-          isDisabled={activeProvider !== null}
-        />
-        <OAuthButton
-          provider="apple"
-          icon={<AppleLogo size={18} />}
-          label={labels.apple}
-          onClick={() => handleClick("apple")}
-          isLoading={activeProvider === "apple"}
-          isDisabled={activeProvider !== null}
-        />
-        <OAuthButton
-          provider="line"
-          icon={<LineLogo size={18} />}
-          label={labels.line}
-          onClick={() => handleClick("line")}
-          isLoading={activeProvider === "line"}
-          isDisabled={activeProvider !== null}
-        />
+        {isEnabled("google") && (
+          <OAuthButton
+            provider="google"
+            icon={<GoogleLogo size={18} />}
+            label={labels.google}
+            onClick={() => handleClick("google")}
+            isLoading={activeProvider === "google"}
+            isDisabled={activeProvider !== null}
+          />
+        )}
+        {isEnabled("apple") && (
+          <OAuthButton
+            provider="apple"
+            icon={<AppleLogo size={18} />}
+            label={labels.apple}
+            onClick={() => handleClick("apple")}
+            isLoading={activeProvider === "apple"}
+            isDisabled={activeProvider !== null}
+          />
+        )}
+        {isEnabled("line") && (
+          <OAuthButton
+            provider="line"
+            icon={<LineLogo size={18} />}
+            label={labels.line}
+            onClick={() => handleClick("line")}
+            isLoading={activeProvider === "line"}
+            isDisabled={activeProvider !== null}
+          />
+        )}
       </div>
       <style jsx global>{`
         @keyframes qwen-oauth-ripple {

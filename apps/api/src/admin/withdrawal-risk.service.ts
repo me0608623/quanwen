@@ -126,6 +126,7 @@ export class WithdrawalRiskService {
         prompt,
         {
           temperature: 0.2,
+          model: this.zai.auditModel, // 提領風險判斷：金流相關，維持高品質模型
           promptKey: promptEntry.key,
           promptVersion: promptEntry.version,
         },

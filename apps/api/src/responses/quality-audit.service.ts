@@ -489,6 +489,7 @@ export class QualityAuditService {
       userPrompt,
       {
         temperature: 0.3,
+        model: this.zai.auditModel, // 灰區品質裁決：維持高品質模型
         promptKey: prompt.key,
         promptVersion: prompt.version,
       },

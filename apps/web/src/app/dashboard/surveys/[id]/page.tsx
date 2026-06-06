@@ -709,6 +709,7 @@ export default function SurveyDetailPage() {
           <SurveyPreviewPlayer
             title={livePreviewDraft.title}
             description={livePreviewDraft.description}
+            coverImageUrl={livePreviewDraft.coverImageUrl}
             questions={livePreviewDraft.questions}
             theme={livePreviewDraft.theme}
           />
@@ -721,6 +722,7 @@ export default function SurveyDetailPage() {
       <SurveyPreviewModal
         title={livePreviewDraft.title}
         description={livePreviewDraft.description}
+        coverImageUrl={livePreviewDraft.coverImageUrl}
         questions={livePreviewDraft.questions}
         theme={livePreviewDraft.theme}
         open={showPreview}

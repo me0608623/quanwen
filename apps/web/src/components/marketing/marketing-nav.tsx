@@ -9,7 +9,6 @@ const links = [
   { href: "/solutions", label: "解決方案" },
   { href: "/integrations", label: "整合" },
   { href: "/pricing", label: "價格" },
-  { href: "/stories", label: "客戶故事" },
 ];
 
 export function MarketingNav() {

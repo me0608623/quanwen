@@ -8,7 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { and, eq, or, lt, desc, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, or, lt, desc, isNotNull, ne, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -34,6 +34,7 @@ const MATCH_LOCK_KEY = 'qw:lock:mutual-match';
 const MATCH_LOCK_TTL_MS = 25_000; // 間隔 30s
 const EXPIRE_LOCK_KEY = 'qw:lock:mutual-expire';
 const EXPIRE_LOCK_TTL_MS = 50_000; // 間隔 60s
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 interface MutualSide {
   userId: string;
@@ -63,6 +64,20 @@ export interface MutualPairView {
     | 'wait_other_fill'   // 我已填，等對方填
     | 'unlocked'          // 雙方都過，可看對方填答
     | 'expired_or_dead';  // 超時/取消
+}
+
+export interface MutualPoolItem {
+  id: string;
+  surveyId: string;
+  surveyTitle: string;
+  surveyDescription: string | null;
+  category: string | null;
+  owner: {
+    userId: string;
+    displayName: string;
+    reputationScore: number | null;
+  };
+  createdAt: Date;
 }
 
 @Injectable()
@@ -123,6 +138,95 @@ export class MutualService {
       waiting: Number(waitingRow?.n ?? 0),
       myWaiting: Number(myWaitingRow?.n ?? 0),
     };
+  }
+
+  async listAvailablePool(userId: string): Promise<MutualPoolItem[]> {
+    const rows = await this.db
+      .select({
+        id: mutualPairs.id,
+        surveyId: mutualPairs.aSurveyId,
+        surveyTitle: surveys.title,
+        surveyDescription: surveys.description,
+        category: surveys.category,
+        ownerUserId: mutualPairs.aUserId,
+        ownerName: users.displayName,
+        reputationScore: respondentProfiles.reputationScore,
+        createdAt: mutualPairs.createdAt,
+      })
+      .from(mutualPairs)
+      .innerJoin(surveys, eq(surveys.id, mutualPairs.aSurveyId))
+      .innerJoin(users, eq(users.id, mutualPairs.aUserId))
+      .leftJoin(respondentProfiles, eq(respondentProfiles.userId, mutualPairs.aUserId))
+      .where(
+        and(
+          eq(mutualPairs.status, 'waiting'),
+          eq(surveys.status, 'published'),
+          eq(surveys.type, 'mutual'),
+          ne(mutualPairs.aUserId, userId),
+        ),
+      )
+      .orderBy(desc(mutualPairs.createdAt))
+      .limit(20);
+
+    return rows.map((row) => ({
+      id: row.id,
+      surveyId: row.surveyId,
+      surveyTitle: row.surveyTitle,
+      surveyDescription: row.surveyDescription,
+      category: row.category,
+      owner: {
+        userId: row.ownerUserId,
+        displayName: row.ownerName ?? '對方',
+        reputationScore: row.reputationScore ?? null,
+      },
+      createdAt: row.createdAt,
+    }));
+  }
+
+  async matchByCode(userId: string, code: string): Promise<{ pairId: string }> {
+    const normalized = code.trim();
+    if (!normalized) throw new BadRequestException('請輸入互惠問卷編號');
+    if (!UUID_RE.test(normalized)) throw new BadRequestException('互惠問卷編號格式不正確');
+
+    const targetRows = await this.db
+      .select()
+      .from(mutualPairs)
+      .innerJoin(surveys, eq(surveys.id, mutualPairs.aSurveyId))
+      .where(
+        and(
+          eq(mutualPairs.status, 'waiting'),
+          eq(surveys.status, 'published'),
+          eq(surveys.type, 'mutual'),
+          or(eq(mutualPairs.id, normalized), eq(mutualPairs.aSurveyId, normalized)),
+        ),
+      )
+      .limit(1);
+    const target = targetRows[0]?.mutual_pairs;
+    if (!target) throw new NotFoundException('找不到可配對的互惠問卷編號');
+    if (target.aUserId === userId) throw new BadRequestException('不能配對自己的互惠問卷');
+
+    const myWaitingRows = await this.db
+      .select()
+      .from(mutualPairs)
+      .innerJoin(surveys, eq(surveys.id, mutualPairs.aSurveyId))
+      .where(
+        and(
+          eq(mutualPairs.status, 'waiting'),
+          eq(mutualPairs.aUserId, userId),
+          eq(surveys.status, 'published'),
+          eq(surveys.type, 'mutual'),
+        ),
+      )
+      .orderBy(mutualPairs.createdAt)
+      .limit(1);
+    const mine = myWaitingRows[0]?.mutual_pairs;
+    if (!mine) {
+      throw new BadRequestException('你需要先發佈一份互惠問卷，才能填寫別人的互惠問卷');
+    }
+    if (mine.id === target.id) throw new BadRequestException('不能配對同一份互惠問卷');
+
+    await this.matchTwoWaitingPairs(mine, target);
+    return { pairId: mine.id };
   }
 
   // ─── 列出當前 user 的所有 mutual pairs ───────────────────────────────────────
@@ -847,49 +951,61 @@ export class MutualService {
       }
       if (!b) continue;
 
-      const now = new Date();
-      const expiresAt = new Date(now.getTime() + MUTUAL_TTL_MS);
-
-      // 把 b 的資料併入 a，並刪掉 b（簡化：保留 a 為配對主體）
       try {
-        await this.db
-          .update(mutualPairs)
-          .set({
-            status: 'matched',
-            bUserId: b.aUserId,
-            bSurveyId: b.aSurveyId,
-            matchedAt: now,
-            expiresAt,
-            updatedAt: now,
-          })
-          .where(eq(mutualPairs.id, a.id));
-
-        await this.db.delete(mutualPairs).where(eq(mutualPairs.id, b.id));
-
+        await this.matchTwoWaitingPairs(a, b);
         used.add(a.id);
         used.add(b.id);
-
-        this.logger.log(`Matched mutual pair: A=${a.aUserId.slice(0, 8)} B=${b.aUserId.slice(0, 8)}`);
-
-        // 通知雙方
-        await this.notifications.create({
-          userId: a.aUserId,
-          type: 'system',
-          title: '互惠配對成功',
-          body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
-          metadata: { pairId: a.id },
-        });
-        await this.notifications.create({
-          userId: b.aUserId,
-          type: 'system',
-          title: '互惠配對成功',
-          body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
-          metadata: { pairId: a.id },
-        });
       } catch (err) {
         this.logger.error(`配對失敗 pair=${a.id}/${b.id}`, err);
       }
     }
+  }
+
+  private async matchTwoWaitingPairs(
+    a: Pick<typeof mutualPairs.$inferSelect, 'id' | 'aUserId' | 'aSurveyId'>,
+    b: Pick<typeof mutualPairs.$inferSelect, 'id' | 'aUserId' | 'aSurveyId'>,
+  ) {
+    const now = new Date();
+    const expiresAt = new Date(now.getTime() + MUTUAL_TTL_MS);
+
+    await this.db.transaction(async (tx) => {
+      const updated = await tx
+        .update(mutualPairs)
+        .set({
+          status: 'matched',
+          bUserId: b.aUserId,
+          bSurveyId: b.aSurveyId,
+          matchedAt: now,
+          expiresAt,
+          updatedAt: now,
+        })
+        .where(and(eq(mutualPairs.id, a.id), eq(mutualPairs.status, 'waiting')))
+        .returning({ id: mutualPairs.id });
+      if (!updated[0]) throw new BadRequestException('你的互惠問卷已不在配對池中');
+
+      const deleted = await tx
+        .delete(mutualPairs)
+        .where(and(eq(mutualPairs.id, b.id), eq(mutualPairs.status, 'waiting')))
+        .returning({ id: mutualPairs.id });
+      if (!deleted[0]) throw new BadRequestException('對方互惠問卷已被配對，請重新選擇');
+    });
+
+    this.logger.log(`Matched mutual pair: A=${a.aUserId.slice(0, 8)} B=${b.aUserId.slice(0, 8)}`);
+
+    await this.notifications.create({
+      userId: a.aUserId,
+      type: 'system',
+      title: '互惠配對成功',
+      body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
+      metadata: { pairId: a.id },
+    });
+    await this.notifications.create({
+      userId: b.aUserId,
+      type: 'system',
+      title: '互惠配對成功',
+      body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
+      metadata: { pairId: a.id },
+    });
   }
 
   // ─── 超時 cron：每分鐘清掉 expired pair ────────────────────────────────────

@@ -17,14 +17,14 @@ const PLAN_CONFIG = {
     id: 'free' as const,
     name: 'Free',
     priceMonthly: 0,
-    dailyAiLimit: 3,
+    dailyAiLimit: 5,
     badge: '目前方案',
     cta: '已啟用',
   },
   vip: {
     id: 'vip' as const,
     name: 'VIP',
-    priceMonthly: 890,
+    priceMonthly: 490,
     dailyAiLimit: 50,
     badge: '熱門',
     cta: '升級 VIP',
@@ -32,8 +32,8 @@ const PLAN_CONFIG = {
   vvip: {
     id: 'vvip' as const,
     name: 'VVIP',
-    priceMonthly: 1990,
-    dailyAiLimit: null,
+    priceMonthly: 1290,
+    dailyAiLimit: 300,
     badge: '專業',
     cta: '升級 VVIP',
   },
@@ -189,11 +189,11 @@ export class UserSubscriptionService {
   private planAggregateLimit(plan: SubscriptionPlan): number | null {
     switch (plan) {
       case 'free':
-        return 3;
+        return 5;
       case 'vip':
         return 50;
       case 'vvip':
-        return null;
+        return 300;
     }
   }
 }

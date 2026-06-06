@@ -25,6 +25,8 @@ export interface SpinResult {
   prizeKey: string;
   label: string;
   pointsWon: number;
+  /** 轉完後剩餘抽獎次數（後端回傳，前端即時更新用） */
+  availableChances: number;
 }
 
 export function useSpinStatus() {
@@ -45,7 +47,13 @@ export function useSpin() {
       const { data } = await api.post<SpinResult>('/spin');
       return data;
     },
-    onSuccess: () => {
+    onSuccess: (res) => {
+      // 用後端回傳的剩餘次數即時 patch，避免轉完到 refetch 之間次數還顯示舊值
+      qc.setQueryData<SpinStatus>(['spin', 'status'], (prev) =>
+        prev
+          ? { ...prev, availableChances: res.availableChances, canSpin: res.availableChances > 0 }
+          : prev,
+      );
       qc.invalidateQueries({ queryKey: ['spin'] });
       qc.invalidateQueries({ queryKey: ['wallet'] });
     },

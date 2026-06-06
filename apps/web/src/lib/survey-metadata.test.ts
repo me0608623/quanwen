@@ -2,11 +2,11 @@ import { describe, it, expect, vi, afterEach } from 'vitest';
 import { surveyMetadata } from './survey-metadata';
 
 function mockFetch(impl: () => Promise<Partial<Response>>) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  global.fetch = vi.fn(impl as any);
+  vi.stubGlobal('fetch', vi.fn(impl));
 }
 
 afterEach(() => {
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
 

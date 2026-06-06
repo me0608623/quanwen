@@ -6,6 +6,13 @@ import * as schema from './schema';
 // 共用型別（node-postgres 和 pglite 的 query interface 相同）
 export type AppDb = ReturnType<typeof drizzle<typeof schema>>;
 
+/**
+ * 可執行查詢的 db 介面：頂層 AppDb 或 transaction 內的 tx。
+ * 讓 service 方法能選擇「自己開 transaction」或「掛在呼叫方的 transaction 上」，
+ * 以達成跨 service 的單一原子交易。
+ */
+export type DbExecutor = AppDb | Parameters<Parameters<AppDb['transaction']>[0]>[0];
+
 const DB_TOKEN = 'DB';
 export { DB_TOKEN as DB };
 

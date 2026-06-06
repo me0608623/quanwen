@@ -1,7 +1,17 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
-import { useMyMutualPairs, useMutualPoolStats, useMyMutualStats, type MutualPair } from '@/hooks/use-mutual';
+import { useRouter } from 'next/navigation';
+import {
+  useMatchMutualByCode,
+  useMyMutualPairs,
+  useMutualPool,
+  useMutualPoolStats,
+  useMyMutualStats,
+  type MutualPair,
+  type MutualPoolItem,
+} from '@/hooks/use-mutual';
 
 const ACTION_LABEL: Record<MutualPair['nextAction'], { label: string; tone: string }> = {
   wait_match:      { label: '配對中', tone: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -38,9 +48,14 @@ function formatRelative(at: string | null | undefined): string {
 }
 
 export default function MutualPage() {
+  const router = useRouter();
+  const [showRules, setShowRules] = useState(false);
+  const [matchCode, setMatchCode] = useState('');
   const { data: pairs, isLoading, error } = useMyMutualPairs();
+  const { data: poolItems } = useMutualPool();
   const { data: pool } = useMutualPoolStats();
   const { data: myStats } = useMyMutualStats();
+  const matchByCode = useMatchMutualByCode();
 
   if (isLoading) {
     return (
@@ -74,6 +89,18 @@ export default function MutualPage() {
   const cancelled = list.filter((p) => p.status === 'cancelled');
   const expired = list.filter((p) => p.status === 'expired');
 
+  const handleMatchByCode = async (code: string) => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    try {
+      const result = await matchByCode.mutateAsync(trimmed);
+      router.push(`/mutual/${result.pairId}`);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '配對失敗，請確認編號是否仍在配對池中');
+    }
+  };
+
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-8">
       <div className="flex items-start justify-between gap-4">
@@ -83,13 +110,24 @@ export default function MutualPage() {
             兩個人都有問卷，互相填寫對方的，AI 審過就同時解鎖看對方填答。
           </p>
         </div>
-        <Link
-          href="/dashboard/surveys/new"
-          className="shrink-0 rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
-        >
-          + 發佈互惠問卷
-        </Link>
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="rounded-md border border-border px-3 py-2 text-sm font-semibold hover:bg-muted"
+          >
+            互惠問卷規則
+          </button>
+          <Link
+            href="/dashboard/surveys/new"
+            className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            + 發佈互惠問卷
+          </Link>
+        </div>
       </div>
+
+      {showRules && <RulesModal onClose={() => setShowRules(false)} />}
 
       {/* Pool stats */}
       {pool && (
@@ -117,7 +155,54 @@ export default function MutualPage() {
         </div>
       )}
 
+      <section className="space-y-3">
+        <div>
+          <h2 className="text-sm font-bold tracking-wide">指定互惠問卷編號</h2>
+          <p className="text-xs text-muted-foreground">
+            可輸入朋友給你的互惠編號，或下方列表中的問卷 ID，系統會用你已發佈且配對中的互惠問卷建立配對。
+          </p>
+        </div>
+        <form
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleMatchByCode(matchCode);
+          }}
+          className="flex flex-col gap-2 rounded-lg border border-border bg-card p-3 sm:flex-row"
+        >
+          <input
+            value={matchCode}
+            onChange={(e) => setMatchCode(e.target.value)}
+            placeholder="輸入互惠編號或問卷 ID"
+            className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+          />
+          <button
+            type="submit"
+            disabled={matchByCode.isPending || !matchCode.trim()}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+          >
+            {matchByCode.isPending ? '配對中...' : '指定填寫'}
+          </button>
+        </form>
+      </section>
+
       {list.length === 0 && <EmptyState />}
+
+      <Section title="可選擇的互惠問卷" subtitle="從已發佈且等待配對的問卷中挑一份，填完後等對方也完成即可解鎖">
+        {poolItems && poolItems.length > 0 ? (
+          poolItems.map((item) => (
+            <PoolCard
+              key={item.id}
+              item={item}
+              isPending={matchByCode.isPending}
+              onSelect={() => handleMatchByCode(item.id)}
+            />
+          ))
+        ) : (
+          <div className="rounded-lg border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
+            目前沒有其他人等待配對的互惠問卷。你可以先發佈自己的互惠問卷，或請朋友提供互惠編號。
+          </div>
+        )}
+      </Section>
 
       {active.length > 0 && (
         <Section title="🔥 進行中" subtitle="配對成功，至少有一方該動作">
@@ -164,11 +249,43 @@ function Section({ title, subtitle, children }: { title: string; subtitle: strin
   );
 }
 
+function RulesModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-lg rounded-lg border border-border bg-background p-5 shadow-xl">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-bold">互惠問卷規則</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              雙方都持有互惠問卷，互相完成對方問卷並通過 AI 品質審核後，同時解鎖彼此填答。
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-md border border-border px-2 py-1 text-sm hover:bg-muted"
+            aria-label="關閉互惠問卷規則"
+          >
+            X
+          </button>
+        </div>
+        <ol className="mt-4 space-y-3 text-sm text-muted-foreground">
+          <li><span className="font-semibold text-foreground">1.</span> 先發佈一份類型為互惠的問卷，問卷會進入配對池。</li>
+          <li><span className="font-semibold text-foreground">2.</span> 可等待系統自動配對，也可從列表選別人的問卷，或輸入朋友提供的互惠編號。</li>
+          <li><span className="font-semibold text-foreground">3.</span> 你填完對方問卷後，對方會在進行中看到「對方已填寫完畢，請盡快填寫對方的問卷」。</li>
+          <li><span className="font-semibold text-foreground">4.</span> 兩邊填答都通過 AI 審核後，才會同時解鎖彼此答案；任何一方退件會取消配對。</li>
+        </ol>
+      </div>
+    </div>
+  );
+}
+
 function PairCard({ pair }: { pair: MutualPair }) {
   const action = STATUS_LABEL[pair.status] ?? ACTION_LABEL[pair.nextAction];
   const canFill = pair.nextAction === 'fill_other';
   const canView = pair.nextAction === 'unlocked';
   const remaining = formatRemaining(pair.expiresAt);
+  const otherAlreadyFilledMine = canFill && !!pair.self.filledAt;
 
   return (
     <div className="rounded-xl border border-border bg-card p-4 hover:shadow-sm transition-shadow">
@@ -188,6 +305,16 @@ function PairCard({ pair }: { pair: MutualPair }) {
 
           <p className="text-xs text-muted-foreground">我的問卷</p>
           <p className="font-semibold truncate">{pair.self.surveyTitle}</p>
+          <div className="mt-1 flex flex-wrap gap-2 text-[11px] text-muted-foreground">
+            <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">互惠編號 {pair.id}</span>
+            <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">問卷 ID {pair.self.surveyId}</span>
+          </div>
+
+          {otherAlreadyFilledMine && (
+            <div className="mt-3 rounded-md border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
+              對方已填寫完畢，請盡快填寫對方的問卷後獲得對方問卷答案。
+            </div>
+          )}
 
           {pair.other ? (
             <>
@@ -229,6 +356,51 @@ function PairCard({ pair }: { pair: MutualPair }) {
             </span>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function PoolCard({
+  item,
+  isPending,
+  onSelect,
+}: {
+  item: MutualPoolItem;
+  isPending: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="mb-2 flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">互惠編號 {item.id}</span>
+            <span className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono">問卷 ID {item.surveyId}</span>
+            {item.category && <span>{item.category}</span>}
+          </div>
+          <p className="font-semibold">{item.surveyTitle}</p>
+          {item.surveyDescription && (
+            <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.surveyDescription}</p>
+          )}
+          <p className="mt-2 text-xs text-muted-foreground">
+            發佈者 {item.owner.displayName}
+            {item.owner.reputationScore !== null && (
+              <span className="ml-2 rounded bg-slate-100 px-1.5 py-0.5 font-medium text-slate-700">
+                信譽 {item.owner.reputationScore}
+              </span>
+            )}
+            <span className="ml-2">發佈於 {formatRelative(item.createdAt)}</span>
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onSelect}
+          disabled={isPending}
+          className="shrink-0 rounded-md bg-primary px-3 py-2 text-xs font-bold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
+        >
+          選擇並填寫
+        </button>
       </div>
     </div>
   );

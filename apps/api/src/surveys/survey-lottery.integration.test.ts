@@ -233,6 +233,44 @@ describe('SurveyLotteryService (integration)', () => {
     expect(createdNotifications).toHaveLength(4);
   });
 
+  it('lets creators fulfill individual winners with unique redemption instructions', async () => {
+    await db
+      .update(schema.surveys)
+      .set({ lotteryWinnerCount: 2 })
+      .where(eq(schema.surveys.id, 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'));
+
+    const drawn = await service.draw(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      '11111111-1111-1111-1111-111111111111',
+    );
+    expect(drawn.winners).toHaveLength(2);
+
+    const firstWinnerId = drawn.winners[0].id;
+    const first = await service.fulfillWinner(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      firstWinnerId,
+      '11111111-1111-1111-1111-111111111111',
+      '電子餐券序號 A-1234，請於期限前至門市兌換。',
+    );
+
+    const firstWinner = first.winners.find((winner) => winner.id === firstWinnerId);
+    const secondWinner = first.winners.find((winner) => winner.id !== firstWinnerId);
+    expect(firstWinner?.fulfillmentStatus).toBe('notified');
+    expect(firstWinner?.fulfillmentNote).toContain('A-1234');
+    expect(secondWinner?.fulfillmentStatus).toBe('pending');
+    expect(createdNotifications).toHaveLength(4);
+
+    const all = await service.fulfill(
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+      '11111111-1111-1111-1111-111111111111',
+      '電子餐券序號 B-5678，請於期限前至門市兌換。',
+    );
+    expect(all.winners.every((winner) => winner.fulfillmentStatus === 'notified')).toBe(true);
+    expect(all.winners.find((winner) => winner.id === firstWinnerId)?.fulfillmentNote).toContain('A-1234');
+    expect(all.winners.find((winner) => winner.id !== firstWinnerId)?.fulfillmentNote).toContain('B-5678');
+    expect(createdNotifications).toHaveLength(5);
+  });
+
   it('prevents creators from bypassing draw mode readiness rules', async () => {
     await db
       .update(schema.surveys)

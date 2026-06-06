@@ -97,6 +97,14 @@ export default function PublicSurveyPage() {
 
   return (
     <main className="mx-auto max-w-xl px-4 py-8">
+      {survey.coverImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={resolveAssetUrl(survey.coverImageUrl)}
+          alt=""
+          className="mb-4 max-h-60 w-full rounded-xl object-cover"
+        />
+      )}
       <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
       {survey.description && (
         <p className="mb-2 text-sm text-muted-foreground">{survey.description}</p>

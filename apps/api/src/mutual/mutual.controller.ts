@@ -29,6 +29,10 @@ const SubmitMutualSchema = z.object({
 
 type SubmitMutualDto = z.infer<typeof SubmitMutualSchema>;
 
+const MatchByCodeSchema = z.object({
+  code: z.string().min(1).max(100),
+});
+
 @Controller('mutual')
 @UseGuards(JwtAuthGuard)
 export class MutualController {
@@ -53,6 +57,24 @@ export class MutualController {
   myStats(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
     return this.mutual.getMyStats(user.id);
+  }
+
+  /** GET /mutual/pool — 可手動選取的互惠問卷配對池 */
+  @Get('pool')
+  pool(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.mutual.listAvailablePool(user.id);
+  }
+
+  /** POST /mutual/match-by-code — 用互惠編號或問卷 ID 指定配對 */
+  @Post('match-by-code')
+  @HttpCode(HttpStatus.CREATED)
+  matchByCode(
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(MatchByCodeSchema)) dto: z.infer<typeof MatchByCodeSchema>,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.mutual.matchByCode(user.id, dto.code);
   }
 
   /** GET /mutual/:id — 配對詳情 + 要填的對方問卷 */

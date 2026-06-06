@@ -84,7 +84,7 @@ export class AiAuditService {
       return await this.zai.jsonChat<AuditResult>(
         AUDIT_SYSTEM_PROMPT,
         surveyText,
-        { temperature: 0.1 },
+        { temperature: 0.1, model: this.zai.auditModel }, // 問卷 AI 審核：維持高品質模型
       );
     } catch (err) {
       this.logger.error(`問卷 ${surveyId} AI 評分失敗`, err);
