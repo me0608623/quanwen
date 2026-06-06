@@ -107,6 +107,8 @@ describe('Tasks category filter (integration)', () => {
         ai_score      INTEGER,
         ai_reject_reason TEXT,
         cover_image_url TEXT,
+        external_url    TEXT,
+        estimated_minutes INTEGER,
         is_anonymous  BOOLEAN NOT NULL DEFAULT true,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),

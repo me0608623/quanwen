@@ -80,6 +80,52 @@ export default function SurveyFillPage() {
       </main>
     );
 
+  // 外部問卷：站內無題目，顯示跳轉頁，引導填答者前往外部平台填寫
+  if (survey.externalUrl) {
+    return (
+      <main className="mx-auto max-w-xl px-4 py-16">
+        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+          <div className="text-5xl mb-4">🔗</div>
+          <h1 className="text-2xl font-bold">{survey.title}</h1>
+          {survey.description && (
+            <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{survey.description}</p>
+          )}
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-3 text-sm">
+            {survey.estimatedMinutes ? (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-3 py-1 font-medium">
+                ⏱️ 約 {survey.estimatedMinutes} 分鐘
+              </span>
+            ) : null}
+            <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-700">
+              🎁 {survey.rewardMode === 'lottery' ? `抽 ${survey.lotteryPrize ?? '獎品'}` : `NT$${survey.rewardPoints}`}
+            </span>
+          </div>
+          <div className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-left text-xs leading-relaxed text-amber-800">
+            這份問卷在外部平台（例如 Google 表單）填寫。點擊下方按鈕會在新分頁開啟，請依問卷說明完成填答。
+            <br />
+            獎勵由問卷建立者依其填答結果發放。
+          </div>
+          <a
+            href={survey.externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-6 inline-flex items-center justify-center gap-2 rounded-md bg-primary px-6 py-3 text-base font-semibold text-primary-foreground hover:bg-primary/90"
+          >
+            前往填寫問卷 ↗
+          </a>
+          <div className="mt-4">
+            <button
+              onClick={() => router.push('/tasks')}
+              className="text-sm text-muted-foreground hover:underline"
+            >
+              ← 回到問卷列表
+            </button>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
   if (submitted || survey.alreadySubmitted) {
     return (
       <main className="mx-auto max-w-xl px-4 py-16 text-center">

@@ -80,6 +80,7 @@ export class SurveysService {
           category: dto.category,
           aiReviewEnabled: dto.aiReviewEnabled ?? true,
           externalUrl: dto.externalUrl,
+          estimatedMinutes: dto.estimatedMinutes,
           rewardPoints: effectivePoints,
           baseRewardPoints: basePoints,
           rewardMode,
@@ -349,6 +350,16 @@ export class SurveysService {
     const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
     if (survey.rewardMode === 'lottery' && !survey.lotteryTermsAcceptedAt) {
       throw new BadRequestException('抽獎問卷發布前必須接受獎品履約條款');
+    }
+
+    // 外部問卷（Google Forms 等）：站內無題目，填答者跳轉至外部頁面。
+    // 跳過題目要求、AI 審核與預算鎖定（獎勵由建立者於外部流程履約），直接上架進池。
+    if (survey.externalUrl) {
+      await this.db
+        .update(surveys)
+        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(surveys.id, surveyId));
+      return { message: '外部問卷已上架，填答者將跳轉至外部頁面填寫', surveyId };
     }
 
     const questionCount = await this.db
@@ -821,6 +832,7 @@ export class SurveysService {
         surveyorId: surveys.surveyorId,
         status: surveys.status,
         type: surveys.type,
+        externalUrl: surveys.externalUrl,
         aiReviewEnabled: surveys.aiReviewEnabled,
         rewardMode: surveys.rewardMode,
         lotteryDrawnAt: surveys.lotteryDrawnAt,

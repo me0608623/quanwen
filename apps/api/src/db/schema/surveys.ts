@@ -72,8 +72,11 @@ export const surveys = pgTable(
     category: surveyCategoryEnum('category'),
     // Phase C-2: 發問卷方可決定要不要導入 AI 品質審核 (standard 才有意義)
     aiReviewEnabled: boolean('ai_review_enabled').notNull().default(true),
-    // Phase C-3: 外部平台連結 (Google Forms 等)。非空 → mutual 走「截圖證明 + 互評」流程
+    // Phase C-3: 外部平台連結 (Google Forms / SurveyMonkey 等)。
+    // 非空 → 此問卷不在站內填答，填答者改為「跳轉至外部頁面」(standard 與 mutual 皆適用)
     externalUrl: text('external_url'),
+    // 建立者填寫的預估填答時間 (分鐘)。外部問卷無題目可自動估算時必填，站內問卷可選填覆寫自動估算
+    estimatedMinutes: integer('estimated_minutes'),
 
     // 獎勵設定
     rewardType: rewardTypeEnum('reward_type').notNull().default('cash'),

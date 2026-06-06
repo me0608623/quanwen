@@ -147,6 +147,9 @@ export class ResponsesService {
         deadlineTier: surveys.deadlineTier,
         // QUA-279: 封面圖片（任務列表卡片背景用）
         coverImageUrl: surveys.coverImageUrl,
+        // 外部問卷連結 + 建立者預估分鐘數（任務卡顯示「外部問卷」徽章與填答時間）
+        externalUrl: surveys.externalUrl,
+        estimatedMinutes: surveys.estimatedMinutes,
         questionCount: sql<number>`coalesce(${questionCountSq.cnt}, 0)`,
       })
       .from(surveys)
@@ -249,6 +252,9 @@ export class ResponsesService {
       lotteryTermsAcceptedAt: survey.lotteryTermsAcceptedAt,
       isAnonymous: survey.isAnonymous,
       theme: survey.theme,
+      // 外部問卷：非空 → 填答頁改顯示「跳轉外部頁面」而非站內題目
+      externalUrl: survey.externalUrl,
+      estimatedMinutes: survey.estimatedMinutes,
       // 問卷歡迎頁橫幅圖（建立者上傳的封面圖，亦顯示於填答歡迎頁）
       coverImageUrl: survey.coverImageUrl,
       // 歡迎頁可插入的多張圖片（依序顯示於描述之後）

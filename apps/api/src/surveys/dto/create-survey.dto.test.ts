@@ -12,6 +12,8 @@ const BASE_SURVEY = {
   rewardPoints: 0,
   targetCount: 10,
   aiReviewEnabled: false,
+  // 外部問卷需預估分鐘數；BASE 帶上以便 externalUrl 格式測試聚焦在 URL 驗證
+  estimatedMinutes: 10,
   questions: [],
 };
 

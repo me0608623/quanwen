@@ -29,6 +29,9 @@ export interface AvailableSurvey {
   questionCount?: number;
   // QUA-279: 封面圖片
   coverImageUrl?: string;
+  // 外部問卷連結（非空 → 填答者跳轉至外部頁面）+ 建立者預估分鐘數
+  externalUrl?: string | null;
+  estimatedMinutes?: number | null;
 }
 
 export interface PublicQuestion {
@@ -57,6 +60,9 @@ export interface PublicSurvey {
   lotteryTermsAcceptedAt?: string | null;
   isAnonymous: boolean;
   theme?: SurveyTheme | null;
+  /** 外部問卷連結（非空 → 填答頁顯示跳轉而非站內題目）+ 建立者預估分鐘數 */
+  externalUrl?: string | null;
+  estimatedMinutes?: number | null;
   /** 歡迎頁橫幅圖（建立者上傳的封面圖） */
   coverImageUrl?: string | null;
   /** 歡迎頁可插入的多張圖片，依序顯示於描述之後 */

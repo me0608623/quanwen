@@ -71,6 +71,7 @@ export const SURVEYS_DDL = `
     category          survey_category,
     ai_review_enabled BOOLEAN      NOT NULL DEFAULT true,
     external_url      TEXT,
+    estimated_minutes INTEGER,
     reward_type       reward_type  NOT NULL DEFAULT 'cash',
     reward_points     INTEGER      NOT NULL DEFAULT 0,
     reward_mode       VARCHAR(16)  NOT NULL DEFAULT 'fixed',

@@ -230,6 +230,46 @@ export default function HomePage() {
         </div>
       </section>
 
+      <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)] py-20">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-muted)]">
+            從建立到分析，平台都幫你做完
+          </p>
+          <h2 className="mt-3 font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
+            10 秒匯入、AI 分析、平台代辦抽獎
+          </h2>
+          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
+            不用從零開始，也不用自己跑統計、自己辦抽獎 —— 這些麻煩事交給券問。
+          </p>
+          <div className="mt-10 grid gap-4 md:grid-cols-3">
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">⚡</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">10 秒匯入既有問卷</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                已經在 Google Forms、SurveyCake 或 Excel 做好問卷？貼上連結或檔案，
+                系統自動解析題目與選項，10 秒搬進券問，馬上開始收真實樣本。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">📊</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">AI 數據分析報告</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                收完回覆不用自己跑統計：AI 自動生成洞察簡報，整理關鍵發現與交叉分析，
+                並可一鍵匯出 PDF / Excel / CSV 原始資料或乾淨樣本。
+              </p>
+            </article>
+            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
+              <p className="text-2xl">🎲</p>
+              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">平台代辦公正抽獎</h3>
+              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
+                想用抽獎回饋吸引填答？平台代你開獎：獎金託管、隨機抽出、
+                自動通知中獎者並發獎，每次開獎都有公平性核對紀錄可稽核。
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
       <section className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]">
         <div className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
           <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-7">

@@ -181,6 +181,7 @@ export interface Survey {
   category?: SurveyCategory | null;
   aiReviewEnabled?: boolean;
   externalUrl?: string | null;
+  estimatedMinutes?: number | null;
   rewardPoints: number;
   rewardMode?: 'fixed' | 'lottery';
   lotteryPrize?: string | null;

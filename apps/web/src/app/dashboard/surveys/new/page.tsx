@@ -43,6 +43,9 @@ export default function NewSurveyPage() {
   const [category, setCategory] = useState<SurveyCategory | ''>('');
   const [aiReviewEnabled, setAiReviewEnabled] = useState(true);
   const [externalUrl, setExternalUrl] = useState('');
+  // 標準問卷：是否為「外部問卷」（Google 表單等，填答者跳轉填寫，站內不出題）
+  const [isExternal, setIsExternal] = useState(false);
+  const [estimatedMinutes, setEstimatedMinutes] = useState(10);
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
@@ -139,7 +142,12 @@ export default function NewSurveyPage() {
         type,
         category: category || undefined,
         aiReviewEnabled: type === 'mutual' ? true : aiReviewEnabled,
-        externalUrl: type === 'mutual' && externalUrl.trim() ? externalUrl.trim() : undefined,
+        externalUrl:
+          (type === 'mutual' || (type === 'standard' && isExternal)) && externalUrl.trim()
+            ? externalUrl.trim()
+            : undefined,
+        // 外部問卷由建立者填預估分鐘數（站內問卷依題數自動估算）
+        estimatedMinutes: type === 'standard' && isExternal ? estimatedMinutes : undefined,
         rewardPoints: type === 'mutual' ? 0 : rewardPoints,
         rewardMode: type === 'mutual' ? 'fixed' : rewardMode,
         lotteryPrize: type === 'standard' && rewardMode === 'lottery' ? lotteryPrize.trim() : undefined,
@@ -153,7 +161,8 @@ export default function NewSurveyPage() {
         targetCount: type === 'mutual' ? 9999 : targetCount,
         // 受眾鎖定只對 standard 有意義（mutual 走配對機制）
         audienceCriteria: type === 'standard' && Object.keys(audience).length > 0 ? audience : undefined,
-        questions,
+        // 外部問卷站內不出題
+        questions: type === 'standard' && isExternal ? [] : questions,
       });
       savedRef.current = true;
       router.push(`/dashboard/surveys/${survey.id}`);
@@ -180,12 +189,12 @@ export default function NewSurveyPage() {
       {/* Type selector */}
       <section className="space-y-3 rounded-lg border border-border p-4">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">問卷類型</h2>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-3">
           <button
             type="button"
-            onClick={() => setType('standard')}
+            onClick={() => { setType('standard'); setIsExternal(false); }}
             className={`text-left rounded-lg border-2 px-4 py-3 transition-colors ${
-              type === 'standard'
+              type === 'standard' && !isExternal
                 ? 'border-primary bg-primary/5'
                 : 'border-border hover:border-primary/50'
             }`}
@@ -193,18 +202,18 @@ export default function NewSurveyPage() {
             <div className="mb-1 flex items-center gap-2">
               <span className="text-lg">💰</span>
               <span className="font-semibold text-sm">標準（付費取樣）</span>
-              {type === 'standard' && (
+              {type === 'standard' && !isExternal && (
                 <span className="ml-auto text-xs font-medium text-primary">✓</span>
               )}
             </div>
             <p className="text-xs text-slate-600">
-              設定獎勵點數，平台媒合受試者來填寫。需要預算鎖定 + AI 審核。
+              站內出題，平台媒合受試者來填寫。需要預算鎖定 + AI 審核。
             </p>
           </button>
 
           <button
             type="button"
-            onClick={() => setType('mutual')}
+            onClick={() => { setType('mutual'); setIsExternal(false); }}
             className={`text-left rounded-lg border-2 px-4 py-3 transition-colors ${
               type === 'mutual'
                 ? 'border-primary bg-primary/5'
@@ -222,9 +231,31 @@ export default function NewSurveyPage() {
               不付錢，系統幫你配對另一個有問卷的人。雙方填完就解鎖看對方填答。
             </p>
           </button>
+
+          <button
+            type="button"
+            onClick={() => { setType('standard'); setIsExternal(true); }}
+            className={`text-left rounded-lg border-2 px-4 py-3 transition-colors ${
+              type === 'standard' && isExternal
+                ? 'border-primary bg-primary/5'
+                : 'border-border hover:border-primary/50'
+            }`}
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-lg">🔗</span>
+              <span className="font-semibold text-sm">外部問卷連結</span>
+              {type === 'standard' && isExternal && (
+                <span className="ml-auto text-xs font-medium text-primary">✓</span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              已用 Google 表單等外部平台。平台只做公布與媒合，填答者跳轉填寫，不出題、不審核。
+            </p>
+          </button>
         </div>
       </section>
 
+      {!(type === 'standard' && isExternal) && (<>
       {/* AI Draft */}
       <div className="flex gap-3">
         <div className="flex-1">
@@ -254,6 +285,7 @@ export default function NewSurveyPage() {
           </button>
         ))}
       </div>
+      </>)}
 
       {/* Basic info */}
       <section className="space-y-3 rounded-lg border border-border p-4">
@@ -315,6 +347,38 @@ export default function NewSurveyPage() {
 
         {type === 'standard' && (
           <>
+          {isExternal && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/60 p-3">
+              <p className="mb-2 text-xs text-sky-800">
+                🔗 外部問卷：填答者會在問卷池看到並跳轉到你的外部頁面填寫，平台不出題、不審核。獎勵由你依填答結果自行發放。
+              </p>
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
+                <div>
+                  <label className="mb-1 block text-xs font-medium">外部問卷網址 *</label>
+                  <input
+                    type="url"
+                    value={externalUrl}
+                    onChange={(e) => setExternalUrl(e.target.value)}
+                    aria-label="外部問卷網址"
+                    placeholder="https://forms.gle/..."
+                    className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1 block text-xs font-medium">預估填寫分鐘 *</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={180}
+                    value={estimatedMinutes}
+                    onChange={(e) => setEstimatedMinutes(Math.max(1, Number(e.target.value) || 1))}
+                    aria-label="預估填寫分鐘"
+                    className="w-24 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                  />
+                </div>
+              </div>
+            </div>
+          )}
           <div>
             <label className="mb-2 block text-sm font-medium">回饋方式</label>
             <div className="grid gap-2 sm:grid-cols-2">
@@ -544,7 +608,8 @@ export default function NewSurveyPage() {
         <AudienceTargeting value={audience} onChange={setAudience} />
       )}
 
-      {/* Questions */}
+      {/* Questions — 外部問卷不在站內出題，隱藏題目編輯 */}
+      {!(type === 'standard' && isExternal) && (
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">
@@ -578,7 +643,9 @@ export default function NewSurveyPage() {
           + 新增題目
         </button>
       </section>
+      )}
 
+      {!(type === 'standard' && isExternal) && (
       <section className="space-y-3 rounded-lg border border-border p-4">
         <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">即時預覽</h2>
         <SurveyPreviewPlayer
@@ -588,6 +655,7 @@ export default function NewSurveyPage() {
           questions={livePreviewDraft.questions}
         />
       </section>
+      )}
 
       {/* Actions */}
       <div className="flex justify-end gap-3 pt-2">

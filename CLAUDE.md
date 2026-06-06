@@ -619,6 +619,26 @@ docker compose -f docker-compose.hub.yml down
 
 > 給其他 session：正式站不再是「本機 Docker + Cloudflare tunnel」，已遷移到雲端、不依賴開發機。
 
+## ⚠️ 改完代碼必須部署（強制）
+
+**本機改 code ≠ 正式站更新。** 每次代碼改動完成並驗證後，依改動範圍部署，否則使用者在公開網站看不到變化：
+
+| 改了什麼 | 要部署到 | 指令 |
+|----------|---------|------|
+| `apps/web`（前端/首頁/UI） | **Vercel** | `cd /home/aa/projects/quanwen && vercel --prod --yes --scope 409500476s-projects` |
+| `apps/api`（後端/API） | **Render**（經 Docker Hub） | 見下方「更新正式 API」三步驟 |
+| `packages/*`（共用） | **兩邊都要** | 先 API 再前端 |
+| DB schema | **Neon** | `cd apps/api && DATABASE_URL=$NEON_DATABASE_URL npx drizzle-kit push` |
+
+- 流程順序：`pnpm verify` 全綠 → `git commit` → 部署（先 commit 正式站才有 git 對應可回溯）。
+- Vercel 部署是上傳**整個本地 working tree**（未 commit 的改動也會上線）；docker build 也吃 working tree。
+  若工作樹混有其他 session 的半成品 → **從乾淨 worktree 部署**：
+  `git worktree add /tmp/quanwen-deploy HEAD && cp -r .vercel /tmp/quanwen-deploy/`，
+  從那裡 docker build / `vercel --prod`，完事 `git worktree remove --force /tmp/quanwen-deploy`。
+- 部署後驗證：前端 `curl -sI https://quanwen.vercel.app | head -1`；API `curl -s https://quanwen-api.onrender.com/health`
+  （⚠️ health 在**根路徑** `/health`，不是 `/api/v1/health` — 後者 404。冷啟動可能要等 30-60s）。
+- Render redeploy 用 API 觸發後，可 poll `GET /v1/services/$RENDER_SERVICE_ID/deploys/<dep-id>` 直到 `"status":"live"` 再驗證。
+
 ## 架構
 
 | 層 | 服務 | 位置 |
@@ -629,7 +649,21 @@ docker compose -f docker-compose.hub.yml down
 | Redis | 無（Throttler 自動降級 in-memory） | — |
 
 - Render free 閒置 ~15 分鐘休眠，首個請求冷啟動 ~30-60s。
-- 憑證/IDs：Render service `srv-d8hsdilckfvc73b4r8a0`、owner `tea-d8hrrvb7uimc73a3us9g`；Vercel project `quanwen`（`prj_zBNngjpM7PiVTZj4c7a2EWn8o1Ph`）、team scope `409500476s-projects`。Render API key 與 Vercel token 由使用者保管（Vercel token 在 `/home/aa/.local/share/com.vercel.cli/auth.json`）。
+- 憑證/IDs：Render service `srv-d8hsdilckfvc73b4r8a0`、owner `tea-d8hrrvb7uimc73a3us9g`；Vercel project `quanwen`（`prj_zBNngjpM7PiVTZj4c7a2EWn8o1Ph`）、team scope `409500476s-projects`。
+
+### 🔑 密鑰存取（其他 session 用這個）
+
+> 切勿把金鑰明文寫進本檔（會進 git）。金鑰存在 **repo 外**的 `chmod 600` 私密檔。
+
+```bash
+source /home/aa/.config/quanwen/secrets.env
+# 之後可用：$RENDER_API_KEY、$RENDER_SERVICE_ID、$NEON_DATABASE_URL
+# 範例：觸發 Render 重部署
+curl -s -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
+  -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" -d '{}'
+```
+- Vercel token 不在此檔，`vercel` CLI 會自動讀 `/home/aa/.local/share/com.vercel.cli/auth.json`（部署用 `vercel --prod --yes --scope 409500476s-projects`）。
+- 私密檔內容：`RENDER_API_KEY`、`RENDER_SERVICE_ID`、`NEON_DATABASE_URL`。
 
 ## 更新正式 API（程式碼改動後）
 
