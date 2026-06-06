@@ -65,7 +65,8 @@ export default function DashboardPage() {
   // KPI 計算（從 surveys list 直接算）
   const totalSurveys = surveys.length;
   const publishedCount = surveys.filter((s) => s.status === 'published').length;
-  const pendingCount = surveys.filter((s) => s.status === 'pending_review').length;
+  // 2026-06-06 改版後發布即上架，pending_review 僅剩舊資料；KPI 改顯示草稿數
+  const draftCount = surveys.filter((s) => s.status === 'draft').length;
   const totalResponses = surveys.reduce((sum, s) => sum + (s.completedCount ?? 0), 0);
   const totalTarget = surveys.reduce((sum, s) => sum + (s.targetCount ?? 0), 0);
   const avgCompletion = totalTarget > 0 ? Math.round((totalResponses / totalTarget) * 100) : 0;
@@ -152,7 +153,7 @@ export default function DashboardPage() {
             extra={lockedBudget > 0 ? `鎖定預算 NT$${lockedBudget.toLocaleString()}` : undefined}
             accent="green"
           />
-          <Kpi label="待審" value={pendingCount} suffix="份" accent="yellow" />
+          <Kpi label="草稿" value={draftCount} suffix="份" accent="yellow" />
           <Kpi label="累計回收" value={totalResponses} extra={`完成率 ${avgCompletion}%`} accent="blue" />
         </div>
       )}
@@ -226,7 +227,6 @@ export default function DashboardPage() {
           >
             <option value="all">全部狀態</option>
             <option value="draft">草稿</option>
-            <option value="pending_review">審核中</option>
             <option value="published">已發布</option>
             <option value="closed">已關閉</option>
           </select>
