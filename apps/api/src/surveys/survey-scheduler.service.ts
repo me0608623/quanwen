@@ -168,12 +168,20 @@ export class SurveySchedulerService {
   ): Promise<void> {
     const now = new Date();
 
-    await this.db
+    const closed = await this.db
       .update(surveys)
       .set({ status: 'closed', updatedAt: now })
-      .where(eq(surveys.id, surveyId));
+      .where(eq(surveys.id, surveyId))
+      .returning({ completedCount: surveys.completedCount });
 
     this.logger.log(`Auto-closed survey ${surveyId} (${title}): ${reason}`);
+
+    // 退回未用預算（與 admin 強制關閉一致）；自動截止不退款會讓鎖定款永遠卡在 lockedCash。
+    this.wallet
+      .unlockSurveyBudget(surveyorId, surveyId, closed[0]?.completedCount ?? 0)
+      .catch((err) =>
+        this.logger.warn(`Auto-close 退款失敗 surveyId=${surveyId}: ${err}`),
+      );
 
     // Notify the survey creator
     try {

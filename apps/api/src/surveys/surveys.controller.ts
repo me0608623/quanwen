@@ -134,6 +134,19 @@ export class SurveysController {
     return this.surveyLottery.fulfill(id, user.id, dto.note);
   }
 
+  // 單一中獎者履約（前端逐筆兌獎用）
+  @Post(':id/lottery/winners/:resultId/fulfill')
+  @HttpCode(HttpStatus.OK)
+  fulfillLotteryWinner(
+    @Param('id') id: string,
+    @Param('resultId') resultId: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(FulfillLotterySchema)) dto: FulfillLotteryDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveyLottery.fulfillWinner(id, resultId, user.id, dto.note);
+  }
+
   // ─── GET /surveys/:id ──────────────────────────────────────────────────────
   @Get(':id')
   findOne(@Param('id') id: string, @Req() req: Request) {

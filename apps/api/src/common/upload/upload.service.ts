@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { mkdir, writeFile, unlink } from 'fs/promises';
-import { join, extname } from 'path';
+import { join, extname, basename } from 'path';
 import { randomUUID } from 'crypto';
 
 const UPLOAD_DIR = join(process.cwd(), 'uploads');
@@ -47,8 +47,12 @@ export class UploadService {
   /** Delete a previously uploaded file by its URL path */
   async delete(urlPath: string): Promise<void> {
     if (!urlPath?.startsWith('/uploads/')) return;
-    const filename = urlPath.replace('/uploads/', '');
+    const filename = urlPath.slice('/uploads/'.length);
+    // 僅允許刪除上傳目錄內的單一檔案：阻擋路徑穿越（../、絕對路徑、子目錄）。
+    // save() 產生的檔名一律是 `<uuid><ext>`，因此限定為純 basename。
+    if (!/^[A-Za-z0-9._-]+$/.test(filename) || filename.includes('..')) return;
     const filepath = join(UPLOAD_DIR, filename);
+    if (filepath !== join(UPLOAD_DIR, basename(filename))) return;
     try {
       await unlink(filepath);
     } catch {

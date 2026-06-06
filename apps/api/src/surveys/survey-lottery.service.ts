@@ -307,6 +307,40 @@ export class SurveyLotteryService {
     return this.getSummary(surveyId, surveyorId);
   }
 
+  async fulfillWinner(surveyId: string, resultId: string, surveyorId: string, note: string) {
+    const survey = await this.getLotterySurvey(surveyId);
+    if (survey.surveyorId !== surveyorId) throw new ForbiddenException('無權處理此問卷抽獎');
+    if (!survey.lotteryDrawnAt) throw new BadRequestException('尚未開獎，無法送出兌獎通知');
+
+    const trimmedNote = note.trim();
+    if (trimmedNote.length < 5 || trimmedNote.length > 1000) {
+      throw new BadRequestException('兌獎說明需為 5 至 1000 字');
+    }
+
+    const [winner] = await this.db
+      .update(surveyLotteryResults)
+      .set({
+        fulfillmentStatus: 'notified',
+        fulfillmentNote: trimmedNote,
+        fulfilledAt: new Date(),
+      })
+      .where(
+        and(
+          eq(surveyLotteryResults.id, resultId),
+          eq(surveyLotteryResults.surveyId, surveyId),
+          eq(surveyLotteryResults.isWinner, true),
+          eq(surveyLotteryResults.fulfillmentStatus, 'pending'),
+        ),
+      )
+      .returning({ id: surveyLotteryResults.id });
+
+    if (!winner) throw new BadRequestException('此中獎者已通知，或查無待履約中獎紀錄');
+
+    await this.retryPendingFulfillmentNotifications(surveyId);
+
+    return this.getSummary(surveyId, surveyorId);
+  }
+
   async draw(surveyId: string, surveyorId?: string, allowPartialClosed = false) {
     const survey = await this.getLotterySurvey(surveyId);
     if (surveyorId && survey.surveyorId !== surveyorId) {
@@ -493,6 +527,14 @@ export class SurveyLotteryService {
       );
 
     for (const row of rows) {
+      // 先原子佔位（drawNotifiedAt: null → now），搶不到就跳過 → 兩個 worker 併發不會重複通知。
+      const claimed = await this.db
+        .update(surveyLotteryResults)
+        .set({ drawNotifiedAt: new Date() })
+        .where(and(eq(surveyLotteryResults.id, row.id), isNull(surveyLotteryResults.drawNotifiedAt)))
+        .returning({ id: surveyLotteryResults.id });
+      if (claimed.length === 0) continue;
+
       try {
         await this.notifications.create({
           userId: row.respondentId,
@@ -503,11 +545,12 @@ export class SurveyLotteryService {
             : `您參加的問卷「${row.title}」已開獎，本次未抽中「${row.prize}」。感謝您的參與。`,
           metadata: { surveyId: row.surveyId, lottery: true, isWinner: row.isWinner, prize: row.prize },
         });
+      } catch (err) {
+        // 通知失敗 → 釋放佔位，讓下一輪 cron 重試。
         await this.db
           .update(surveyLotteryResults)
-          .set({ drawNotifiedAt: new Date() })
-          .where(and(eq(surveyLotteryResults.id, row.id), isNull(surveyLotteryResults.drawNotifiedAt)));
-      } catch (err) {
+          .set({ drawNotifiedAt: null })
+          .where(eq(surveyLotteryResults.id, row.id));
         this.logger.warn(`Survey lottery notification retry pending: result=${row.id} reason=${String(err)}`);
       }
     }

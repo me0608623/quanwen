@@ -6,6 +6,7 @@ import { usePublicSurvey, useSubmitResponse } from '@/hooks/use-responses';
 import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
 import { DEFAULT_BACKGROUND, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
+import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import type { AnswerInput } from '@/hooks/use-responses';
 import { lotteryDisclosure } from '@/lib/lottery-display';
 import { estimateFillMinutes } from '@/lib/fill-time';
@@ -141,9 +142,30 @@ export default function SurveyFillPage() {
       >
         ← 返回
       </button>
+      {survey.coverImageUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={resolveAssetUrl(survey.coverImageUrl)}
+          alt=""
+          className="mb-4 max-h-60 w-full rounded-xl object-cover"
+        />
+      )}
       <h1 className="text-2xl font-bold mb-1">{survey.title}</h1>
       {survey.description && (
         <p className="text-sm text-muted-foreground mb-2">{survey.description}</p>
+      )}
+      {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+        <div className="mb-3 space-y-3">
+          {survey.welcomeImages.map((url, i) => (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              key={`${url}-${i}`}
+              src={resolveAssetUrl(url)}
+              alt={`歡迎圖 ${i + 1}`}
+              className="w-full rounded-xl object-contain"
+            />
+          ))}
+        </div>
       )}
       <div className="flex items-center gap-3 text-xs text-muted-foreground mb-8">
         {survey.rewardPoints > 0 && <span className="text-primary font-semibold">獎勵 NT${survey.rewardPoints}</span>}

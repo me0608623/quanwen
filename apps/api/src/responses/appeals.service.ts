@@ -216,17 +216,21 @@ export class AppealsService {
       if (resolved.length === 0) throw new ConflictException('此申訴已被其他管理員處理');
     });
 
-    // 2) 補發獎勵（透過 wallet service）
+    // 2) 補發獎勵（透過 wallet service）。
+    //    付款結果決定通知措辭：不可在實際 pending/失敗 時謊稱「已補發」。
+    let rewardPaid = true;
     if (survey.rewardMode === 'fixed' && survey.rewardPoints > 0) {
       try {
-        await this.wallet.issueReward({
+        const outcome = await this.wallet.issueReward({
           surveyId: survey.id,
           responseId: resp.id,
           respondentId: resp.respondentId,
           surveyorId: survey.surveyorId,
           rewardAmount: survey.rewardPoints,
         });
+        rewardPaid = outcome.status === 'success' || outcome.status === 'duplicate';
       } catch (err) {
+        rewardPaid = false;
         this.logger.error(`申訴通過補發獎勵失敗 responseId=${resp.id}`, err);
       }
     }
@@ -237,7 +241,9 @@ export class AppealsService {
     // 5) 通知受試者
     const resultMessage = survey.rewardMode === 'lottery'
       ? '您的申訴已通過，抽獎資格已恢復，信譽分 +5。'
-      : `您的申訴已通過，獎勵 NT$${survey.rewardPoints} 已補發，信譽分 +5。`;
+      : rewardPaid
+        ? `您的申訴已通過，獎勵 NT$${survey.rewardPoints} 已補發，信譽分 +5。`
+        : `您的申訴已通過，信譽分 +5；獎勵 NT$${survey.rewardPoints} 將於問券方補足預算後自動發放。`;
     await this.notifications.create({
       userId: resp.respondentId,
       type: 'system',

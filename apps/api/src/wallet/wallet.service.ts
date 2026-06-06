@@ -8,7 +8,7 @@ import {
 } from '@nestjs/common';
 import { eq, desc, and, sql, inArray } from 'drizzle-orm';
 import { DB } from '../db';
-import type { AppDb } from '../db';
+import type { AppDb, DbExecutor } from '../db';
 import {
   wallets,
   transactions,
@@ -39,10 +39,19 @@ export class WalletService {
     private readonly kyc: KycService,
   ) {}
 
+  // ─── 手續費 / 單份成本（獎金 + 15% 手續費）──────────────────────────────────
+  // 鎖定預算、預算檢查、發獎扣款三處必須用同一個單份成本，否則鎖定額與實付額不一致。
+  private feeFor(reward: number): number {
+    return Math.ceil(reward * PLATFORM_FEE_RATE);
+  }
+  private unitCostFor(reward: number): number {
+    return reward + this.feeFor(reward);
+  }
+
   // ─── 取得（或建立）錢包 ───────────────────────────────────────────────────
 
-  async ensureWallet(userId: string) {
-    const rows = await this.db
+  async ensureWallet(userId: string, exec: DbExecutor = this.db) {
+    const rows = await exec
       .select()
       .from(wallets)
       .where(eq(wallets.userId, userId))
@@ -50,7 +59,7 @@ export class WalletService {
 
     if (rows[0]) return rows[0];
 
-    const [created] = await this.db
+    const [created] = await exec
       .insert(wallets)
       .values({ userId })
       .returning();
@@ -255,10 +264,10 @@ export class WalletService {
     respondentId: string;
     surveyorId: string;
     rewardAmount: number; // 受試者獲得金額
-  }): Promise<void> {
+  }): Promise<{ status: 'success' | 'pending' | 'duplicate' | 'skipped' }> {
     const { surveyId, responseId, respondentId, surveyorId, rewardAmount } = params;
 
-    if (rewardAmount <= 0) return;
+    if (rewardAmount <= 0) return { status: 'skipped' };
 
     const platformFee = Math.ceil(rewardAmount * PLATFORM_FEE_RATE);
     const totalDeduct = rewardAmount + platformFee;
@@ -289,17 +298,39 @@ export class WalletService {
         return;
       }
 
-      // ── 先原子扣款：guarded UPDATE 是唯一真相來源 ─────────────────────────
-      // 若問券方餘額不足（或並發造成餘額已低於門檻），UPDATE 影響 0 行 → pending
-      const deducted = await tx
-        .update(wallets)
-        .set({
-          cashBalance: sql`cash_balance - ${totalDeduct}`,
-          version: sql`version + 1`,
-          updatedAt: now,
-        })
-        .where(and(eq(wallets.userId, surveyorId), sql`cash_balance >= ${totalDeduct}`))
-        .returning({ id: wallets.id });
+      // ── 原子扣款：優先動用問卷鎖定預算(lockedCash/survey_escrow)，不足再動 cashBalance ──
+      // 發布問卷時已把 (獎金+手續費)×目標數 鎖進 lockedCash，發獎理應從這筆托管款支付；
+      // 若改從 cashBalance 另扣，鎖定款會永遠退不回 → 等同對問券方雙重收費（已修）。
+      // 隔離情境未先鎖定(lockedCash=0)時，fallback 全由 cashBalance 支付，維持既有行為。
+      const [pre] = await tx
+        .select({ locked: wallets.lockedCash, cash: wallets.cashBalance, version: wallets.version })
+        .from(wallets)
+        .where(eq(wallets.userId, surveyorId))
+        .limit(1);
+
+      const preLocked = pre?.locked ?? 0;
+      const preCash = pre?.cash ?? 0;
+      const escrowPortion = Math.min(preLocked, totalDeduct);
+      const cashPortion = totalDeduct - escrowPortion;
+      const canPay = preLocked + preCash >= totalDeduct;
+
+      const deducted = canPay
+        ? await tx
+            .update(wallets)
+            .set({
+              lockedCash: sql`locked_cash - ${escrowPortion}`,
+              cashBalance: sql`cash_balance - ${cashPortion}`,
+              version: sql`version + 1`,
+              updatedAt: now,
+            })
+            .where(and(
+              eq(wallets.userId, surveyorId),
+              eq(wallets.version, pre?.version ?? 0),
+              sql`locked_cash >= ${escrowPortion}`,
+              sql`cash_balance >= ${cashPortion}`,
+            ))
+            .returning({ id: wallets.id })
+        : [];
 
       txResult.status = deducted.length > 0 ? 'success' : 'pending';
 
@@ -346,17 +377,29 @@ export class WalletService {
         })
         .returning();
 
-      // ── 複式記帳分錄 ──────────────────────────────────────────────────────
-      await tx.insert(journalEntries).values([
-        { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: totalDeduct, creditAmount: 0 },
-        { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
-        { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
-        { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
-        { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
-        { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
-      ]);
-
+      // ── 複式記帳分錄：僅在實際扣款成功時寫入 ───────────────────────────────
+      // pending（問券方資金不足）時不寫分錄；否則總帳會記入從未發生的資金流動，
+      // 造成 wallet_* 帳與 cash_balance、survey_escrow 帳與 locked_cash 永久偏差（已修）。
       if (txResult.status === 'success') {
+        // reward_out 借方依實際資金來源拆分：托管款走 survey_escrow，cash 走 wallet_<surveyor>
+        const rewardOutDebits = [
+          escrowPortion > 0
+            ? { transactionId: rewardOutTxn.id, accountName: 'survey_escrow', debitAmount: escrowPortion, creditAmount: 0 }
+            : null,
+          cashPortion > 0
+            ? { transactionId: rewardOutTxn.id, accountName: `wallet_${surveyorId}`, debitAmount: cashPortion, creditAmount: 0 }
+            : null,
+        ].filter((e): e is NonNullable<typeof e> => e !== null);
+
+        await tx.insert(journalEntries).values([
+          ...rewardOutDebits,
+          { transactionId: rewardOutTxn.id, accountName: 'reward_payable', debitAmount: 0, creditAmount: totalDeduct },
+          { transactionId: rewardInTxn.id, accountName: 'reward_payable', debitAmount: rewardAmount, creditAmount: 0 },
+          { transactionId: rewardInTxn.id, accountName: `wallet_${respondentId}`, debitAmount: 0, creditAmount: rewardAmount },
+          { transactionId: feeTxn.id, accountName: 'reward_payable', debitAmount: platformFee, creditAmount: 0 },
+          { transactionId: feeTxn.id, accountName: 'platform_revenue', debitAmount: 0, creditAmount: platformFee },
+        ]);
+
         // 受試者入帳
         await tx
           .update(wallets)
@@ -371,12 +414,12 @@ export class WalletService {
     } catch (err: unknown) {
       if ((err as { code?: string })?.code === '23505') {
         this.logger.log(`Reward skipped: response=${responseId} concurrent duplicate`);
-        return;
+        return { status: 'duplicate' };
       }
       throw err;
     }
 
-    if (txResult.duplicate) return;
+    if (txResult.duplicate) return { status: 'duplicate' };
 
     this.logger.log(
       `Reward issued: survey=${surveyId} response=${responseId} amount=${rewardAmount} fee=${platformFee} status=${txResult.status}`,
@@ -395,6 +438,8 @@ export class WalletService {
           this.logger.error(`reward_issued 通知失敗 responseId=${responseId}`, err),
         );
     }
+
+    return { status: txResult.status };
   }
 
   // ─── 申請提領 ─────────────────────────────────────────────────────────────
@@ -426,6 +471,8 @@ export class WalletService {
         and(
           eq(transactions.userId, userId),
           eq(transactions.type, 'withdraw_request'),
+          // 被駁回/取消的提領已退回餘額，不應佔用每日額度。
+          sql`status NOT IN ('failed', 'cancelled')`,
           sql`created_at >= NOW() - interval '1 day'`,
         ),
       );
@@ -488,15 +535,18 @@ export class WalletService {
   }> {
     const wallet = await this.getWallet(surveyorId);
     const surveyRows = await this.db
-      .select({ rewardPoints: surveys.rewardPoints, targetCount: surveys.targetCount })
+      .select({ rewardPoints: surveys.rewardPoints, targetCount: surveys.targetCount, surveyorId: surveys.surveyorId })
       .from(surveys)
       .where(eq(surveys.id, surveyId))
       .limit(1);
 
     const survey = surveyRows[0];
     if (!survey) throw new NotFoundException('找不到問卷');
+    // 僅問卷擁有者可查預算需求，避免他人枚舉任意問卷的獎金/目標數設定。
+    if (survey.surveyorId !== surveyorId) throw new NotFoundException('找不到問卷');
 
-    const requiredAmount = survey.rewardPoints * survey.targetCount;
+    // 含 15% 手續費，與實際發獎扣款一致；否則剛好足額本金的問卷會通過檢查卻發不出獎。
+    const requiredAmount = this.unitCostFor(survey.rewardPoints) * survey.targetCount;
     const walletBalance = wallet?.cashBalance ?? 0;
 
     return {
@@ -584,40 +634,64 @@ export class WalletService {
 
   // ─── 通用積分發放（轉盤、活動獎勵等，與 survey 無關）──────────────────────
 
-  async grantPoints(userId: string, pointsAmount: number, note: string): Promise<void> {
+  /**
+   * 發放積分。
+   * @param exec 可選的外部 transaction；傳入時掛在呼叫方的交易上（與呼叫方同生共死，
+   *             失敗一起 rollback），不傳則自己開一個 transaction。
+   */
+  async grantPoints(
+    userId: string,
+    pointsAmount: number,
+    note: string,
+    exec?: DbExecutor,
+  ): Promise<void> {
     if (pointsAmount <= 0) return;
-    await this.ensureWallet(userId);
-    const now = new Date();
 
-    await this.db.transaction(async (tx) => {
-      const [txn] = await tx
-        .insert(transactions)
-        .values({
-          userId,
-          type: 'points_in',
-          amount: pointsAmount,
-          status: 'success',
-          note,
-          completedAt: now,
-        })
-        .returning();
-
-      await tx.insert(journalEntries).values([
-        { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
-        { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
-      ]);
-
-      await tx
-        .update(wallets)
-        .set({
-          pointsBalance: sql`points_balance + ${pointsAmount}`,
-          version: sql`version + 1`,
-          updatedAt: now,
-        })
-        .where(eq(wallets.userId, userId));
-    });
+    if (exec) {
+      // 掛在外部交易上：ensureWallet 與帳務必須走同一個 exec 才有原子性
+      await this.ensureWallet(userId, exec);
+      await this.grantPointsInTx(exec, userId, pointsAmount, note);
+    } else {
+      await this.ensureWallet(userId);
+      await this.db.transaction((tx) => this.grantPointsInTx(tx, userId, pointsAmount, note));
+    }
 
     this.logger.log(`Bonus points granted: user=${userId.slice(0, 8)} points=${pointsAmount} (${note})`);
+  }
+
+  /** grantPoints 的帳務核心：交易/分錄/錢包更新，全部走傳入的 exec（不自開 transaction）。 */
+  private async grantPointsInTx(
+    exec: DbExecutor,
+    userId: string,
+    pointsAmount: number,
+    note: string,
+  ): Promise<void> {
+    const now = new Date();
+    const [txn] = await exec
+      .insert(transactions)
+      .values({
+        userId,
+        type: 'points_in',
+        amount: pointsAmount,
+        status: 'success',
+        note,
+        completedAt: now,
+      })
+      .returning();
+
+    await exec.insert(journalEntries).values([
+      { transactionId: txn.id, accountName: 'points_liability', debitAmount: pointsAmount, creditAmount: 0 },
+      { transactionId: txn.id, accountName: `points_wallet_${userId}`, debitAmount: 0, creditAmount: pointsAmount },
+    ]);
+
+    await exec
+      .update(wallets)
+      .set({
+        pointsBalance: sql`points_balance + ${pointsAmount}`,
+        version: sql`version + 1`,
+        updatedAt: now,
+      })
+      .where(eq(wallets.userId, userId));
   }
 
   // ─── 發放積分（受試者完成積分類型問卷時呼叫）─────────────────────────────
@@ -783,7 +857,8 @@ export class WalletService {
     const survey = surveyRows[0];
     if (!survey || survey.rewardPoints === 0) return;
 
-    const totalBudget = survey.rewardPoints * survey.targetCount;
+    // 鎖定 (獎金 + 15% 手續費) × 目標數，確保發獎時托管款足以支付本金與手續費。
+    const totalBudget = this.unitCostFor(survey.rewardPoints) * survey.targetCount;
     await this.ensureWallet(surveyorId);
 
     const walletRows = await this.db
@@ -854,9 +929,10 @@ export class WalletService {
     const survey = surveyRows[0];
     if (!survey || survey.rewardPoints === 0) return;
 
-    // 實際已支付 = completedCount × rewardPoints（不含手續費，手續費在 issueReward 時已扣）
-    const totalLocked = survey.targetCount * survey.rewardPoints;
-    const actualPaid = completedCount * survey.rewardPoints;
+    // 鎖定與實付都以單份成本（獎金 + 手續費）計算，與 lockSurveyBudget/issueReward 一致。
+    const unitCost = this.unitCostFor(survey.rewardPoints);
+    const totalLocked = survey.targetCount * unitCost;
+    const actualPaid = completedCount * unitCost;
     const refundAmount = Math.max(0, totalLocked - actualPaid);
 
     if (refundAmount <= 0) return;

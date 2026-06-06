@@ -273,6 +273,105 @@ export class ExportService {
     return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
+  // ── 組裝匯出矩陣（Responses 表頭/資料列 + Summary 列）；ODS 與其他純資料匯出共用 ──
+  private async buildResponsesMatrix(
+    surveyId: string,
+    options: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<{ headers: (string | number)[]; body: (string | number)[][]; summary: (string | number)[][] }> {
+    const questions = await this.db
+      .select()
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const options_ = qIds.length > 0
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds))
+      : [];
+    const optionLabelById = this.buildOptionLabelById(options_);
+    for (const option of SYNTHETIC_YES_NO_OPTIONS) optionLabelById.set(option.id, option.label);
+
+    let responses = await this.db
+      .select()
+      .from(surveyResponses)
+      .where(and(
+        eq(surveyResponses.surveyId, surveyId),
+        inArray(surveyResponses.status, ['submitted', 'rewarded']),
+      ))
+      .orderBy(desc(surveyResponses.submittedAt));
+
+    if (options.cleanOnly) {
+      const minScore = options.minQualityScore ?? 70;
+      responses = responses.filter((r) => (r.qualityScore ?? 0) >= minScore);
+    }
+
+    const respIds = responses.map((r) => r.id);
+    const answers = respIds.length > 0
+      ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, respIds))
+      : [];
+    const answerByResponseQuestion = this.buildAnswerByResponseQuestion(answers);
+
+    const headers: (string | number)[] = [
+      'Response ID',
+      'Submitted At',
+      'Quality Score',
+      'Status',
+      'Fill Duration (s)',
+      ...questions.map((q, i) => `Q${i + 1}: ${q.title}`),
+    ];
+
+    const body: (string | number)[][] = responses.map((r) => {
+      const row: (string | number)[] = [
+        r.id,
+        r.submittedAt ? new Date(r.submittedAt).toISOString() : '',
+        r.qualityScore ?? '',
+        r.status,
+        r.fillDurationSeconds ?? '',
+      ];
+      for (const q of questions) {
+        const a = answerByResponseQuestion.get(this.answerKey(r.id, q.id));
+        if (!a) { row.push(''); continue; }
+        if (q.type === 'text') row.push(a.textAnswer ?? '');
+        else if (q.type === 'rating') row.push(a.ratingValue ?? '');
+        else if (q.type === 'single_choice' || q.type === 'multiple_choice') {
+          const ids = Array.isArray(a.selectedOptionIds) ? a.selectedOptionIds as string[] : [];
+          row.push(ids.map((id) => optionLabelById.get(id) ?? id).join('; '));
+        }
+        else if (q.type === 'matrix') row.push(a.textAnswer ?? '');
+        else row.push('');
+      }
+      return row;
+    });
+
+    const summary: (string | number)[][] = [
+      ['Total Responses', responses.length],
+      ['Avg Quality', responses.length > 0 ? Math.round(responses.reduce((s, r) => s + (r.qualityScore ?? 0), 0) / responses.length) : 0],
+      ['Passed (>=80)', responses.filter((r) => (r.qualityScore ?? 0) >= 80).length],
+      ['Suspicious (50-79)', responses.filter((r) => { const s = r.qualityScore ?? 0; return s >= 50 && s < 80; }).length],
+      ['Rejected (<50)', responses.filter((r) => (r.qualityScore ?? 0) < 50 && r.qualityScore != null).length],
+      ['Unaudited', responses.filter((r) => r.qualityScore == null).length],
+    ];
+
+    return { headers, body, summary };
+  }
+
+  /** OpenDocument Spreadsheet (.ods) 匯出：Responses + Summary 兩張表（透過 SheetJS）。 */
+  async generateResponsesOds(
+    surveyId: string,
+    surveyorId: string,
+    options: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<Buffer> {
+    await this.assertOwnedSurvey(surveyId, surveyorId);
+    const { headers, body, summary } = await this.buildResponsesMatrix(surveyId, options);
+
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const XLSX = require('xlsx');
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...body]), 'Responses');
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Metric', 'Value'], ...summary]), 'Summary');
+    return Buffer.from(XLSX.write(wb, { bookType: 'ods', type: 'buffer' }));
+  }
+
   // ─── Helpers ────────────────────────────────────────────────────
 
   private async assertOwnedSurvey(surveyId: string, surveyorId: string) {

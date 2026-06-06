@@ -22,6 +22,20 @@ const nextConfig = {
   },
   // typedRoutes: 等 /dashboard 和 /tasks 頁面建好後再啟用
 
+  // 安全 headers：防點擊劫持 / MIME 嗅探 / referrer 外洩（API 端有 helmet，前端頁面這裡補上）。
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+        ],
+      },
+    ];
+  },
 };
 
 export default nextConfig;
