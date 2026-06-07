@@ -308,6 +308,26 @@ export function QuestionEditor({
             label="題目圖片（選填）"
           />
 
+          {/* 題目影片：填答時顯示在題目上方並自動播放（靜音起播） */}
+          <div>
+            <input
+              type="url"
+              value={(question.config?.videoUrl as string | undefined) ?? ''}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                const nextConfig = { ...(question.config ?? {}) } as Record<string, unknown>;
+                if (v) nextConfig.videoUrl = v;
+                else delete nextConfig.videoUrl;
+                updateField('config', nextConfig);
+              }}
+              placeholder="影片連結（選填）：貼上 YouTube 或 Vimeo 網址"
+              className="w-full rounded border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            />
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              填答時影片會顯示在題目上方並自動播放（瀏覽器政策：自動播放為靜音起播）。僅支援 YouTube / Vimeo。
+            </p>
+          </div>
+
           {isChoiceType && (
             <div className="space-y-2 pl-2">
               {(question.options ?? []).map((opt, i) => (

@@ -45,11 +45,50 @@ interface SurveyJsQuestion {
   showOtherItem?: boolean;
   otherText?: string;
   otherPlaceholder?: string;
+  // 題目影片（type: 'html' 元素，由 buildVideoEmbedUrl 白名單組裝）
+  html?: string;
 }
 
 // 選項 label 視為「其他」的判定（其他 / 其他（請填寫）/ 其它…）
 export function findOtherOption<T extends { id: string; label: string }>(options: T[]): T | undefined {
   return options.find((o) => /^其[他它]/.test(o.label.trim()));
+}
+
+/**
+ * 題目影片連結 → 安全 embed URL。
+ * 白名單僅 YouTube / Vimeo，且 embed URL 由我們組裝（不嵌原始 URL），防任意 iframe 注入。
+ * 自動播放需靜音（瀏覽器政策），帶 autoplay+mute 參數。回傳 null = 不渲染。
+ */
+export function buildVideoEmbedUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string' || !raw.trim()) return null;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (url.protocol !== 'https:') return null;
+  const host = url.hostname.replace(/^www\./, '');
+
+  // YouTube: watch?v=ID / youtu.be/ID / shorts/ID
+  if (host === 'youtube.com' || host === 'youtu.be') {
+    let id = '';
+    if (host === 'youtu.be') id = url.pathname.slice(1).split('/')[0];
+    else if (url.pathname === '/watch') id = url.searchParams.get('v') ?? '';
+    else if (url.pathname.startsWith('/shorts/')) id = url.pathname.split('/')[2] ?? '';
+    else if (url.pathname.startsWith('/embed/')) id = url.pathname.split('/')[2] ?? '';
+    if (!/^[A-Za-z0-9_-]{6,20}$/.test(id)) return null;
+    return `https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&playsinline=1&rel=0`;
+  }
+
+  // Vimeo: vimeo.com/123456789
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') {
+    const m = url.pathname.match(/\/(?:video\/)?(\d{6,12})/);
+    if (!m) return null;
+    return `https://player.vimeo.com/video/${m[1]}?autoplay=1&muted=1`;
+  }
+
+  return null;
 }
 
 interface SurveyJsPage {
@@ -95,10 +134,30 @@ export function quanswenToSurveyJs(params: {
       : bypassExpression;
   }
 
+  // 題目影片：在題目前插入 embed 影片（必須在 skip-logic 索引處理「之後」插入，
+  // 否則 hiddenByTargetIndex 的元素索引會位移）。影片元素跟隨題目的 visibleIf 一起顯示/隱藏。
+  const finalElements: SurveyJsQuestion[] = [];
+  params.questions.forEach((q, i) => {
+    const el = elements[i];
+    if (!el) return;
+    const embedUrl = buildVideoEmbedUrl((q.config as Record<string, unknown> | undefined)?.videoUrl);
+    if (embedUrl) {
+      finalElements.push({
+        name: `${q.id}-video`,
+        title: '',
+        type: 'html',
+        isRequired: false,
+        html: `<div style="position:relative;padding-top:56.25%;border-radius:12px;overflow:hidden"><iframe src="${embedUrl}" style="position:absolute;inset:0;width:100%;height:100%;border:0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen loading="lazy"></iframe></div>`,
+        ...(el.visibleIf ? { visibleIf: el.visibleIf } : {}),
+      });
+    }
+    finalElements.push(el);
+  });
+
   return {
     title: params.title,
     description: params.description,
-    pages: [{ name: 'page1', elements }],
+    pages: [{ name: 'page1', elements: finalElements }],
     showProgressBar: 'top',
     progressBarType: 'questions',
     questionTitlePattern: 'numRequireTitle',

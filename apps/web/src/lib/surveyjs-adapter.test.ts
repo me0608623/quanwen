@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { quanswenToSurveyJs, extractAnswers, buildVisibleIfExpression } from './surveyjs-adapter';
+import { quanswenToSurveyJs, extractAnswers, buildVisibleIfExpression, buildVideoEmbedUrl } from './surveyjs-adapter';
 import type { PublicQuestion } from '@/hooks/use-responses';
 
 const baseQuestion: PublicQuestion = {
@@ -417,5 +417,49 @@ describe('「其他（請填寫）」選項 → SurveyJS other item', () => {
   it('沒有「其他」選項的題目不受影響', () => {
     const model = quanswenToSurveyJs({ questions: [baseQuestion] });
     expect(model.pages[0].elements[0].showOtherItem).toBeUndefined();
+  });
+});
+
+describe('buildVideoEmbedUrl 白名單', () => {
+  it('YouTube watch / youtu.be / shorts → nocookie embed + 靜音自動播放', () => {
+    expect(buildVideoEmbedUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'))
+      .toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?autoplay=1&mute=1&playsinline=1&rel=0');
+    expect(buildVideoEmbedUrl('https://youtu.be/dQw4w9WgXcQ')).toContain('/embed/dQw4w9WgXcQ');
+    expect(buildVideoEmbedUrl('https://www.youtube.com/shorts/dQw4w9WgXcQ')).toContain('/embed/dQw4w9WgXcQ');
+  });
+
+  it('Vimeo → player embed', () => {
+    expect(buildVideoEmbedUrl('https://vimeo.com/123456789'))
+      .toBe('https://player.vimeo.com/video/123456789?autoplay=1&muted=1');
+  });
+
+  it('白名單外 / 非 https / 垃圾輸入 → null（防 iframe 注入）', () => {
+    expect(buildVideoEmbedUrl('https://evil.com/embed/x')).toBeNull();
+    expect(buildVideoEmbedUrl('http://youtube.com/watch?v=dQw4w9WgXcQ')).toBeNull();
+    expect(buildVideoEmbedUrl('javascript:alert(1)')).toBeNull();
+    expect(buildVideoEmbedUrl('https://youtube.com/watch?v=<script>')).toBeNull();
+    expect(buildVideoEmbedUrl('')).toBeNull();
+    expect(buildVideoEmbedUrl(undefined)).toBeNull();
+  });
+});
+
+describe('題目影片元素插入', () => {
+  it('config.videoUrl → 題目前插入 html 影片元素', () => {
+    const videoQ: PublicQuestion = {
+      ...baseQuestion,
+      id: 'qv',
+      config: { videoUrl: 'https://youtu.be/dQw4w9WgXcQ' },
+    };
+    const model = quanswenToSurveyJs({ questions: [videoQ] });
+    const els = model.pages[0].elements;
+    expect(els).toHaveLength(2);
+    expect(els[0].type).toBe('html');
+    expect(els[0].html).toContain('youtube-nocookie.com/embed/dQw4w9WgXcQ');
+    expect(els[1].name).toBe('qv');
+  });
+
+  it('無 videoUrl 的題目不插入額外元素', () => {
+    const model = quanswenToSurveyJs({ questions: [baseQuestion] });
+    expect(model.pages[0].elements).toHaveLength(1);
   });
 });

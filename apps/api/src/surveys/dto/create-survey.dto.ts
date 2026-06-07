@@ -19,6 +19,16 @@ export const SurveyQuestionSchema = z.object({
   // 上限 50:台灣縣市 22 個、Google Forms 匯入常見長清單,20 太緊(曾擋下合法匯入)
   options: z.array(QuestionOptionSchema).max(50).optional(),
 }).superRefine((question, ctx) => {
+  // 題目影片連結：只允許 YouTube / Vimeo（白名單），前端自行組 embed URL，防任意 iframe 注入
+  const videoUrl = question.config?.videoUrl;
+  if (videoUrl !== undefined && videoUrl !== null && videoUrl !== '') {
+    const ok = typeof videoUrl === 'string'
+      && videoUrl.length <= 500
+      && /^https:\/\/((www\.)?(youtube\.com|youtu\.be|vimeo\.com))\//i.test(videoUrl);
+    if (!ok) {
+      ctx.addIssue({ code: 'custom', path: ['config', 'videoUrl'], message: '影片連結僅支援 YouTube 或 Vimeo（https）' });
+    }
+  }
   if (question.type !== 'rating' || !question.config) return;
   const { maxRating, scaleStart } = question.config;
   if (maxRating !== undefined && (!Number.isInteger(maxRating) || (maxRating as number) < 2 || (maxRating as number) > 10)) {
