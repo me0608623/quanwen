@@ -12,7 +12,7 @@ import { estimateFillMinutes } from '@/lib/fill-time';
 import { toCsv } from '@/lib/to-csv';
 import { lotteryWinnerActions } from '@/lib/lottery-result-actions';
 
-const TAB = { available: '可填問卷', history: '填答紀錄', lottery: '抽獎回饋' } as const;
+const TAB = { available: '可填問卷', history: '填答紀錄', lottery: '抽獎回饋', brand: '企業品牌問卷' } as const;
 type TabKey = keyof typeof TAB;
 
 function rewardLabel(survey: { rewardMode?: 'fixed' | 'lottery'; rewardPoints: number; lotteryPrize?: string | null }) {
@@ -83,7 +83,10 @@ export default function TasksPage() {
 
   // 篩選 + 排序（不可變副本；recommended = 後端原序）
   const kw = query.trim().toLowerCase();
+  // 企業品牌問卷獨立分頁(淡金色);可填問卷列表排除品牌問卷避免重複
+  const brandSurveys = surveys.filter((s) => s.isBrandSurvey);
   const displayedSurveys = surveys
+    .filter((s) => !s.isBrandSurvey)
     .filter((s) => !urgentOnly || (s.deadlineTier && s.deadlineTier !== 'standard'))
     .filter((s) => !kw || s.title.toLowerCase().includes(kw))
     .sort((a, b) => {
@@ -178,11 +181,16 @@ export default function TasksPage() {
             onClick={() => setTab(key)}
             className={[
               'px-4 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2',
-              tab === key
-                ? 'border-[#126b8a] text-[#126b8a]'
-                : 'border-transparent text-muted-foreground hover:text-foreground',
+              key === 'brand'
+                ? tab === key
+                  ? 'border-[#C9A227] text-[#A07D14] bg-gradient-to-b from-[#FBF3DC]/80 to-transparent rounded-t-md'
+                  : 'border-transparent text-[#B8962E] hover:text-[#A07D14] hover:bg-[#FBF3DC]/50 rounded-t-md'
+                : tab === key
+                  ? 'border-[#126b8a] text-[#126b8a]'
+                  : 'border-transparent text-muted-foreground hover:text-foreground',
             ].join(' ')}
           >
+            {key === 'brand' && <span className="mr-1">👑</span>}
             {label}
             {key === 'available' && availableCount > 0 && (
               <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#126b8a]/10 px-1.5 text-[10px] font-semibold text-[#126b8a]">
@@ -192,6 +200,11 @@ export default function TasksPage() {
             {key === 'lottery' && lotteryResults.length > 0 && (
               <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-amber-100 px-1.5 text-[10px] font-semibold text-amber-800">
                 {lotteryResults.length}
+              </span>
+            )}
+            {key === 'brand' && brandSurveys.length > 0 && (
+              <span className="ml-1.5 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-[#F3E3AC] px-1.5 text-[10px] font-semibold text-[#8A6D0B]">
+                {brandSurveys.length}
               </span>
             )}
           </button>
@@ -442,6 +455,76 @@ export default function TasksPage() {
                     <span className="text-base font-extrabold text-[#126b8a]">{rewardLabel(s)}</span>
                   </div>
                 )}
+              </div>
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* 企業品牌問卷(淡金色) */}
+      {tab === 'brand' && (
+        <div className="space-y-3">
+          {/* 金色主打橫幅 */}
+          <div className="relative overflow-hidden rounded-xl border border-[#E5CF8C] bg-gradient-to-br from-[#FBF3DC] via-[#F8ECC8] to-[#F3E3AC] p-5">
+            <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#C9A227]/15 blur-2xl" />
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#A07D14]">企業品牌問卷專區</p>
+            <h2 className="mt-1.5 text-xl font-bold text-[#6B5408]">⚡ 1 分鐘填寫，賺優惠券</h2>
+            <p className="mt-1.5 text-sm text-[#8A6D0B]">
+              這裡是企業品牌投放問卷的專屬空間。完成品牌問卷並通過品質審核，
+              即可獲得該品牌提供的優惠券，自動存入你的「優惠券夾」。
+            </p>
+            <Link href="/wallet" className="mt-3 inline-block text-sm font-semibold text-[#A07D14] underline hover:text-[#6B5408]">
+              查看我的優惠券夾 →
+            </Link>
+          </div>
+
+          {surveysLoading && (
+            <div className="animate-pulse rounded-xl border border-[#E5CF8C] bg-[#FBF3DC]/50 p-4">
+              <div className="h-4 w-3/4 rounded bg-[#F3E3AC]" />
+              <div className="mt-2 h-3 w-28 rounded bg-[#F3E3AC]" />
+            </div>
+          )}
+
+          {!surveysLoading && brandSurveys.length === 0 && (
+            <div className="rounded-xl border-2 border-dashed border-[#E5CF8C] bg-[#FBF3DC]/30 p-12 text-center">
+              <p className="text-3xl">👑</p>
+              <p className="mt-2 font-semibold text-[#8A6D0B]">目前還沒有進行中的品牌問卷</p>
+              <p className="mt-1 text-xs text-[#A07D14]">品牌活動上線時會出現在這裡，記得常回來看看</p>
+            </div>
+          )}
+
+          {brandSurveys.map((s) => (
+            <Link
+              key={s.id}
+              href={`/tasks/${s.id}`}
+              className="block overflow-hidden rounded-xl border border-[#E5CF8C] bg-gradient-to-br from-[#FFFDF6] to-[#FBF3DC] transition-all hover:-translate-y-0.5 hover:border-[#C9A227]/60 hover:shadow-md"
+            >
+              <div className="p-4">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="rounded-full bg-[#F3E3AC] px-2 py-0.5 text-[10px] font-semibold text-[#8A6D0B]">
+                        👑 {s.couponBrand ?? '品牌活動'}
+                      </span>
+                      <span className="rounded bg-[#C9A227]/10 px-1.5 py-0.5 text-[10px] font-medium text-[#A07D14]">
+                        ⚡ 約 {s.estimatedMinutes ?? estimateFillMinutes(s.questionCount ?? 0)} 分鐘
+                      </span>
+                    </div>
+                    <p className="mt-1.5 truncate font-semibold text-[#5C470A]">{s.title}</p>
+                    {s.description && (
+                      <p className="mt-1 line-clamp-2 text-sm text-[#8A6D0B]">{s.description}</p>
+                    )}
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <span className="text-sm font-extrabold text-[#A07D14]">🎟️ {s.couponTitle ?? '優惠券'}</span>
+                    <p className="mt-0.5 text-[10px] uppercase tracking-wide text-[#B8962E]">填寫即賺</p>
+                  </div>
+                </div>
+                <div className="mt-2.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[#A07D14]">
+                  <span>{s.completedCount}/{s.targetCount} 份</span>
+                  {s.expiresAt && <span>截止 {new Date(s.expiresAt).toLocaleDateString('zh-TW')}</span>}
+                  {s.isAnonymous && <span className="rounded bg-[#F3E3AC]/70 px-1.5 py-0.5">匿名</span>}
+                </div>
               </div>
             </Link>
           ))}

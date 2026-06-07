@@ -102,6 +102,12 @@ export class SurveysService {
           welcomeImages: dto.welcomeImages,
           // 樣式主題
           theme: dto.theme,
+          // 企業品牌問卷 + 優惠券設定
+          isBrandSurvey: dto.isBrandSurvey ?? false,
+          couponBrand: dto.couponBrand,
+          couponTitle: dto.couponTitle,
+          couponCode: dto.couponCode,
+          couponExpiresAt: dto.couponExpiresAt ? new Date(dto.couponExpiresAt) : null,
           // QUA-201: 排程發布 / 自動關閉（建立時可一併設定）
           scheduledPublishAt: dto.scheduledPublishAt ? new Date(dto.scheduledPublishAt) : null,
           autoCloseAt: dto.autoCloseAt ? new Date(dto.autoCloseAt) : null,

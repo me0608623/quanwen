@@ -2,7 +2,7 @@
 
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Coins, Banknote, TrendingUp, Clock } from 'lucide-react';
+import { Coins, Banknote, TrendingUp, Clock, Ticket } from 'lucide-react';
 import {
   useWallet,
   useWalletTransactions,
@@ -12,6 +12,7 @@ import {
   useEcpayDeposit,
   useRequestWithdrawal,
   useEarningsSummary,
+  useMyCoupons,
 } from '@/hooks/use-wallet';
 import { useMe } from '@/hooks/use-auth';
 import { cn } from '@/lib/cn';
@@ -314,6 +315,103 @@ function TxList({ txns }: { txns: { id: string; type: string; amount: number; st
   );
 }
 
+// ─── 優惠券夾 ────────────────────────────────────────────────────────────────
+// 企業品牌問卷通過品質審核後獲得的優惠券,集中存放在這裡(淡金色)。
+
+const COUPON_STATUS_LABELS: Record<string, string> = {
+  active: '可使用',
+  used: '已使用',
+  expired: '已過期',
+};
+
+function CouponFolder() {
+  const { data: coupons = [], isLoading } = useMyCoupons();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  const copyCode = (id: string, code: string) => {
+    navigator.clipboard?.writeText(code).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  };
+
+  if (isLoading) return <div className="h-32 animate-pulse rounded-xl bg-[#FBF3DC]" />;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-[#E5CF8C] bg-gradient-to-br from-[#FBF3DC] to-[#F3E3AC] p-6">
+        <div className="mb-1 flex items-center gap-2">
+          <Ticket className="h-5 w-5 text-[#A07D14]" />
+          <span className="text-sm font-semibold text-[#8A6D0B]">優惠券夾</span>
+          <span className="ml-auto rounded-full bg-white/60 px-2 py-0.5 text-[11px] font-medium text-[#A07D14]">
+            {coupons.filter((c) => c.status === 'active').length} 張可用
+          </span>
+        </div>
+        <p className="text-xs text-[#A07D14]">
+          完成「企業品牌問卷」並通過品質審核，獲得的優惠券會自動存放在這裡。
+        </p>
+      </div>
+
+      {coupons.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-[#E5CF8C] bg-[#FBF3DC]/30 p-10 text-center">
+          <p className="text-3xl">🎟️</p>
+          <p className="mt-2 text-sm font-semibold text-[#8A6D0B]">還沒有優惠券</p>
+          <p className="mt-1 text-xs text-[#A07D14]">
+            到任務頁的「👑 企業品牌問卷」分頁，1 分鐘填寫即可賺優惠券
+          </p>
+          <a href="/tasks" className="mt-3 inline-block text-sm font-semibold text-[#A07D14] underline hover:text-[#6B5408]">
+            去看看品牌問卷 →
+          </a>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {coupons.map((c) => {
+            const inactive = c.status !== 'active';
+            return (
+              <div
+                key={c.id}
+                className={cn(
+                  'relative overflow-hidden rounded-xl border p-4',
+                  inactive
+                    ? 'border-border bg-muted/40 opacity-60'
+                    : 'border-[#E5CF8C] bg-gradient-to-br from-[#FFFDF6] to-[#FBF3DC]',
+                )}
+              >
+                {/* 票券打孔裝飾 */}
+                <div className="absolute -left-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-background" />
+                <div className="absolute -right-2 top-1/2 h-4 w-4 -translate-y-1/2 rounded-full bg-background" />
+                <div className="flex items-center justify-between gap-3 pl-2 pr-2">
+                  <div className="min-w-0 flex-1">
+                    {c.brandName && (
+                      <p className="text-[11px] font-semibold text-[#B8962E]">👑 {c.brandName}</p>
+                    )}
+                    <p className={cn('truncate text-sm font-bold', inactive ? 'text-muted-foreground' : 'text-[#5C470A]')}>
+                      🎟️ {c.title}
+                    </p>
+                    <p className="mt-0.5 text-[11px] text-[#A07D14]">
+                      {new Date(c.acquiredAt).toLocaleDateString('zh-TW')} 取得
+                      {c.expiresAt && ` · ${new Date(c.expiresAt).toLocaleDateString('zh-TW')} 到期`}
+                      {' · '}{COUPON_STATUS_LABELS[c.status] ?? c.status}
+                    </p>
+                  </div>
+                  {c.code && !inactive && (
+                    <button
+                      onClick={() => copyCode(c.id, c.code!)}
+                      className="shrink-0 rounded-md border border-dashed border-[#C9A227] bg-white/70 px-3 py-1.5 font-mono text-xs font-bold text-[#8A6D0B] transition hover:bg-white"
+                    >
+                      {copiedId === c.id ? '已複製 ✓' : c.code}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── 主頁面 ──────────────────────────────────────────────────────────────────
 
 function WalletContent() {
@@ -326,7 +424,8 @@ function WalletContent() {
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cash' | 'points'>('cash');
+  const [activeTab, setActiveTab] = useState<'cash' | 'points' | 'coupons'>('cash');
+  const { data: myCoupons = [] } = useMyCoupons();
 
   useEffect(() => {
     if (searchParams.get('deposit') === 'done') {
@@ -371,6 +470,13 @@ function WalletContent() {
           label={isRespondent ? '我的收益' : '現金錢包'}
         />
         <TabButton active={activeTab === 'points'} onClick={() => setActiveTab('points')} icon={<Coins className="h-4 w-4" />} label="積分" badge={wallet?.pointsBalance ? wallet.pointsBalance.toLocaleString() : undefined} />
+        <TabButton
+          active={activeTab === 'coupons'}
+          onClick={() => setActiveTab('coupons')}
+          icon={<Ticket className="h-4 w-4" />}
+          label="優惠券夾"
+          badge={myCoupons.filter((c) => c.status === 'active').length > 0 ? String(myCoupons.filter((c) => c.status === 'active').length) : undefined}
+        />
       </div>
 
       {activeTab === 'cash' && (
@@ -435,6 +541,8 @@ function WalletContent() {
           </section>
         </>
       )}
+
+      {activeTab === 'coupons' && <CouponFolder />}
     </main>
   );
 }

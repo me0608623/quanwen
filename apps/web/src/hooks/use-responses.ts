@@ -32,6 +32,10 @@ export interface AvailableSurvey {
   // 外部問卷連結（非空 → 填答者跳轉至外部頁面）+ 建立者預估分鐘數
   externalUrl?: string | null;
   estimatedMinutes?: number | null;
+  // 企業品牌問卷：1 分鐘填寫賺優惠券
+  isBrandSurvey?: boolean;
+  couponBrand?: string | null;
+  couponTitle?: string | null;
 }
 
 export interface PublicQuestion {

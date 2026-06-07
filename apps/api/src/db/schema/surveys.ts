@@ -129,6 +129,13 @@ export const surveys = pgTable(
     // 是否允許匿名填答
     isAnonymous: boolean('is_anonymous').notNull().default(true),
 
+    // 企業品牌問卷:1 分鐘填寫賺優惠券。通過審核後發 user_coupons
+    isBrandSurvey: boolean('is_brand_survey').notNull().default(false),
+    couponBrand: varchar('coupon_brand', { length: 100 }),
+    couponTitle: varchar('coupon_title', { length: 200 }),
+    couponCode: varchar('coupon_code', { length: 100 }),
+    couponExpiresAt: timestamp('coupon_expires_at', { withTimezone: true }),
+
     // QUA-201: Scheduled publish and auto-close
     scheduledPublishAt: timestamp('scheduled_publish_at', { withTimezone: true }),
     autoCloseAt: timestamp('auto_close_at', { withTimezone: true }),
@@ -186,6 +193,31 @@ export const questionOptions = pgTable(
   },
   (t) => ({
     questionIdx: index('question_options_question_idx').on(t.questionId),
+  }),
+);
+
+// ─── 用戶優惠券夾 ─────────────────────────────────────────────────────────────
+// 企業品牌問卷通過品質審核後發放;存放於 /wallet 優惠券夾。
+
+export const userCoupons = pgTable(
+  'user_coupons',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    surveyId: uuid('survey_id').references(() => surveys.id, { onDelete: 'set null' }),
+    responseId: uuid('response_id'),
+    brandName: varchar('brand_name', { length: 100 }),
+    title: varchar('title', { length: 200 }).notNull(),
+    code: varchar('code', { length: 100 }),
+    // active | used | expired
+    status: varchar('status', { length: 16 }).notNull().default('active'),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
+    acquiredAt: timestamp('acquired_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('user_coupons_user_idx').on(t.userId),
+    // 同一份填答只發一張券(冪等)
+    responseUq: uniqueIndex('user_coupons_response_uq').on(t.responseId),
   }),
 );
 

@@ -36,6 +36,29 @@ export function useWallet() {
   });
 }
 
+// 優惠券夾:企業品牌問卷通過審核後獲得的優惠券
+export interface UserCoupon {
+  id: string;
+  surveyId: string | null;
+  brandName: string | null;
+  title: string;
+  code: string | null;
+  status: 'active' | 'used' | 'expired';
+  expiresAt: string | null;
+  acquiredAt: string;
+}
+
+export function useMyCoupons() {
+  return useQuery<UserCoupon[]>({
+    queryKey: ['wallet', 'coupons'],
+    queryFn: async () => {
+      const { data } = await api.get('/wallet/coupons');
+      return data;
+    },
+    staleTime: 30_000,
+  });
+}
+
 export function useWalletTransactions(limit = 50) {
   return useQuery<WalletTransaction[]>({
     queryKey: ['wallet', 'transactions', limit],

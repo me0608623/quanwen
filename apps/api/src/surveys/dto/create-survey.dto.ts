@@ -95,6 +95,12 @@ export const CreateSurveyBaseSchema = z.object({
   questions: z.array(SurveyQuestionSchema).max(50).optional(),
   // QUA-196: Skip Logic / Conditional Branching rules (uses LogicRuleSchema for full validation)
   logicRules: z.array(LogicRuleSchema).max(200).optional(),
+  // 企業品牌問卷:1 分鐘填寫賺優惠券(tasks 頁專屬淡金色分頁;審核通過發 user_coupons)
+  isBrandSurvey: z.boolean().optional(),
+  couponBrand: z.string().trim().min(1).max(100).optional(),
+  couponTitle: z.string().trim().min(1).max(200).optional(),
+  couponCode: z.string().trim().min(1).max(100).optional(),
+  couponExpiresAt: z.string().datetime().optional(),
   // QUA-201: Scheduled publish and auto-close（nullish：傳 null 可清除已設定的排程）
   scheduledPublishAt: z.string().datetime().nullish(),
   autoCloseAt: z.string().datetime().nullish(),

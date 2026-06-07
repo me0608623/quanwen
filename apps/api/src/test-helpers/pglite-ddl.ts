@@ -97,6 +97,11 @@ export const SURVEYS_DDL = `
     welcome_images        JSONB,
     theme                 JSONB,
     is_anonymous          BOOLEAN      NOT NULL DEFAULT true,
+    is_brand_survey       BOOLEAN      NOT NULL DEFAULT false,
+    coupon_brand          VARCHAR(100),
+    coupon_title          VARCHAR(200),
+    coupon_code           VARCHAR(100),
+    coupon_expires_at     TIMESTAMPTZ,
     scheduled_publish_at  TIMESTAMPTZ,
     auto_close_at         TIMESTAMPTZ,
     auto_close_after_n    INTEGER,
@@ -124,6 +129,21 @@ export const SURVEYS_DDL = `
     label       VARCHAR(300) NOT NULL,
     sort_order  INTEGER      NOT NULL DEFAULT 0
   );
+
+  CREATE TABLE user_coupons (
+    id          UUID         PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id     UUID         NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    survey_id   UUID         REFERENCES surveys(id) ON DELETE SET NULL,
+    response_id UUID,
+    brand_name  VARCHAR(100),
+    title       VARCHAR(200) NOT NULL,
+    code        VARCHAR(100),
+    status      VARCHAR(16)  NOT NULL DEFAULT 'active',
+    expires_at  TIMESTAMPTZ,
+    acquired_at TIMESTAMPTZ  NOT NULL DEFAULT now()
+  );
+  CREATE INDEX user_coupons_user_idx ON user_coupons(user_id);
+  CREATE UNIQUE INDEX user_coupons_response_uq ON user_coupons(response_id);
 
   CREATE TABLE survey_ai_reports (
     id           UUID         PRIMARY KEY DEFAULT gen_random_uuid(),

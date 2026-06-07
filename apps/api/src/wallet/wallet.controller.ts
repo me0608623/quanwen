@@ -16,6 +16,7 @@ import type { Request, Response } from 'express';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { WalletService } from './wallet.service';
+import { CouponsService } from './coupons.service';
 import { DepositDto, DepositSchema } from './dto/deposit.dto';
 import { WithdrawDto, WithdrawSchema } from './dto/withdraw.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
@@ -40,13 +41,23 @@ export class EcpayWebhookController {
 @UseGuards(JwtAuthGuard)
 @Controller('wallet')
 export class WalletController {
-  constructor(private readonly wallet: WalletService) {}
+  constructor(
+    private readonly wallet: WalletService,
+    private readonly coupons: CouponsService,
+  ) {}
 
   // GET /wallet — 我的錢包餘額
   @Get()
   async getMyWallet(@Req() req: Request) {
     const user = req.user as AuthenticatedUser;
     return this.wallet.getWallet(user.id);
+  }
+
+  // GET /wallet/coupons — 優惠券夾(企業品牌問卷獲得的優惠券)
+  @Get('coupons')
+  async getMyCoupons(@Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.coupons.listForUser(user.id);
   }
 
   // GET /wallet/balance - respondent balance API (Phase 1)
