@@ -10,7 +10,7 @@
  *   CHOICEMULTI / PICKFROM / ADVANCED_SELECTION_BASED → multiple_choice（SurveyCake 共用同一複選 renderer）
  *   TXTSHORT / TXTLONG                            → text
  *   NEST(+ 後續 NESTCHILD)                         → matrix(columns=NEST options, rows=NESTCHILD texts)
- *   NEST_MULTI                                     → matrix（複選矩陣降級為單選矩陣,收 warning）
+ *   NEST_MULTI                                     → matrix（config.matrix.multiple=true,每列可複選）
  *   STATEMENT / QUOTE / DIVIDER                    → 非題目,跳過
  *   其他                                            → text(fallback,收 warning)
  */
@@ -113,10 +113,9 @@ export function parseSurveyCakeNative(raw: unknown): ParsedSurveyCake {
         questions.push({ ...base, type: 'text' });
         continue;
       }
-      if (type === 'NEST_MULTI') {
-        warnings.push(`第 ${i + 1} 題「${text}」為複選矩陣,已降級為單選矩陣(每列僅能選一項)`);
-      }
-      questions.push({ ...base, type: 'matrix', config: { matrix: { rows, columns } } });
+      const matrix: { rows: string[]; columns: string[]; multiple?: boolean } = { rows, columns };
+      if (type === 'NEST_MULTI') matrix.multiple = true;
+      questions.push({ ...base, type: 'matrix', config: { matrix } });
       continue;
     }
 

@@ -102,11 +102,12 @@ export function QuestionEditor({
   const isNumeric = displayType === 'numeric';
   const isMatrix = displayType === 'matrix';
 
-  const matrixConfig = (question.config?.matrix ?? {}) as { rows?: string[]; columns?: string[] };
+  const matrixConfig = (question.config?.matrix ?? {}) as { rows?: string[]; columns?: string[]; multiple?: boolean };
   const matrixRows = matrixConfig.rows ?? [];
   const matrixColumns = matrixConfig.columns ?? [];
-  const writeMatrix = (rows: string[], columns: string[]) =>
-    patchConfig({ ...(question.config ?? {}), matrix: { rows, columns } });
+  const matrixMultiple = matrixConfig.multiple === true;
+  const writeMatrix = (rows: string[], columns: string[], multiple: boolean = matrixMultiple) =>
+    patchConfig({ ...(question.config ?? {}), matrix: { rows, columns, ...(multiple ? { multiple: true } : {}) } });
   const updateMatrixRow = (i: number, v: string) => writeMatrix(matrixRows.map((r, idx) => (idx === i ? v : r)), matrixColumns);
   const addMatrixRow = () => writeMatrix([...matrixRows, ''], matrixColumns);
   const removeMatrixRow = (i: number) => writeMatrix(matrixRows.filter((_, idx) => idx !== i), matrixColumns);
@@ -433,8 +434,19 @@ export function QuestionEditor({
                   + 新增陳述
                 </button>
               </div>
+              <label className="flex items-center gap-2 text-xs text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={matrixMultiple}
+                  onChange={(e) => writeMatrix(matrixRows, matrixColumns, e.target.checked)}
+                  className="h-3.5 w-3.5"
+                />
+                每列可複選（核取多個量表選項）
+              </label>
               <p className="text-[11px] text-muted-foreground">
-                矩陣題：填答者會對每一列「陳述」，從上方「量表選項」各選一個。
+                {matrixMultiple
+                  ? '複選矩陣：填答者可在每一列「陳述」勾選多個「量表選項」。'
+                  : '單選矩陣：填答者會對每一列「陳述」，從上方「量表選項」各選一個。'}
               </p>
             </div>
           )}

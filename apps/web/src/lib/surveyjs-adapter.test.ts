@@ -160,6 +160,35 @@ describe('quanswenToSurveyJs', () => {
     ]);
   });
 
+  it('converts multi-select matrix to matrixdropdown with boolean columns', () => {
+    const q: PublicQuestion = {
+      id: 'q6m',
+      type: 'matrix',
+      title: 'Multi Matrix',
+      sortOrder: 0,
+      isRequired: true,
+      config: {
+        matrix: {
+          rows: ['Row 1', 'Row 2'],
+          columns: ['Col A', 'Col B'],
+          multiple: true,
+        },
+      },
+      options: [],
+    };
+    const model = quanswenToSurveyJs({ questions: [q] });
+    const el = model.pages[0].elements[0];
+    expect(el.type).toBe('matrixdropdown');
+    expect(el.rows).toEqual([
+      { value: 'Row 1', text: 'Row 1' },
+      { value: 'Row 2', text: 'Row 2' },
+    ]);
+    expect(el.columns).toEqual([
+      { name: 'Col A', title: 'Col A', cellType: 'boolean' },
+      { name: 'Col B', title: 'Col B', cellType: 'boolean' },
+    ]);
+  });
+
   it('falls back to comment for unconfigured matrix', () => {
     const q: PublicQuestion = {
       id: 'q7',

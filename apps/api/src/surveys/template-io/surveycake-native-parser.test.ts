@@ -104,7 +104,7 @@ describe('parseSurveyCakeNative', () => {
     expect(r.questions.map((q) => q.type)).toEqual(['multiple_choice', 'multiple_choice']);
   });
 
-  it('NEST_MULTI(複選矩陣) → matrix 並收 warning', () => {
+  it('NEST_MULTI(複選矩陣) → matrix 且 multiple=true（每列可複選）', () => {
     const r = parseSurveyCakeNative({
       title: 'x',
       subjects: [
@@ -115,10 +115,22 @@ describe('parseSurveyCakeNative', () => {
     });
     const q = r.questions.find((x) => x.title === '複選矩陣');
     expect(q?.type).toBe('matrix');
-    const matrix = (q?.config as { matrix?: { rows?: string[]; columns?: string[] } })?.matrix;
+    const matrix = (q?.config as { matrix?: { rows?: string[]; columns?: string[]; multiple?: boolean } })?.matrix;
     expect(matrix?.rows).toEqual(['子題A', '子題B']);
     expect(matrix?.columns).toEqual(['選項1', '選項2']);
-    expect(r.warnings.some((w) => w.includes('複選矩陣'))).toBe(true);
+    expect(matrix?.multiple).toBe(true);
+  });
+
+  it('NEST(單選矩陣) 不帶 multiple 旗標', () => {
+    const r = parseSurveyCakeNative({
+      title: 'x',
+      subjects: [
+        { type: 'NEST', text: '單選矩陣', orders: 0, required: 1, invisible: 0, options: [opt('A', 0)] },
+        { type: 'NESTCHILD', text: '列1', orders: 1, required: 0, invisible: 0, options: null },
+      ],
+    });
+    const matrix = (r.questions[0]?.config as { matrix?: { multiple?: boolean } })?.matrix;
+    expect(matrix?.multiple).toBeUndefined();
   });
 
   it('DIVIDER 跳過,不產生題目', () => {

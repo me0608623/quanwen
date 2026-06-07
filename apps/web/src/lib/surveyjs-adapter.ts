@@ -35,7 +35,7 @@ interface SurveyJsQuestion {
   inputType?: string;
   maxLength?: number;
   rows?: string[] | Array<{ value: string; text: string }>;
-  columns?: string[] | Array<{ value: string; text: string }>;
+  columns?: string[] | Array<{ value: string; text: string }> | Array<{ name: string; title: string; cellType: string }>;
   cellType?: string;
   labelTrue?: string;
   labelFalse?: string;
@@ -229,7 +229,7 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
       const matrixConfig = config.matrix as {
         rows?: string[];
         columns?: string[];
-        scale?: string;
+        multiple?: boolean;
       } | undefined;
 
       const rows = (matrixConfig?.rows ?? []).filter(Boolean);
@@ -240,13 +240,22 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
         return { ...base, type: 'comment' };
       }
 
+      // 每列可複選 → SurveyJS matrixdropdown，每欄一個 boolean 勾選格（核取方格 grid）
+      if (matrixConfig?.multiple) {
+        return {
+          ...base,
+          type: 'matrixdropdown',
+          rows: rows.map((r) => ({ value: r, text: r })),
+          columns: columns.map((c) => ({ name: c, title: c, cellType: 'boolean' })),
+        };
+      }
+
+      // 每列單選 → SurveyJS matrix（radio）
       return {
         ...base,
         type: 'matrix',
         rows: rows.map((r) => ({ value: r, text: r })),
         columns: columns.map((c) => ({ value: c, text: c })),
-        cellType: matrixConfig?.scale === 'multiple' ? 'checkbox' : 'radiogroup',
-        rowsVisibleIf: undefined,
       };
     }
 
