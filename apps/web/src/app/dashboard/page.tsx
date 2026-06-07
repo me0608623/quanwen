@@ -320,6 +320,15 @@ export default function DashboardPage() {
                   >
                     {survey.status === 'draft' || survey.status === 'rejected' ? '編輯' : '查看分析'}
                   </Link>
+                  {survey.status === 'published' && (
+                    <Link
+                      href={`/dashboard/surveys/${survey.id}?edit=1`}
+                      className="rounded-md border px-3 py-1.5 text-sm text-muted-foreground hover:bg-muted transition-colors"
+                      title="編輯標題、說明、圖片、樣式、感謝頁與受眾條件（題目與獎勵已鎖定）"
+                    >
+                      編輯
+                    </Link>
+                  )}
                   <button
                     onClick={() => duplicateSurvey.mutate(survey.id)}
                     disabled={duplicateSurvey.isPending}
