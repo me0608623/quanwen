@@ -70,6 +70,8 @@ export function SurveyEditorShell({
   onPreviewToggle,
 }: SurveyEditorShellProps) {
   const [activeTab, setActiveTab] = useState<SidebarTab>('questions');
+  // 手機：側欄改抽屜（固定 w-56 在小螢幕會吃掉一半寬度，壓爛中間編輯區）
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   const sidebarContent = (() => {
     switch (activeTab) {
@@ -146,6 +148,16 @@ export function SurveyEditorShell({
 
         {/* Action buttons */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* 手機：開啟題目/樣式/獎勵/設定抽屜 */}
+          <button
+            type="button"
+            onClick={() => setMobileSidebarOpen((v) => !v)}
+            className="rounded-md border border-input bg-background px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground transition-colors md:hidden"
+            aria-label="開啟題目與設定面板"
+          >
+            ☰ 題目
+          </button>
+
           {/* Preview toggle */}
           <button
             type="button"
@@ -185,9 +197,24 @@ export function SurveyEditorShell({
       </header>
 
       {/* ─── Main body: Sidebar + Content + Preview ──────────────── */}
-      <div className="flex flex-1 overflow-hidden">
-        {/* Left sidebar with tabs */}
-        <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-slate-50/50">
+      <div className="relative flex flex-1 overflow-hidden">
+        {/* 手機抽屜背景遮罩 */}
+        {mobileSidebarOpen && (
+          <div
+            className="absolute inset-0 z-30 bg-black/30 md:hidden"
+            onClick={() => setMobileSidebarOpen(false)}
+            aria-hidden
+          />
+        )}
+
+        {/* Left sidebar with tabs（手機 = 抽屜，桌機 = 常駐） */}
+        <aside
+          className={cn(
+            'flex w-56 shrink-0 flex-col border-r border-border bg-slate-50/50',
+            'max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-40 max-md:w-72 max-md:bg-slate-50 max-md:shadow-xl',
+            !mobileSidebarOpen && 'max-md:hidden',
+          )}
+        >
           {/* Sidebar tabs */}
           <nav className="flex border-b border-border">
             {([
@@ -212,8 +239,21 @@ export function SurveyEditorShell({
             ))}
           </nav>
 
-          {/* Sidebar content area */}
-          <div className="flex-1 overflow-y-auto">{sidebarContent}</div>
+          {/* Sidebar content area（手機：點選任一項目後自動收合抽屜） */}
+          <div
+            className="flex-1 overflow-y-auto"
+            onClickCapture={(e) => {
+              if (
+                mobileSidebarOpen &&
+                window.matchMedia('(max-width: 767px)').matches &&
+                (e.target as HTMLElement).closest('button')
+              ) {
+                setMobileSidebarOpen(false);
+              }
+            }}
+          >
+            {sidebarContent}
+          </div>
         </aside>
 
         {/* Center content area */}
@@ -221,9 +261,9 @@ export function SurveyEditorShell({
           <div className="mx-auto max-w-2xl p-6">{children}</div>
         </main>
 
-        {/* Right preview pane (optional) */}
+        {/* Right preview pane (optional)；手機 = 全寬覆蓋（避免擠壓編輯區） */}
         {previewOpen && (
-          <aside className="w-80 shrink-0 border-l border-border bg-white overflow-y-auto">
+          <aside className="w-80 shrink-0 border-l border-border bg-white overflow-y-auto max-md:absolute max-md:inset-0 max-md:z-40 max-md:w-full">
             <div className="p-3">
               <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 即時預覽
