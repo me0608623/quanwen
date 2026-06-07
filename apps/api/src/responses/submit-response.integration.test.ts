@@ -8,10 +8,12 @@ import { FULL_SCHEMA_DDL } from '../test-helpers/pglite-ddl';
 import { ResponsesService } from './responses.service';
 import type { AntiCheatService } from './anti-cheat.service';
 import type { WalletService } from '../wallet/wallet.service';
+import type { CouponsService } from '../wallet/coupons.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { QualityAuditService } from './quality-audit.service';
 import type { ReputationService } from './reputation.service';
 import type { SpinService } from '../spin/spin.service';
+import { CryptoService } from '../common/crypto.service';
 
 const RESPONDENT_ID = '11111111-1111-1111-1111-111111111111';
 const SURVEYOR_ID = '22222222-2222-2222-2222-222222222222';
@@ -79,10 +81,12 @@ describe('ResponsesService.submitResponse pending_review gate', () => {
       db as unknown as AppDb,
       antiCheat,
       wallet,
+      { issueForResponse: async () => undefined } as unknown as CouponsService,
       notifications,
       qualityAudit,
       reputation,
       spin,
+      new CryptoService(),
     );
   });
 
@@ -787,7 +791,8 @@ describe('ResponsesService.submitResponse 防刷頻率限制 + 機器人封禁',
     const qualityAudit = { audit: async () => ({ finalScore: 90, status: 'passed', flags: [], signalScores: {}, llmScore: null, llmReasoning: null, llmEvidence: [], behaviorScore: 90 }) } as unknown as QualityAuditService;
     const reputation = { adjust: async () => undefined } as unknown as ReputationService;
     const spin = { grantChance: async () => undefined } as unknown as SpinService;
-    return new ResponsesService(db as unknown as AppDb, antiCheat, wallet, notifications, qualityAudit, reputation, spin);
+    const coupons = { issueForResponse: vi.fn(async () => undefined) } as unknown as CouponsService;
+    return new ResponsesService(db as unknown as AppDb, antiCheat, wallet, coupons, notifications, qualityAudit, reputation, spin, new CryptoService());
   }
 
   beforeAll(async () => {

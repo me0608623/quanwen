@@ -42,6 +42,7 @@ const QUESTION_TYPE_OPTIONS: {
   { key: 'rating', value: 'rating', label: '評分題', icon: '★', description: '星級／分數量表（1–N 分）' },
   { key: 'matrix', value: 'matrix', label: '單選矩陣', icon: '▦', description: '多個子題共用同一量表，每列單選' },
   { key: 'matrix_multi', value: 'matrix', label: '複選矩陣', icon: '▤', description: '多個子題共用同一量表，每列可複選', config: { matrix: { multiple: true } } },
+  { key: 'encrypted', value: 'text', label: '個資加密題', icon: '🔒', description: '敏感個資加密儲存，僅超級管理員可解密查看', config: { encrypted: true } },
 ];
 
 // 題型中文名稱對照（用於側邊欄 block 顯示）
@@ -50,11 +51,19 @@ const TYPE_DISPLAY: Record<string, string> = {
   multiple_choice: '多選',
   text: '問答',
   rating: '評分',
-  numeric: '數字',
-  yes_no: '是/否',
-  dropdown: '下拉選單',
-  matrix: '矩陣量表',
+  matrix: '單選矩陣',
 };
+
+// 側邊欄標籤：依 config 判斷變體（個資加密/數字/是否/下拉/複選矩陣），與編輯器一致
+function blockTypeLabel(q: SurveyQuestion): string {
+  const c = (q.config ?? {}) as Record<string, unknown>;
+  if (q.type === 'text' && c.encrypted === true) return '個資加密題';
+  if (q.type === 'text' && c.inputType === 'numeric') return '數字';
+  if (q.type === 'single_choice' && c.variant === 'yes_no') return '是/否';
+  if (q.type === 'single_choice' && c.renderAs === 'dropdown') return '下拉選單';
+  if (q.type === 'matrix' && (c.matrix as { multiple?: boolean } | undefined)?.multiple) return '複選矩陣';
+  return TYPE_DISPLAY[q.type] ?? q.type.replace('_', ' ');
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -234,7 +243,7 @@ export function QuestionBlockList({
 
             {/* Type label */}
             <div className="mt-0.5 pl-7 text-[10px] text-muted-foreground">
-              {TYPE_DISPLAY[q.type] ?? q.type.replace('_', ' ')}
+              {blockTypeLabel(q)}
             </div>
           </div>
         );

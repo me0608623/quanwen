@@ -1,5 +1,20 @@
 import { describe, expect, it, beforeAll } from 'vitest';
-import { CryptoService } from './crypto.service';
+import { CryptoService, looksEncryptedCipher } from './crypto.service';
+
+describe('looksEncryptedCipher', () => {
+  it('辨識真實密文，且不誤判明文', () => {
+    const enc = new CryptoService().encrypt('王小明 0912345678 台北市信義區');
+    expect(looksEncryptedCipher(enc)).toBe(true);
+    // 明文 / 其他格式不應誤判（避免過度遮蔽）
+    expect(looksEncryptedCipher('王小明')).toBe(false);
+    expect(looksEncryptedCipher('我覺得 v1 很好用：真的')).toBe(false);
+    expect(looksEncryptedCipher('{"陳述A":{"同意":true}}')).toBe(false);
+    expect(looksEncryptedCipher('')).toBe(false);
+    expect(looksEncryptedCipher(null)).toBe(false);
+    expect(looksEncryptedCipher(undefined)).toBe(false);
+    expect(looksEncryptedCipher('v2:a:b:c')).toBe(false);
+  });
+});
 
 describe('CryptoService', () => {
   let svc: CryptoService;

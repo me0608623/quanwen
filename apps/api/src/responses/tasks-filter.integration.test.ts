@@ -11,9 +11,11 @@ import type { AppDb } from '../db';
 import type { AntiCheatService } from './anti-cheat.service';
 import type { QualityAuditService } from './quality-audit.service';
 import type { ReputationService } from './reputation.service';
+import type { CouponsService } from '../wallet/coupons.service';
 import type { WalletService } from '../wallet/wallet.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 import type { SpinService } from '../spin/spin.service';
+import type { CryptoService } from '../common/crypto.service';
 
 const U1 = '11111111-1111-1111-1111-111111111111'; // respondent
 const SURVEYOR = '99999999-9999-9999-9999-999999999999';
@@ -110,6 +112,11 @@ describe('Tasks category filter (integration)', () => {
         external_url    TEXT,
         estimated_minutes INTEGER,
         is_anonymous  BOOLEAN NOT NULL DEFAULT true,
+        is_brand_survey BOOLEAN NOT NULL DEFAULT false,
+        coupon_brand    VARCHAR(100),
+        coupon_title    VARCHAR(200),
+        coupon_code     VARCHAR(100),
+        coupon_expires_at TIMESTAMPTZ,
         created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         updated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         published_at  TIMESTAMPTZ
@@ -172,10 +179,12 @@ describe('Tasks category filter (integration)', () => {
       db as unknown as AppDb,
       {} as AntiCheatService,
       {} as WalletService,
+      {} as CouponsService,
       {} as NotificationsService,
       {} as QualityAuditService,
       {} as ReputationService,
       {} as SpinService,
+      {} as CryptoService,
     );
   });
 

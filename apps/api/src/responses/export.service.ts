@@ -18,6 +18,7 @@ import {
   type OptionLabelMap,
 } from '../surveys/export/response-pivoter';
 import { redactPii } from '../surveys/analysis/anonymizer';
+import { looksEncryptedCipher, ENCRYPTED_ANSWER_PLACEHOLDER } from '../common/crypto.service';
 import { toCsvLine } from '../surveys/export/csv-util';
 
 const SYNTHETIC_YES_NO_OPTIONS = [
@@ -263,7 +264,7 @@ export class ExportService {
       for (const q of questions) {
         const a = answerByResponseQuestion.get(this.answerKey(r.id, q.id));
         if (!a) { row.push(''); continue; }
-        if (q.type === 'text') row.push(a.textAnswer ?? '');
+        if (q.type === 'text') row.push(a.textAnswer ? (looksEncryptedCipher(a.textAnswer) ? ENCRYPTED_ANSWER_PLACEHOLDER : a.textAnswer) : '');
         else if (q.type === 'rating') row.push(a.ratingValue ?? '');
         else if (q.type === 'single_choice' || q.type === 'multiple_choice') {
           const ids = Array.isArray(a.selectedOptionIds) ? a.selectedOptionIds as string[] : [];
@@ -360,7 +361,7 @@ export class ExportService {
       for (const q of questions) {
         const a = answerByResponseQuestion.get(this.answerKey(r.id, q.id));
         if (!a) { row.push(''); continue; }
-        if (q.type === 'text') row.push(a.textAnswer ?? '');
+        if (q.type === 'text') row.push(a.textAnswer ? (looksEncryptedCipher(a.textAnswer) ? ENCRYPTED_ANSWER_PLACEHOLDER : a.textAnswer) : '');
         else if (q.type === 'rating') row.push(a.ratingValue ?? '');
         else if (q.type === 'single_choice' || q.type === 'multiple_choice') {
           const ids = Array.isArray(a.selectedOptionIds) ? a.selectedOptionIds as string[] : [];
@@ -603,7 +604,9 @@ export class ExportService {
           ratingValue: a.ratingValue,
         }));
         const cells = pivotAnswerCells(questions, pivotAnswers, optionLabels).map((c, i) =>
-          TEXT_TYPES.has(questions[i].type) ? redactPii(c) : c,
+          TEXT_TYPES.has(questions[i].type)
+            ? (looksEncryptedCipher(c) ? ENCRYPTED_ANSWER_PLACEHOLDER : redactPii(c))
+            : c,
         );
         await write(
           toCsvLine([
@@ -765,7 +768,9 @@ export class ExportService {
           ratingValue: a.ratingValue,
         }));
         const cells = pivotAnswerCells(questions, pivotAnswers, optionLabels).map((c, i) =>
-          TEXT_TYPES.has(questions[i].type) ? redactPii(c) : c,
+          TEXT_TYPES.has(questions[i].type)
+            ? (looksEncryptedCipher(c) ? ENCRYPTED_ANSWER_PLACEHOLDER : redactPii(c))
+            : c,
         );
         sheet
           .addRow([

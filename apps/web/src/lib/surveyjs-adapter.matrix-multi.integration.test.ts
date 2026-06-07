@@ -32,7 +32,7 @@ describe('SurveyJS matrix integration', () => {
     ]);
 
     const model = new Model(surveyJsModel);
-    const surveyQuestion = model.getAllQuestions()[0] as {
+    const surveyQuestion = model.getAllQuestions()[0] as unknown as {
       getType: () => string;
       rows: unknown[];
       columns: unknown[];

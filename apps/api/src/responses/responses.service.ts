@@ -28,9 +28,11 @@ import { AntiCheatService } from './anti-cheat.service';
 import { QualityAuditService } from './quality-audit.service';
 import { ReputationService } from './reputation.service';
 import { WalletService } from '../wallet/wallet.service';
+import { CouponsService } from '../wallet/coupons.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { SpinService } from '../spin/spin.service';
 import { redactPii } from '../surveys/analysis/anonymizer';
+import { CryptoService, looksEncryptedCipher, ENCRYPTED_ANSWER_PLACEHOLDER } from '../common/crypto.service';
 import { shuffleOptions, generateSeed, type ShuffleOption } from '../surveys/shuffle';
 import { SurveyLotteryService } from '../surveys/survey-lottery.service';
 
@@ -42,10 +44,12 @@ export class ResponsesService {
     @Inject(DB) private readonly db: AppDb,
     private readonly antiCheat: AntiCheatService,
     private readonly walletService: WalletService,
+    private readonly coupons: CouponsService,
     private readonly notifications: NotificationsService,
     private readonly qualityAudit: QualityAuditService,
     private readonly reputation: ReputationService,
     private readonly spin: SpinService,
+    private readonly crypto: CryptoService,
     @Optional() private readonly surveyLottery?: SurveyLotteryService,
   ) {}
 
@@ -150,6 +154,10 @@ export class ResponsesService {
         // 外部問卷連結 + 建立者預估分鐘數（任務卡顯示「外部問卷」徽章與填答時間）
         externalUrl: surveys.externalUrl,
         estimatedMinutes: surveys.estimatedMinutes,
+        // 企業品牌問卷:1 分鐘填寫賺優惠券(tasks 頁淡金色分頁)
+        isBrandSurvey: surveys.isBrandSurvey,
+        couponBrand: surveys.couponBrand,
+        couponTitle: surveys.couponTitle,
         questionCount: sql<number>`coalesce(${questionCountSq.cnt}, 0)`,
       })
       .from(surveys)
@@ -583,12 +591,24 @@ export class ResponsesService {
       responseId = inserted[0].id;
 
       if (dto.answers.length > 0) {
+        // 個資加密題：config.encrypted=true 的題目，答案文字在落庫前以 AES-256-GCM 加密。
+        const encryptedQ = new Set(
+          surveyQRows
+            .filter((q) => {
+              const c = q.config;
+              return typeof c === 'object' && c !== null && !Array.isArray(c) && (c as Record<string, unknown>).encrypted === true;
+            })
+            .map((q) => q.id),
+        );
         await tx.insert(responseAnswers).values(
           dto.answers.map((a) => ({
             responseId: responseId!,
             surveyId, // 反正規化（§3-B1）
             questionId: a.questionId,
-            textAnswer: a.textAnswer,
+            textAnswer:
+              a.textAnswer && encryptedQ.has(a.questionId)
+                ? this.crypto.encrypt(a.textAnswer)
+                : a.textAnswer,
             selectedOptionIds: a.selectedOptionIds ?? null,
             ratingValue: a.ratingValue,
           })),
@@ -724,6 +744,11 @@ export class ResponsesService {
           lotteryDrawMode: surveys.lotteryDrawMode,
           lotteryPrize: surveys.lotteryPrize,
           lotteryDrawnAt: surveys.lotteryDrawnAt,
+          isBrandSurvey: surveys.isBrandSurvey,
+          couponBrand: surveys.couponBrand,
+          couponTitle: surveys.couponTitle,
+          couponCode: surveys.couponCode,
+          couponExpiresAt: surveys.couponExpiresAt,
           qualityScore: surveyResponses.qualityScore,
         })
         .from(surveyResponses)
@@ -843,6 +868,11 @@ export class ResponsesService {
       rewardMode: string;
       lotteryDrawMode: string | null;
       lotteryPrize?: string | null;
+      isBrandSurvey?: boolean;
+      couponBrand?: string | null;
+      couponTitle?: string | null;
+      couponCode?: string | null;
+      couponExpiresAt?: Date | null;
     },
     responseId: string,
     acceptedCount: number,
@@ -860,6 +890,22 @@ export class ResponsesService {
       .catch((err: unknown) =>
         this.logger.error(`轉盤次數發放失敗 respondentId=${survey.respondentId}`, err),
       );
+    // 企業品牌問卷:審核通過發優惠券到優惠券夾(同一 response 冪等)
+    if (survey.isBrandSurvey && survey.couponTitle) {
+      this.coupons
+        .issueForResponse({
+          userId: survey.respondentId,
+          surveyId: survey.surveyId,
+          responseId,
+          brandName: survey.couponBrand ?? null,
+          title: survey.couponTitle,
+          code: survey.couponCode ?? null,
+          expiresAt: survey.couponExpiresAt ?? null,
+        })
+        .catch((err: unknown) =>
+          this.logger.error(`優惠券發放失敗 responseId=${responseId}`, err),
+        );
+    }
     if (survey.rewardMode === 'fixed' && survey.rewardPoints > 0) {
       this.walletService
         .issueReward({
@@ -965,6 +1011,11 @@ export class ResponsesService {
         lotteryDrawMode: surveys.lotteryDrawMode,
         lotteryPrize: surveys.lotteryPrize,
         lotteryDrawnAt: surveys.lotteryDrawnAt,
+        isBrandSurvey: surveys.isBrandSurvey,
+        couponBrand: surveys.couponBrand,
+        couponTitle: surveys.couponTitle,
+        couponCode: surveys.couponCode,
+        couponExpiresAt: surveys.couponExpiresAt,
       })
       .from(surveyResponses)
       .innerJoin(surveys, eq(surveyResponses.surveyId, surveys.id))
@@ -1351,10 +1402,11 @@ export class ResponsesService {
         };
       }
 
-      // text
+      // text（個資加密題：以佔位字串遮蔽，不向問卷方揭露密文/明文）
       const texts = qAnswers
         .map((a) => a.textAnswer)
-        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0);
+        .filter((value): value is string => typeof value === 'string' && value.trim().length > 0)
+        .map((value) => (looksEncryptedCipher(value) ? ENCRYPTED_ANSWER_PLACEHOLDER : value));
       return { questionId: q.id, title: q.title, type: q.type, totalAnswers: texts.length, sampleTexts: texts.slice(0, 20) };
     });
 
@@ -1441,8 +1493,43 @@ export class ResponsesService {
       );
 
     return rows
-      .filter((r) => r.textAnswer && r.textAnswer.trim().length > 0)
+      // 個資加密題：排除，不把密文/PII 送進情緒分析（AI）
+      .filter((r) => r.textAnswer && r.textAnswer.trim().length > 0 && !looksEncryptedCipher(r.textAnswer))
       .map((r) => ({ responseId: r.responseId, text: r.textAnswer! }));
+  }
+
+  /**
+   * 管理員專用：解密某問卷所有「個資加密題」的答案。
+   * 僅供 AdminGuard（role==='admin'，即超級管理員）呼叫，問卷方無此權限。
+   */
+  async getEncryptedAnswersForAdmin(surveyId: string) {
+    const rows = await this.db
+      .select({
+        responseId: responseAnswers.responseId,
+        questionId: responseAnswers.questionId,
+        questionTitle: surveyQuestions.title,
+        textAnswer: responseAnswers.textAnswer,
+        submittedAt: surveyResponses.submittedAt,
+      })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .innerJoin(surveyQuestions, eq(responseAnswers.questionId, surveyQuestions.id))
+      .where(
+        and(
+          eq(responseAnswers.surveyId, surveyId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+        ),
+      );
+
+    return rows
+      .filter((r) => looksEncryptedCipher(r.textAnswer))
+      .map((r) => ({
+        responseId: r.responseId,
+        questionId: r.questionId,
+        questionTitle: r.questionTitle,
+        value: this.crypto.tryDecrypt(r.textAnswer),
+        submittedAt: r.submittedAt,
+      }));
   }
 
   // ─── 問券方：每日填答趨勢（近 30 天）────────────────────────────────────────

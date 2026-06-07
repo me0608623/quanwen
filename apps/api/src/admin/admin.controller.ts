@@ -70,6 +70,15 @@ export class AdminController {
     return this.aiAudit.evaluateSurvey(id);
   }
 
+  /**
+   * GET /admin/surveys/:id/encrypted-answers
+   * 超級管理員專用：解密某問卷的「個資加密題」答案（問卷方看不到明文）。
+   */
+  @Get('surveys/:id/encrypted-answers')
+  getEncryptedAnswers(@Param('id') id: string) {
+    return this.responses.getEncryptedAnswersForAdmin(id);
+  }
+
   // ─── 問卷管理 ────────────────────────────────────────────────────────────────
 
   /** GET /admin/surveys?status=pending_review */

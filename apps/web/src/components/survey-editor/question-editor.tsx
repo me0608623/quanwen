@@ -12,7 +12,8 @@ type DisplayQuestionType =
   | 'numeric'
   | 'yes_no'
   | 'dropdown'
-  | 'matrix';
+  | 'matrix'
+  | 'encrypted';
 
 const TYPE_LABELS: Record<DisplayQuestionType, string> = {
   single_choice: '單選',
@@ -23,6 +24,7 @@ const TYPE_LABELS: Record<DisplayQuestionType, string> = {
   yes_no: '是/否',
   dropdown: '下拉選單',
   matrix: '矩陣量表',
+  encrypted: '個資加密題',
 };
 
 const DEFAULT_MATRIX_COLUMNS = ['非常不同意', '不同意', '普通', '同意', '非常同意'];
@@ -55,6 +57,7 @@ export function QuestionEditor({
 }: QuestionEditorProps) {
   const [activeTab, setActiveTab] = useState<ActiveTab>('content');
   const displayType = useMemo<DisplayQuestionType>(() => {
+    if (question.type === 'text' && question.config?.encrypted === true) return 'encrypted';
     if (question.type === 'text' && question.config?.inputType === 'numeric') return 'numeric';
     if (question.type === 'single_choice' && question.config?.variant === 'yes_no') return 'yes_no';
     if (question.type === 'single_choice' && question.config?.renderAs === 'dropdown') return 'dropdown';
@@ -147,6 +150,12 @@ export function QuestionEditor({
     delete baseConfig.variant;
     delete baseConfig.renderAs;
     delete baseConfig.inputType;
+    delete baseConfig.encrypted;
+
+    if (nextType === 'encrypted') {
+      onChange({ ...question, type: 'text', options: undefined, config: { ...baseConfig, encrypted: true } });
+      return;
+    }
 
     if (nextType === 'matrix') {
       const existing = question.config?.matrix as { rows?: string[]; columns?: string[] } | undefined;
@@ -448,6 +457,12 @@ export function QuestionEditor({
                   ? '複選矩陣：填答者可在每一列「陳述」勾選多個「量表選項」。'
                   : '單選矩陣：填答者會對每一列「陳述」，從上方「量表選項」各選一個。'}
               </p>
+            </div>
+          )}
+
+          {displayType === 'encrypted' && (
+            <div className="rounded border border-amber-300 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              🔒 個資加密題：填答者的文字回答會以 AES-256-GCM 加密後儲存。問卷方（你）在統計、匯出、AI 分析中都只會看到「已加密」佔位字串；僅平台超級管理員可解密查看。適用於姓名、電話、地址、身分證等敏感個資。
             </div>
           )}
 

@@ -14,6 +14,21 @@ import { createCipheriv, createDecipheriv, randomBytes, scryptSync } from 'crypt
  * 3. 輸出格式：`v1:<iv_base64>:<authTag_base64>:<cipher_base64>`，版本前綴方便日後輪替金鑰
  * 4. decrypt 失敗 throw 而非靜默回 null（避免破解攻擊靜默通過）
  */
+/** 顯示給「非管理員」看的加密答案佔位字串（個資加密題） */
+export const ENCRYPTED_ANSWER_PLACEHOLDER = '🔒 已加密（僅管理員可見）';
+
+/**
+ * 純函式：判斷字串是否為 CryptoService 密文格式 `v1:iv:tag:ct`（4 段、首段 v1、其餘 base64）。
+ * 不需金鑰，供匯出層等無 DI 處遮蔽加密答案用。自然明文幾乎不可能命中此格式。
+ */
+export function looksEncryptedCipher(value: unknown): boolean {
+  if (typeof value !== 'string') return false;
+  const parts = value.split(':');
+  if (parts.length !== 4 || parts[0] !== 'v1') return false;
+  const b64 = /^[A-Za-z0-9+/]+={0,2}$/;
+  return parts.slice(1).every((p) => p.length > 0 && b64.test(p));
+}
+
 @Injectable()
 export class CryptoService {
   private readonly logger = new Logger(CryptoService.name);
