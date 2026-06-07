@@ -41,6 +41,8 @@ interface QuestionEditorProps {
   index: number;
   onChange: (q: SurveyQuestion) => void;
   onRemove: () => void;
+  /** 複製此題（插入到本題下方，標題加「（複本）」供微調） */
+  onDuplicate?: () => void;
   ratingSiblings?: Array<{ index: number; title: string }>;
   jumpTargets?: Array<{ index: number; title: string }>;
 }
@@ -52,6 +54,7 @@ export function QuestionEditor({
   index,
   onChange,
   onRemove,
+  onDuplicate,
   ratingSiblings = [],
   jumpTargets = [],
 }: QuestionEditorProps) {
@@ -248,6 +251,16 @@ export function QuestionEditor({
           />
           必填
         </label>
+        {onDuplicate && (
+          <button
+            type="button"
+            onClick={onDuplicate}
+            className="text-xs text-[#126b8a] hover:underline"
+            title="複製此題到下方，再微調文字與選項"
+          >
+            複製此題
+          </button>
+        )}
         <button type="button" onClick={onRemove} className="text-xs text-destructive hover:underline">
           刪除
         </button>

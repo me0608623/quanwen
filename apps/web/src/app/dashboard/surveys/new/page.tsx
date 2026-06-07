@@ -128,6 +128,22 @@ export default function NewSurveyPage() {
     setQuestions((prev) => prev.filter((_, idx) => idx !== i).map((q, idx) => ({ ...q, sortOrder: idx })));
   };
 
+  // 複製題目：插入到原題下方，標題加「（複本）」供微調；選項重新產 id 避免共用
+  const duplicateQuestion = (i: number) => {
+    setQuestions((prev) => {
+      const src = prev[i];
+      if (!src) return prev;
+      const copy = {
+        ...src,
+        id: undefined,
+        title: src.title ? `${src.title}（複本）` : src.title,
+        options: src.options?.map((o) => ({ ...o, id: crypto.randomUUID() })),
+      };
+      const next = [...prev.slice(0, i + 1), copy, ...prev.slice(i + 1)];
+      return next.map((q, idx) => ({ ...q, sortOrder: idx }));
+    });
+  };
+
   const addQuestion = () => {
     setQuestions((prev) => [...prev, { ...defaultQuestion(), sortOrder: prev.length }]);
   };
@@ -624,6 +640,7 @@ export default function NewSurveyPage() {
             index={i}
             onChange={(updated) => updateQuestion(i, updated)}
             onRemove={() => removeQuestion(i)}
+            onDuplicate={() => duplicateQuestion(i)}
             jumpTargets={questions
               .map((qq, idx) => ({ question: qq, idx }))
               .filter(({ idx }) => idx !== i)

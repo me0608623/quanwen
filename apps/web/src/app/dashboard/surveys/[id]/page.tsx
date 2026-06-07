@@ -552,6 +552,7 @@ export default function SurveyDetailPage() {
           index={selectedQuestionIndex}
           onChange={(next) => updateQuestion(selectedQuestionIndex, next)}
           onRemove={() => removeQuestion(selectedQuestionIndex)}
+          onDuplicate={() => duplicateQuestion(selectedQuestionIndex)}
           jumpTargets={questions
             .map((qq, idx) => ({ question: qq, idx }))
             .filter(({ idx }) => idx !== selectedQuestionIndex)
@@ -671,6 +672,7 @@ export default function SurveyDetailPage() {
                 index={index}
                 onChange={(next) => updateQuestion(index, next)}
                 onRemove={() => removeQuestion(index)}
+                onDuplicate={() => duplicateQuestion(index)}
                 jumpTargets={questions
                   .map((qq, idx) => ({ question: qq, idx }))
                   .filter(({ idx }) => idx !== index)

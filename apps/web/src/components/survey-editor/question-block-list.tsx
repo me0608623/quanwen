@@ -211,7 +211,7 @@ export function QuestionBlockList({
                     e.stopPropagation();
                     onDuplicate(index);
                   }}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-primary transition-opacity"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 max-sm:opacity-60 hover:text-primary transition-opacity"
                   aria-label={`複製第 ${index + 1} 題`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -229,7 +229,7 @@ export function QuestionBlockList({
                     e.stopPropagation();
                     onDelete(index);
                   }}
-                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 hover:text-destructive transition-opacity"
+                  className="shrink-0 rounded p-0.5 text-muted-foreground opacity-0 group-hover:opacity-100 max-sm:opacity-60 hover:text-destructive transition-opacity"
                   aria-label={`刪除第 ${index + 1} 題`}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
