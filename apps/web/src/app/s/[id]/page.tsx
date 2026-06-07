@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
 import { usePublicLinkSurvey, useSubmitPublicResponse } from '@/hooks/use-responses';
@@ -9,6 +9,7 @@ import { lotteryDisclosure } from '@/lib/lottery-display';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
+import { getToken } from '@/lib/token';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
 
@@ -30,6 +31,9 @@ export default function PublicSurveyPage() {
   const submit = useSubmitPublicResponse(id, anonToken);
 
   const [done, setDone] = useState<{ flagged: boolean } | null>(null);
+  // 登入偵測放 useEffect，避免 SSR/CSR 不一致造成 hydration mismatch
+  const [hasToken, setHasToken] = useState(false);
+  useEffect(() => setHasToken(!!getToken()), []);
 
   if (isLoading) return <main className="p-6"><LoadingSpinner /></main>;
   if (!survey)
@@ -48,15 +52,61 @@ export default function PublicSurveyPage() {
     );
   if (survey.rewardMode === 'lottery') {
     return (
-      <main className="mx-auto max-w-xl px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold">{survey.title}</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
-          這份問卷提供「{survey.lotteryPrize}」抽獎回饋。請登入後填答，系統才能在開獎後通知你是否中獎。
+      <main className="mx-auto max-w-xl px-4 py-8">
+        {survey.coverImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveAssetUrl(survey.coverImageUrl)}
+            alt=""
+            className="mb-4 max-h-60 w-full rounded-xl object-cover"
+          />
+        )}
+        <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
+        {survey.description && (
+          <p className="mb-2 whitespace-pre-wrap text-sm text-muted-foreground">{survey.description}</p>
+        )}
+        {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+          <div className="mb-3 space-y-3">
+            {survey.welcomeImages.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${url}-${i}`}
+                src={resolveAssetUrl(url)}
+                alt={`歡迎圖 ${i + 1}`}
+                className="w-full rounded-xl object-contain"
+              />
+            ))}
+          </div>
+        )}
+        <p className="mb-4 text-xs text-muted-foreground">
+          {survey.questions.length} 題
+          {survey.questions.length > 0 && ` · 預估約 ${estimateFillMinutes(survey.questions.length)} 分鐘`}
         </p>
-        <p className="mt-2 text-sm font-semibold text-amber-800">抽獎規則：{lotteryDisclosure(survey)}</p>
-        <Link href={`/auth/login?redirect=${encodeURIComponent(`/tasks/${id}`)}`} className="mt-6 inline-flex rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700">
-          登入後參與抽獎
-        </Link>
+        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
+          <p className="text-sm font-semibold text-amber-900">🎁 抽獎回饋：{survey.lotteryPrize}</p>
+          <p className="mt-1 text-sm text-amber-800">抽獎規則：{lotteryDisclosure(survey)}</p>
+        </div>
+        <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4 text-center">
+          <p className="text-sm text-muted-foreground">
+            {hasToken
+              ? '你已登入券問，前往填答即可參與抽獎。'
+              : '需要登入券問帳號填答，系統才能在開獎後通知你是否中獎。'}
+          </p>
+          <Link
+            href={hasToken ? `/tasks/${id}` : `/auth/login?redirect=${encodeURIComponent(`/tasks/${id}`)}`}
+            className="mt-3 inline-flex rounded-lg bg-amber-600 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+          >
+            {hasToken ? '前往填答參與抽獎' : '登入後參與抽獎'}
+          </Link>
+          {!hasToken && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              還沒有帳號？
+              <Link href="/auth/register" className="ml-1 font-medium text-[#126b8a] hover:underline">
+                免費註冊 →
+              </Link>
+            </p>
+          )}
+        </div>
       </main>
     );
   }
