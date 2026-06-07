@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useParams } from 'next/navigation';
 import {
   AdminUserDetail,
   useAdminUserDetail,
@@ -54,11 +55,14 @@ function money(n: number) {
   return `NT$${n.toLocaleString()}`;
 }
 
-export default function AdminUserDetailPage({ params }: { params: { id: string } }) {
+export default function AdminUserDetailPage() {
+  // Next 16：client component 用 useParams() 取得路由參數（params prop 已變 Promise，
+  // 直接讀 params.id 會是 undefined → query 停用 → 頁面空白）。
+  const { id } = useParams<{ id: string }>();
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [scanEnabled, setScanEnabled] = useState(false);
-  const detail = useAdminUserDetail(params.id);
-  const scan = useMultiAccountScan(params.id, scanEnabled);
+  const detail = useAdminUserDetail(id);
+  const scan = useMultiAccountScan(id, scanEnabled);
   const suspend = useSuspendUser();
   const unsuspend = useUnsuspendUser();
 
@@ -74,7 +78,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
 
   const handleSuspend = (reason: string) => {
     suspend.mutate(
-      { id: params.id, reason },
+      { id, reason },
       { onSuccess: () => setSuspendOpen(false) },
     );
   };
@@ -100,7 +104,7 @@ export default function AdminUserDetailPage({ params }: { params: { id: string }
           <div className="flex gap-2">
             {user.status === 'suspended' ? (
               <button
-                onClick={() => unsuspend.mutate(params.id)}
+                onClick={() => unsuspend.mutate(id)}
                 disabled={unsuspend.isPending}
                 className="rounded-md border border-green-600 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
               >
