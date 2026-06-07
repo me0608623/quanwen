@@ -77,7 +77,7 @@ export default function GuidePage() {
           <Item label="收益：">通過審核的獎勵進入「待領獎勵 / 我的收益」，可查看現金、禮券與託管狀態。</Item>
           <Item label="儲值（發問卷方）：">透過綠界 ECPay，單筆 NT$100–100,000。平台帳上零持股，全程託管。</Item>
           <Item label="提領：">最低 NT$300、每日上限 NT$30,000；提領 ≥ NT$2,000 需先通過 KYC 身分驗證。</Item>
-          <Item label="平台手續費：">每筆獎勵發放收取 15% 服務費。</Item>
+          <Item label="平台手續費：">每筆獎勵發放收取 10% 服務費。</Item>
           <p className="text-xs">所有金額以新台幣整數計算；身分證、銀行帳號等個資以 AES-256 加密保存。</p>
         </Section>
 
@@ -97,7 +97,8 @@ export default function GuidePage() {
           <ul className="list-disc space-y-1 pl-5">
             <li>品質分 ≥ 80 通過發獎、50–79 可疑、&lt; 50 退件</li>
             <li>退件可申訴；連續退件可能停權</li>
-            <li>平台手續費 15%；金額一律新台幣整數</li>
+            <li>問卷發布即上架，AI 只提供品質建議、不退件不擋發布</li>
+            <li>平台手續費 10%；金額一律新台幣整數</li>
             <li>儲值 NT$100–100,000；提領 NT$300 起、每日上限 NT$30,000、≥NT$2,000 需 KYC</li>
             <li>每完成一份問卷 +1 次轉盤；轉盤最高 200 點</li>
             <li>外部問卷由建立者自行發放獎勵，平台不代為審核</li>

@@ -3,13 +3,13 @@ import type { NewPointShopItem } from './schema';
 /**
  * 積分商城禮券雛形目錄（便利商店禮券）。
  *
- * 換算基準：1 積分 = NT$0.5；平台加成 15%（PLATFORM_MARKUP_RATE，與現金獎勵抽成 PLATFORM_FEE_RATE 一致）。
+ * 換算基準：1 積分 = NT$0.5；平台加成 10%（PLATFORM_MARKUP_RATE，與現金獎勵抽成 PLATFORM_FEE_RATE 一致）。
  * → costPoints = round(faceValue × 2 × 1.15)。例：NT$100 → 230 點、NT$500 → 1150 點。
  * 圖片：全部放 apps/web/public/vouchers/（不可放 /shop/，會被 middleware 當受保護路由攔截）。
  *   7-11 圖來源 ibon i禮讚；全家圖來源 Edenred Richart Life（官方禮物卡卡面）。
  * 面額：7-ELEVEN 50/100/200/300/500；全家禮物卡 50/100/200/500。
  */
-export const PLATFORM_MARKUP_RATE = 0.15;
+export const PLATFORM_MARKUP_RATE = 0.10;
 
 const points = (faceValue: number) => Math.round(faceValue * 2 * (1 + PLATFORM_MARKUP_RATE));
 

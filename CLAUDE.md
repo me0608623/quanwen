@@ -144,7 +144,7 @@ Standard `/tasks` marketplace filters out `type='mutual'` surveys.
 
 All monetary amounts are stored as **integers in New Taiwan Dollars (NT$)**. Never use floats.
 
-Double-entry accounting: every `WalletService` mutation creates both a `transactions` record and two `journal_entries` (debit + credit). Survey publication locks budget (`lockedCash`); survey close releases unused budget back to `cashBalance`. Platform takes **15%** fee on each reward payout (`PLATFORM_FEE_RATE = 0.15`).
+Double-entry accounting: every `WalletService` mutation creates both a `transactions` record and two `journal_entries` (debit + credit). Survey publication locks budget (`lockedCash`); survey close releases unused budget back to `cashBalance`. Platform takes **10%** fee on each reward payout (`PLATFORM_FEE_RATE = 0.10`，2026-06-07 由 15% 調降).
 
 ECPay deposit limits: NT$100–NT$100,000 per transaction. Withdrawal limits: NT$300 minimum, NT$30,000 maximum per day. KYC verification is required before withdrawal.
 
@@ -172,7 +172,7 @@ Text-type answers (`text`, `matrix`) are passed through `redactPii()` before exp
 ❌ Call respondent wallet "儲值"   ✅ "待領獎勵" / "我的收益"
 ❌ Self-collect payments          ✅ ECPay (綠界) payment gateway only
 ❌ Send PII to Z.ai               ✅ De-identify before any AI call
-❌ Platform fee = 10%             ✅ PLATFORM_FEE_RATE = 0.15 (15%)
+❌ Platform fee = 15%（舊值）      ✅ PLATFORM_FEE_RATE = 0.10 (10%，2026-06-07 起)
 ❌ Auto-link OAuth by email       ✅ Always create new user; explicit binding via /settings/accounts
 ❌ Add schema without DDL sync    ✅ Update both schema/*.ts AND database.module.ts PGlite block
 ❌ role guard for feature access  ✅ Check profile.isOnboardingDone; all users have both profiles

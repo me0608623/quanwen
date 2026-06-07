@@ -22,7 +22,7 @@ import { EcpayService } from './ecpay.service';
 import { CryptoService } from '../common/crypto.service';
 import { KycService } from '../kyc/kyc.service';
 
-const PLATFORM_FEE_RATE = 0.15; // 15% 手續費
+const PLATFORM_FEE_RATE = 0.10; // 10% 手續費（2026-06-07 由 15% 調降）
 const MIN_WITHDRAWAL = 300;
 const MAX_DAILY_WITHDRAWAL = 30_000;
 
@@ -39,7 +39,7 @@ export class WalletService {
     private readonly kyc: KycService,
   ) {}
 
-  // ─── 手續費 / 單份成本（獎金 + 15% 手續費）──────────────────────────────────
+  // ─── 手續費 / 單份成本（獎金 + 10% 手續費）──────────────────────────────────
   // 鎖定預算、預算檢查、發獎扣款三處必須用同一個單份成本，否則鎖定額與實付額不一致。
   private feeFor(reward: number): number {
     return Math.ceil(reward * PLATFORM_FEE_RATE);
@@ -372,7 +372,7 @@ export class WalletService {
           status: txResult.status,
           relatedSurveyId: surveyId,
           relatedResponseId: responseId,
-          note: `平台手續費 15%`,
+          note: `平台手續費 10%`,
           completedAt: txResult.status === 'success' ? now : null,
         })
         .returning();
@@ -545,7 +545,7 @@ export class WalletService {
     // 僅問卷擁有者可查預算需求，避免他人枚舉任意問卷的獎金/目標數設定。
     if (survey.surveyorId !== surveyorId) throw new NotFoundException('找不到問卷');
 
-    // 含 15% 手續費，與實際發獎扣款一致；否則剛好足額本金的問卷會通過檢查卻發不出獎。
+    // 含 10% 手續費，與實際發獎扣款一致；否則剛好足額本金的問卷會通過檢查卻發不出獎。
     const requiredAmount = this.unitCostFor(survey.rewardPoints) * survey.targetCount;
     const walletBalance = wallet?.cashBalance ?? 0;
 
@@ -857,7 +857,7 @@ export class WalletService {
     const survey = surveyRows[0];
     if (!survey || survey.rewardPoints === 0) return;
 
-    // 鎖定 (獎金 + 15% 手續費) × 目標數，確保發獎時托管款足以支付本金與手續費。
+    // 鎖定 (獎金 + 10% 手續費) × 目標數，確保發獎時托管款足以支付本金與手續費。
     const totalBudget = this.unitCostFor(survey.rewardPoints) * survey.targetCount;
     await this.ensureWallet(surveyorId);
 

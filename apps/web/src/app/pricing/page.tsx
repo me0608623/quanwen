@@ -30,9 +30,9 @@ export default function PricingPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--q-on-dark-soft)]">
               標準發案 · 推薦
             </p>
-            <h2 className="mt-3 font-serif text-3xl">預算的 15%</h2>
+            <h2 className="mt-3 font-serif text-3xl">預算的 10%</h2>
             <ul className="mt-4 space-y-2 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-              <li>僅就成功發放的問卷預算收取 15% 服務費。</li>
+              <li>僅就成功發放的問卷預算收取 10% 服務費。</li>
               <li>已含 AI 審核、洞察額度與綠界金流手續費。</li>
               <li>無效樣本自動過濾不計費，未用完預算無條件退回現金錢包。</li>
             </ul>

@@ -192,7 +192,7 @@ describe('WalletService.issueReward (integration)', () => {
 
     const surveyorAfter = await cashOf(SURVEYOR_ID);
     const respondentAfter = await cashOf(RESPONDENT_ID);
-    expect(surveyorAfter).toBe(surveyorBefore - 115); // 100 + 15 fee
+    expect(surveyorAfter).toBe(surveyorBefore - 110); // 100 + 10 fee
     expect(respondentAfter).toBe(respondentBefore + 100);
 
     const txns = await txnsByResponse(responseId);
@@ -298,14 +298,14 @@ describe('WalletService.issueReward (integration)', () => {
     const txns = await txnsByResponse(responseId);
     const feeTxn = txns.find((t) => t.type === 'platform_fee');
     expect(feeTxn).toBeTruthy();
-    expect(feeTxn!.amount).toBe(30); // 15% of 200
+    expect(feeTxn!.amount).toBe(20); // 10% of 200
 
     const entries = await db
       .select()
       .from(schema.journalEntries)
       .where(eq(schema.journalEntries.transactionId, feeTxn!.id));
     const platformRev = entries.find((e) => e.accountName === 'platform_revenue');
-    expect(platformRev?.creditAmount).toBe(30);
+    expect(platformRev?.creditAmount).toBe(20);
   });
 
   it('6. 同一份填答重試發獎時不重複扣款或入帳', async () => {
