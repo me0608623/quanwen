@@ -3,12 +3,30 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 
 const connectors = [
-  "綠界 ECPay（金流託管）",
-  "Google 登入",
-  "LINE 登入",
-  "7-11 ibon 禮券",
-  "全家 FamiPort 禮券",
-  "AI 品質引擎",
+  {
+    name: "綠界 ECPay 金流託管",
+    desc: "儲值、發放、退款與分潤都經綠界處理，預算全額託管、平台不碰金流。",
+  },
+  {
+    name: "Google 登入",
+    desc: "一鍵 OAuth 登入免記密碼，降低註冊流失。",
+  },
+  {
+    name: "LINE 登入",
+    desc: "串接台灣最普及的 LINE 帳號，填答者快速進場。",
+  },
+  {
+    name: "7-ELEVEN 數位禮券",
+    desc: "累積的積分可兌換 7-ELEVEN 禮券，全台門市通用。",
+  },
+  {
+    name: "全家禮物卡",
+    desc: "累積的積分可兌換全家禮物卡，全台門市通用。",
+  },
+  {
+    name: "AI 品質引擎",
+    desc: "三層審核與洞察分析內建於流程，問卷發布後即時生效。",
+  },
 ];
 
 export default function IntegrationsPage() {
@@ -30,13 +48,11 @@ export default function IntegrationsPage() {
         <div className="mx-auto grid max-w-6xl gap-4 px-4 sm:px-6 md:grid-cols-2 lg:grid-cols-3 lg:px-8">
           {connectors.map((item) => (
             <article
-              key={item}
+              key={item.name}
               className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6"
             >
-              <p className="text-lg font-semibold text-[var(--q-ink)]">{item}</p>
-              <p className="mt-2 text-sm text-[var(--q-muted)]">
-                已納入券問流程，部署後可直接用在問卷發布、填答驗證與獎勵發放。
-              </p>
+              <p className="text-lg font-semibold text-[var(--q-ink)]">{item.name}</p>
+              <p className="mt-2 text-sm text-[var(--q-muted)]">{item.desc}</p>
             </article>
           ))}
         </div>

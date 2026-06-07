@@ -32,9 +32,9 @@ export default function PricingPage() {
             </p>
             <h2 className="mt-3 font-serif text-3xl">預算的 15%</h2>
             <ul className="mt-4 space-y-2 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-              <li>僅從成功發放的問卷預算收取 15% 服務費。</li>
-              <li>含 AI 審核與洞察額度，含綠界金流手續費。</li>
-              <li>自動過濾無效樣本不計費，未用完預算無條件退回現金錢包。</li>
+              <li>僅就成功發放的問卷預算收取 15% 服務費。</li>
+              <li>已含 AI 審核、洞察額度與綠界金流手續費。</li>
+              <li>無效樣本自動過濾不計費，未用完預算無條件退回現金錢包。</li>
             </ul>
           </article>
 
@@ -51,7 +51,7 @@ export default function PricingPage() {
       <section className="pb-20">
         <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
           <p className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] px-6 py-4 text-center text-sm text-[var(--q-body-strong)]">
-            未用預算 100% 退回，平台全程零持股託管。
+            平台全程託管，未動用預算 100% 退回，不賺價差。
           </p>
         </div>
       </section>
