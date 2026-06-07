@@ -105,12 +105,25 @@ export function SurveyRendererSurveyJS({
           --sjs-primary-forecolor: #ffffff;
           --sjs-primary-backcolor-light: color-mix(in srgb, var(--qw-accent, #126b8a) 10%, transparent);
           --sjs-primary-backcolor-dark: var(--qw-accent-dark, #0f5d78);
+          /* ⚠️ SurveyJS 的 fallback 鏈會撿到 shadcn 的 --background（HSL 分量格式，非合法色值）
+             導致題目卡背景變透明、題目全部黏在一起。明確定義 SJS 變數，讓 fallback 不會走到 --background。 */
+          --sjs-question-background: #ffffff;
+          --sjs-questionpanel-backcolor: #ffffff;
+          --sjs-general-backcolor: #ffffff;
+          --sjs-general-backcolor-dim: #f1f3f5;
         }
-        .surveyjs-wrapper .sd-title {
+        /* 只隱藏「問卷層級」標題（頁首已另行顯示）。
+           ⚠️ 不能用 .sd-title 一刀切 — SurveyJS 每題標題也帶 sd-title class，
+           曾導致填答頁看不到題目文字、選項全部連在一起。 */
+        .surveyjs-wrapper .sd-container-modern__title {
           display: none;
         }
         .surveyjs-wrapper .sd-page__title {
           display: none;
+        }
+        /* 題目卡之間留間距，題目不互相黏在一起 */
+        .surveyjs-wrapper .sd-question {
+          margin-bottom: 0.75rem;
         }
         .surveyjs-wrapper .sd-btn {
           background-color: var(--qw-accent, #126b8a);

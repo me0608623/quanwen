@@ -30,6 +30,7 @@ import { SurveyStylePanel } from '@/components/survey-editor/survey-style-panel'
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { usePricingAdvice } from '@/hooks/use-pricing';
 import { estimateFillMinutes } from '@/lib/fill-time';
+import { lotteryDrawRule } from '@/lib/lottery-display';
 import { SURVEY_TEMPLATES } from '@/lib/survey-templates';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -187,7 +188,7 @@ export default function SurveyDetailPage() {
     alert(e?.response?.data?.message ?? fallback);
   };
 
-  const handleSave = async () => {
+  const handleSave = async (): Promise<boolean> => {
     const audienceCriteria = {
       ...audience,
       minReputationScore: minReputation > 0 ? minReputation : undefined,
@@ -237,8 +238,10 @@ export default function SurveyDetailPage() {
         });
       }
       setDirty(false);
+      return true;
     } catch (err) {
       showAxiosError(err, '儲存失敗，請稍後再試。');
+      return false;
     }
   };
 
@@ -258,6 +261,11 @@ export default function SurveyDetailPage() {
 
   const handlePublish = async () => {
     try {
+      // 發布的是「伺服器上的」問卷 — 有未儲存變更（含一鍵補上的抽獎說明）先存再發布
+      if (dirty) {
+        const saved = await handleSave();
+        if (!saved) return;
+      }
       await publishSurvey.mutateAsync(id);
       setShowPublishConfirm(false);
       // Don't use alert() — it blocks Playwright and delays React re-render.
@@ -265,6 +273,19 @@ export default function SurveyDetailPage() {
     } catch (err) {
       showAxiosError(err, '發布問卷失敗，請稍後再試。');
     }
+  };
+
+  // 抽獎問卷：問卷說明應寫明「此問卷為抽獎項目、獎項、幾份、如何抽」— 一鍵補上
+  const descriptionMentionsLottery = description.includes('抽獎');
+  const appendLotteryNotice = () => {
+    const drawRule = lotteryDrawRule({
+      lotteryWinnerCount,
+      lotteryDrawMode,
+      lotteryDrawAt: lotteryDrawMode === 'scheduled' ? localInputToIso(lotteryDrawAt) : null,
+    });
+    const notice = `【抽獎說明】此問卷為抽獎項目：完成填答並通過品質審核即獲得抽獎資格。獎項：${lotteryPrize.trim() || '（請填寫獎項）'}，共 ${lotteryWinnerCount} 份。開獎方式：${drawRule}，中獎將以站內通知告知。`;
+    setDescription((prev) => (prev.trim() ? `${prev.trimEnd()}\n\n${notice}` : notice));
+    markDirty();
   };
 
   const handleDelete = async () => {
@@ -895,6 +916,23 @@ export default function SurveyDetailPage() {
                   <p className="mt-1.5 text-amber-700">
                     發布即代表你承諾於開獎後 7 日內交付獎品；填答者會在填答頁看到以上抽獎資訊，平台將追蹤履約。
                   </p>
+                  {descriptionMentionsLottery ? (
+                    <p className="mt-2 text-emerald-700">✓ 問卷說明已提及抽獎資訊。</p>
+                  ) : (
+                    <div className="mt-2 rounded-md border border-amber-300 bg-white/70 px-2.5 py-2">
+                      <p className="font-semibold">⚠️ 問卷說明尚未提及抽獎</p>
+                      <p className="mt-0.5">
+                        請在問卷說明寫明：<b>此問卷為抽獎項目、獎項是什麼、共幾份、如何抽出</b>，讓填答者一眼看懂。
+                      </p>
+                      <button
+                        type="button"
+                        onClick={appendLotteryNotice}
+                        className="mt-1.5 rounded border border-amber-400 px-2 py-1 font-semibold text-amber-800 hover:bg-amber-100"
+                      >
+                        一鍵補上抽獎說明
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -943,10 +981,14 @@ export default function SurveyDetailPage() {
                 <button
                   type="button"
                   onClick={handlePublish}
-                  disabled={insufficient || noQuestions || publishSurvey.isPending}
+                  disabled={insufficient || noQuestions || publishSurvey.isPending || updateSurvey.isPending}
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
-                  {publishSurvey.isPending ? '發布中…' : '確認發布'}
+                  {publishSurvey.isPending || updateSurvey.isPending
+                    ? '發布中…'
+                    : dirty
+                      ? '儲存並發布'
+                      : '確認發布'}
                 </button>
               </div>
             </div>
