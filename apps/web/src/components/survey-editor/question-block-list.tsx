@@ -3,6 +3,7 @@
 import { useState, useCallback, type DragEvent } from 'react';
 import type { SurveyQuestion } from '@/hooks/use-surveys';
 import { cn } from '@/lib/utils';
+import { getSectionBreak, SECTION_COLORS, type SectionBreak } from '@/lib/surveyjs-adapter';
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -16,6 +17,8 @@ interface QuestionBlockListProps {
   onAdd: (type: QuestionType, presetConfig?: Record<string, unknown>) => void;
   /** Optional: callback to duplicate a question */
   onDuplicate?: (index: number) => void;
+  /** Optional: 更新某題（區段標記等 config 變更用） */
+  onUpdateQuestion?: (index: number, next: SurveyQuestion) => void;
   /** Optional: currently selected question index */
   selectedIndex?: number;
   /** Optional: callback when a question is clicked */
@@ -74,12 +77,26 @@ export function QuestionBlockList({
   onDelete,
   onAdd,
   onDuplicate,
+  onUpdateQuestion,
   selectedIndex,
   onSelect,
 }: QuestionBlockListProps) {
   const [showTypeSelector, setShowTypeSelector] = useState(false);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null);
+  // 正在編輯區段設定的題目 index（null = 無）
+  const [sectionEditIndex, setSectionEditIndex] = useState<number | null>(null);
+
+  // ── 區段標記操作（存於該題 config.sectionBreak = 新頁從此題開始）──
+  const sectionOf = (q: SurveyQuestion) => getSectionBreak(q.config);
+  const setSection = (index: number, sb: SectionBreak | null) => {
+    const q = questions[index];
+    if (!q || !onUpdateQuestion) return;
+    const nextConfig = { ...(q.config ?? {}) } as Record<string, unknown>;
+    if (sb) nextConfig.sectionBreak = sb;
+    else delete nextConfig.sectionBreak;
+    onUpdateQuestion(index, { ...q, config: nextConfig });
+  };
 
   // ─── Drag & Drop handlers ──────────────────────────────────────
 
@@ -160,10 +177,70 @@ export function QuestionBlockList({
         const isDragging = dragIndex === index;
         const isDropTarget = dropTargetIndex === index && dragIndex !== index;
         const isSelected = selectedIndex === index;
+        const section = sectionOf(q);
 
         return (
+          <div key={q.id || index} className="space-y-1">
+            {/* 區段標頭（此題為新區段/新頁的起點） */}
+            {section && (
+              <button
+                type="button"
+                onClick={() => canEdit && setSectionEditIndex(sectionEditIndex === index ? null : index)}
+                className="mt-2 flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[11px] font-semibold"
+                style={{ borderLeft: `4px solid ${section.color}`, background: `${section.color}14`, color: section.color }}
+                title={canEdit ? '點擊編輯區段設定' : undefined}
+              >
+                ▸ {section.name}
+                <span className="ml-auto font-normal opacity-70">新頁起點</span>
+              </button>
+            )}
+
+            {/* 區段編輯面板 */}
+            {canEdit && sectionEditIndex === index && (
+              <div className="rounded-md border border-border bg-white p-2.5 space-y-2" onClick={(e) => e.stopPropagation()}>
+                <input
+                  type="text"
+                  value={section?.name ?? ''}
+                  onChange={(e) => setSection(index, { name: e.target.value, color: section?.color ?? SECTION_COLORS[0], description: section?.description })}
+                  maxLength={50}
+                  placeholder="區段名稱（如：基本資料）"
+                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <input
+                  type="text"
+                  value={section?.description ?? ''}
+                  onChange={(e) => setSection(index, { name: section?.name ?? '新區段', color: section?.color ?? SECTION_COLORS[0], description: e.target.value || undefined })}
+                  maxLength={200}
+                  placeholder="區段說明（選填）"
+                  className="w-full rounded border border-input bg-background px-2 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {SECTION_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={() => setSection(index, { name: section?.name ?? '新區段', color: c, description: section?.description })}
+                      className={cn(
+                        'h-5 w-5 rounded-full border-2 transition-transform',
+                        section?.color === c ? 'scale-110 border-foreground' : 'border-transparent',
+                      )}
+                      style={{ backgroundColor: c }}
+                      aria-label={`區段顏色 ${c}`}
+                    />
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => { setSection(index, null); setSectionEditIndex(null); }}
+                    className="ml-auto text-[11px] text-destructive hover:underline"
+                  >
+                    移除區段
+                  </button>
+                </div>
+                <p className="text-[10px] text-muted-foreground">填答時此區段會獨立成一頁，自動顯示上一頁／下一頁。</p>
+              </div>
+            )}
+
           <div
-            key={q.id || index}
             draggable={canEdit}
             onDragStart={(e) => handleDragStart(e, index)}
             onDragOver={(e) => handleDragOver(e, index)}
@@ -201,6 +278,34 @@ export function QuestionBlockList({
               {/* Required badge */}
               {q.isRequired && (
                 <span className="text-[10px] text-red-400">*</span>
+              )}
+
+              {/* 區段按鈕：設此題為新區段（新頁）起點 / 開啟區段設定 */}
+              {canEdit && onUpdateQuestion && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (!section) {
+                      setSection(index, { name: `區段 ${index + 1}`, color: SECTION_COLORS[0] });
+                    }
+                    setSectionEditIndex(sectionEditIndex === index ? null : index);
+                  }}
+                  className={cn(
+                    'shrink-0 rounded p-0.5 transition-opacity',
+                    section
+                      ? 'opacity-100'
+                      : 'text-muted-foreground opacity-0 group-hover:opacity-100 max-sm:opacity-60 hover:text-primary',
+                  )}
+                  style={section ? { color: section.color } : undefined}
+                  aria-label={section ? '編輯區段設定' : `從第 ${index + 1} 題開始新區段`}
+                  title={section ? '編輯區段設定' : '從此題開始新區段（新頁）'}
+                >
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 9h18" />
+                    <rect x="3" y="4" width="18" height="16" rx="2" />
+                  </svg>
+                </button>
               )}
 
               {/* Duplicate button (shown on hover or focus) */}
@@ -245,6 +350,7 @@ export function QuestionBlockList({
             <div className="mt-0.5 pl-7 text-[10px] text-muted-foreground">
               {blockTypeLabel(q)}
             </div>
+          </div>
           </div>
         );
       })}

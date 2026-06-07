@@ -403,6 +403,7 @@ export default function SurveyDetailPage() {
         onDelete={removeQuestion}
         onAdd={addQuestion}
         onDuplicate={duplicateQuestion}
+        onUpdateQuestion={(idx, next) => updateQuestion(idx, next)}
         selectedIndex={selectedQuestionIndex ?? -1}
         onSelect={(idx) => setSelectedQuestionIndex(idx === -1 ? null : idx)}
       />
@@ -873,6 +874,28 @@ export default function SurveyDetailPage() {
                 <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
                   🕒 此問卷已排程於 {new Date(scheduledPublishAt).toLocaleString('zh-TW')} 自動發布。立即發布將略過排程、馬上上架。
                 </p>
+              )}
+
+              {rewardMode === 'lottery' && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+                  <p className="font-bold">🎁 此問卷為抽獎問卷</p>
+                  <ul className="mt-1.5 space-y-1">
+                    <li>• 獎項：<b>{lotteryPrize || '（尚未填寫，請先設定獎項）'}</b></li>
+                    <li>• 名額：<b>{lotteryWinnerCount} 名</b>中獎者</li>
+                    <li>
+                      • 開獎方式：<b>
+                        {lotteryDrawMode === 'when_full'
+                          ? '收滿目標份數後自動開獎'
+                          : lotteryDrawMode === 'scheduled'
+                            ? `指定時間開獎（${lotteryDrawAt ? new Date(lotteryDrawAt).toLocaleString('zh-TW') : '未設定時間'}）`
+                            : '收滿後由你手動開獎'}
+                      </b>
+                    </li>
+                  </ul>
+                  <p className="mt-1.5 text-amber-700">
+                    發布即代表你承諾於開獎後 7 日內交付獎品；填答者會在填答頁看到以上抽獎資訊，平台將追蹤履約。
+                  </p>
+                </div>
               )}
 
               {required > 0 ? (

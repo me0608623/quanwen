@@ -134,15 +134,30 @@ export function quanswenToSurveyJs(params: {
       : bypassExpression;
   }
 
-  // 題目影片：在題目前插入 embed 影片（必須在 skip-logic 索引處理「之後」插入，
-  // 否則 hiddenByTargetIndex 的元素索引會位移）。影片元素跟隨題目的 visibleIf 一起顯示/隱藏。
-  const finalElements: SurveyJsQuestion[] = [];
+  // 題目影片 + 區段分頁：必須在 skip-logic 索引處理「之後」進行，
+  // 否則 hiddenByTargetIndex 的元素索引會位移。影片元素跟隨題目的 visibleIf 一起顯示/隱藏。
+  // 區段（config.sectionBreak = { name, color, description? }）= 新的一頁從該題開始；
+  // 每個區段頁的開頭插入彩色區段橫幅（html 元素）。
+  const pages: SurveyJsPage[] = [];
+  let current: SurveyJsPage = { name: 'page1', elements: [] };
+
   params.questions.forEach((q, i) => {
     const el = elements[i];
     if (!el) return;
+
+    const sectionBreak = getSectionBreak(q.config);
+    if (sectionBreak) {
+      // 開新頁（首題就有區段時，捨棄空的 page1）
+      if (current.elements.length > 0) pages.push(current);
+      current = {
+        name: `section-${q.id}`,
+        elements: [buildSectionBanner(q.id, sectionBreak)],
+      };
+    }
+
     const embedUrl = buildVideoEmbedUrl((q.config as Record<string, unknown> | undefined)?.videoUrl);
     if (embedUrl) {
-      finalElements.push({
+      current.elements.push({
         name: `${q.id}-video`,
         title: '',
         type: 'html',
@@ -151,17 +166,64 @@ export function quanswenToSurveyJs(params: {
         ...(el.visibleIf ? { visibleIf: el.visibleIf } : {}),
       });
     }
-    finalElements.push(el);
+    current.elements.push(el);
   });
+  if (current.elements.length > 0) pages.push(current);
+  if (pages.length === 0) pages.push({ name: 'page1', elements: [] });
 
   return {
     title: params.title,
     description: params.description,
-    pages: [{ name: 'page1', elements: finalElements }],
+    pages,
     showProgressBar: 'top',
     progressBarType: 'questions',
     questionTitlePattern: 'numRequireTitle',
     triggers: triggers.length > 0 ? triggers : undefined,
+  };
+}
+
+// ─── 區段（Section）────────────────────────────────────────────────────────
+
+export interface SectionBreak {
+  name: string;
+  color?: string;
+  description?: string;
+}
+
+/** 區段顏色白名單（編輯器調色盤同步）；防任意字串注入 inline style */
+export const SECTION_COLORS = [
+  '#126b8a', '#0F2A5C', '#8B5CF6', '#10b981', '#f59e0b', '#ef4444', '#64748b',
+] as const;
+
+/** 從題目 config 取出區段標記（驗證形狀與顏色白名單） */
+export function getSectionBreak(config: unknown): SectionBreak | null {
+  const raw = (config as Record<string, unknown> | null | undefined)?.sectionBreak;
+  if (!raw || typeof raw !== 'object') return null;
+  const sb = raw as Record<string, unknown>;
+  const name = typeof sb.name === 'string' ? sb.name.trim().slice(0, 50) : '';
+  if (!name) return null;
+  const color = typeof sb.color === 'string' && (SECTION_COLORS as readonly string[]).includes(sb.color)
+    ? sb.color
+    : SECTION_COLORS[0];
+  const description = typeof sb.description === 'string' ? sb.description.trim().slice(0, 200) : undefined;
+  return { name, color, description };
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+/** 區段橫幅：彩色左邊條 + 區段名稱 + 說明（內容經 HTML escape，顏色走白名單） */
+function buildSectionBanner(questionId: string, sb: SectionBreak): SurveyJsQuestion {
+  const desc = sb.description
+    ? `<p style="margin:4px 0 0;font-size:13px;color:#64748b">${escapeHtml(sb.description)}</p>`
+    : '';
+  return {
+    name: `${questionId}-section`,
+    title: '',
+    type: 'html',
+    isRequired: false,
+    html: `<div style="border-left:4px solid ${sb.color};background:${sb.color}14;border-radius:8px;padding:10px 14px;margin-bottom:4px"><p style="margin:0;font-size:15px;font-weight:700;color:${sb.color}">${escapeHtml(sb.name)}</p>${desc}</div>`,
   };
 }
 

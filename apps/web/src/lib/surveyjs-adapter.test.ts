@@ -463,3 +463,55 @@ describe('題目影片元素插入', () => {
     expect(model.pages[0].elements).toHaveLength(1);
   });
 });
+
+describe('題目分區段 → SurveyJS 多頁', () => {
+  const q = (id: string, sectionBreak?: Record<string, unknown>): PublicQuestion => ({
+    ...baseQuestion,
+    id,
+    ...(sectionBreak ? { config: { sectionBreak } } : {}),
+  });
+
+  it('無區段 → 單頁、無橫幅', () => {
+    const model = quanswenToSurveyJs({ questions: [q('q1'), q('q2')] });
+    expect(model.pages).toHaveLength(1);
+    expect(model.pages[0].elements).toHaveLength(2);
+  });
+
+  it('Q1+Q2 第一區段、Q3 第二區段 → 兩頁，各頁開頭有彩色橫幅', () => {
+    const model = quanswenToSurveyJs({
+      questions: [
+        q('q1', { name: '基本資料', color: '#10b981' }),
+        q('q2'),
+        q('q3', { name: '消費習慣', description: '關於你的日常消費', color: '#8B5CF6' }),
+      ],
+    });
+    expect(model.pages).toHaveLength(2);
+    // 第一頁：橫幅 + q1 + q2
+    expect(model.pages[0].elements.map((e) => e.name)).toEqual(['q1-section', 'q1', 'q2']);
+    expect(model.pages[0].elements[0].type).toBe('html');
+    expect(model.pages[0].elements[0].html).toContain('基本資料');
+    expect(model.pages[0].elements[0].html).toContain('#10b981');
+    // 第二頁：橫幅（含說明）+ q3
+    expect(model.pages[1].elements.map((e) => e.name)).toEqual(['q3-section', 'q3']);
+    expect(model.pages[1].elements[0].html).toContain('關於你的日常消費');
+  });
+
+  it('區段前的散題自成第一頁（無橫幅）', () => {
+    const model = quanswenToSurveyJs({
+      questions: [q('q1'), q('q2', { name: '第二部分' })],
+    });
+    expect(model.pages).toHaveLength(2);
+    expect(model.pages[0].elements.map((e) => e.name)).toEqual(['q1']);
+    expect(model.pages[1].elements.map((e) => e.name)).toEqual(['q2-section', 'q2']);
+  });
+
+  it('安全：區段名稱 HTML escape、顏色走白名單', () => {
+    const model = quanswenToSurveyJs({
+      questions: [q('q1', { name: '<script>alert(1)</script>', color: 'red; background:url(x)' })],
+    });
+    const banner = model.pages[0].elements[0];
+    expect(banner.html).not.toContain('<script>');
+    expect(banner.html).toContain('&lt;script&gt;');
+    expect(banner.html).not.toContain('url(x)');  // 非白名單色 → fallback 預設色
+  });
+});
