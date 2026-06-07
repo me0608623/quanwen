@@ -25,6 +25,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # action 直接 spawn `vercel`，runner 預設沒有 → 需先全域安裝
+      - name: Install Vercel CLI
+        run: npm install -g vercel
+
       - name: Deploy Preview to Vercel
         uses: BetaHuhn/deploy-to-vercel-action@v1
         with:
