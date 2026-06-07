@@ -5,8 +5,17 @@
  * 這些數值刻意集中在此檔，方便依真實完成數據校準（不寫死在邏輯裡）。
  */
 
-/** 每分鐘建議基準費率（單位：分）。NT$3.00/分 ≈ 台灣基本工資水準。僅用於「建議」，無強制力。 */
-export const REWARD_RATE_PER_MIN_CENTS = 300;
+/** 基準時薪（新台幣元）。對齊台灣 2026 基本工資時薪 NT$196；調整基本工資時更新此值。 */
+export const BASE_HOURLY_WAGE_NT = 196;
+
+/** 每分鐘建議基準費率（單位：分）。由基準時薪換算（196/60 ≈ NT$3.27/分）。僅用於「建議」，無強制力。 */
+export const REWARD_RATE_PER_MIN_CENTS = Math.round((BASE_HOURLY_WAGE_NT * 100) / 60);
+
+/**
+ * 每份填答的固定開銷秒數：點進問卷、閱讀說明、檢查與送出的固定成本，
+ * 與題數無關。沒有這項時 1-2 題的迷你問卷會估出 NT$1 的不合理建議價。
+ */
+export const FIXED_OVERHEAD_SECONDS = 60;
 
 /** 各題型預估作答秒數。key 對齊 schema.sql 的 question_type enum（含 DTO 目前的別名）。 */
 export const QUESTION_BASE_SECONDS: Record<string, number> = {

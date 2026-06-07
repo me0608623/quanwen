@@ -379,3 +379,43 @@ describe('extractAnswers', () => {
     expect(answers[0].textAnswer).toBe('42');
   });
 });
+
+describe('「其他（請填寫）」選項 → SurveyJS other item', () => {
+  const otherQ: PublicQuestion = {
+    ...baseQuestion,
+    id: 'qo',
+    options: [
+      { id: 'opt-a', label: 'Option A', sortOrder: 0 },
+      { id: 'opt-other', label: '其他（請填寫）', sortOrder: 1 },
+    ],
+  };
+
+  it('轉換時啟用 showOtherItem，「其他」不重複出現在 choices', () => {
+    const model = quanswenToSurveyJs({ questions: [otherQ] });
+    const el = model.pages[0].elements[0];
+    expect(el.showOtherItem).toBe(true);
+    expect(el.otherText).toBe('其他（請填寫）');
+    expect(el.choices).toEqual([{ value: 'opt-a', text: 'Option A' }]);
+  });
+
+  it('單選選了其他：回填原選項 id + 輸入文字進 textAnswer', () => {
+    const answers = extractAnswers({ qo: 'other', 'qo-Comment': '自由工作者' }, [otherQ]);
+    expect(answers[0].selectedOptionIds).toEqual(['opt-other']);
+    expect(answers[0].textAnswer).toBe('自由工作者');
+  });
+
+  it('複選含其他：other 替換為原選項 id 並保留其他選項', () => {
+    const multiQ: PublicQuestion = { ...otherQ, id: 'qm', type: 'multiple_choice' };
+    const answers = extractAnswers(
+      { qm: ['opt-a', 'other'], 'qm-Comment': '手工皂' },
+      [multiQ],
+    );
+    expect(answers[0].selectedOptionIds).toEqual(['opt-a', 'opt-other']);
+    expect(answers[0].textAnswer).toBe('手工皂');
+  });
+
+  it('沒有「其他」選項的題目不受影響', () => {
+    const model = quanswenToSurveyJs({ questions: [baseQuestion] });
+    expect(model.pages[0].elements[0].showOtherItem).toBeUndefined();
+  });
+});

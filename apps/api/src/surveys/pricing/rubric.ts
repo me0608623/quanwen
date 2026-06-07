@@ -6,6 +6,7 @@
  */
 import {
   REWARD_RATE_PER_MIN_CENTS,
+  FIXED_OVERHEAD_SECONDS,
   QUESTION_BASE_SECONDS,
   DEFAULT_QUESTION_SECONDS,
   RANK_SECONDS_PER_ITEM,
@@ -107,8 +108,11 @@ export function estimateRubricBase(
       ? opts.introChars / READING_CHARS_PER_SEC
       : 0;
 
-  const totalSeconds =
+  const answerSeconds =
     perQuestion.reduce((sum, e) => sum + e.seconds, 0) + introSeconds;
+  // 有題目才計固定開銷（空問卷估 0 元）
+  const totalSeconds =
+    answerSeconds > 0 ? answerSeconds + FIXED_OVERHEAD_SECONDS : 0;
 
   const cents = Math.round((totalSeconds / 60) * REWARD_RATE_PER_MIN_CENTS);
   const baseRewardNt = Math.ceil(cents / 100);

@@ -82,6 +82,23 @@ export function AudienceTargeting({ value, onChange, showReputation = true, disa
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
+              {/* 「不限（全部）」chip — 一鍵清空此維度（= 所有人可見） */}
+              <button
+                type="button"
+                disabled={disabled}
+                onClick={() => {
+                  const draft = { ...value };
+                  delete draft[field];
+                  onChange(draft);
+                }}
+                className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  selected.length === 0
+                    ? 'border-primary bg-primary text-primary-foreground'
+                    : 'border-border bg-background text-foreground hover:border-primary/50'
+                }`}
+              >
+                不限（全部）
+              </button>
               {options.map((o) => {
                 const active = selected.includes(o.value);
                 return (

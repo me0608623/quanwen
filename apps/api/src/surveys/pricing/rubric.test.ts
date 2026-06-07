@@ -64,23 +64,29 @@ describe('estimateRubricBase', () => {
     expect(estimateRubricBase([]).baseRewardNt).toBe(0);
   });
 
-  it('單一單選題 → 6 秒 → 無條件進位 NT$1', () => {
-    expect(estimateRubricBase([q('single_choice')]).baseRewardNt).toBe(1);
+  // 費率基準（2026-06-07 起）：時薪 NT$196 → round(19600/60)=327 分/分鐘；
+  // 另計 60 秒固定開銷（點開問卷/閱讀說明/送出），避免迷你問卷估出 NT$1。
+
+  it('單一單選題 → 6+60 秒固定開銷 → NT$4', () => {
+    // 66/60 × 327 = 359.7 → round 360 分 → ceil → NT$4
+    expect(estimateRubricBase([q('single_choice')]).baseRewardNt).toBe(4);
   });
 
-  it('10 題單選 → 60 秒 = 1 分 → NT$3', () => {
+  it('10 題單選 → 60+60 秒 = 2 分 → NT$7', () => {
     const questions = Array.from({ length: 10 }, () => q('single_choice'));
-    expect(estimateRubricBase(questions).baseRewardNt).toBe(3);
+    // 120/60 × 327 = 654 分 → NT$7
+    expect(estimateRubricBase(questions).baseRewardNt).toBe(7);
   });
 
   it('前言閱讀字數併入總秒數', () => {
     const r = estimateRubricBase([q('single_choice')], { introChars: 50 });
-    // 6 + 50/5(=10) = 16 秒
-    expect(r.totalSeconds).toBe(16);
-    expect(r.baseRewardNt).toBe(1);
+    // 6 + 50/5(=10) + 60 固定開銷 = 76 秒
+    expect(r.totalSeconds).toBe(76);
+    // 76/60 × 327 = 414.2 → NT$5
+    expect(r.baseRewardNt).toBe(5);
   });
 
-  it('設計文件 §4 範例：10 單選 + 3 多選 + 2 簡答(≥50字) + 1 段 60 秒影片題 ≈ NT$15', () => {
+  it('設計文件 §4 範例：10 單選 + 3 多選 + 2 簡答(≥50字) + 1 段 60 秒影片題', () => {
     const questions: RubricQuestion[] = [
       ...Array.from({ length: 10 }, () => q('single_choice')),
       ...Array.from({ length: 3 }, () => q('multi_choice')),
@@ -88,9 +94,10 @@ describe('estimateRubricBase', () => {
       q('single_choice', { config: { mediaWatchSec: 60 } }),
     ];
     const r = estimateRubricBase(questions);
-    // 60 + 36 + 135 + 66 = 297 秒 → round(297*5)=1485 cent → ceil(14.85)=15
-    expect(r.totalSeconds).toBe(297);
-    expect(r.baseRewardNt).toBe(15);
+    // 60 + 36 + 135 + 66 = 297 秒 + 60 固定開銷 = 357 秒
+    expect(r.totalSeconds).toBe(357);
+    // 357/60 × 327 = 1945.65 → round 1946 分 → ceil → NT$20
+    expect(r.baseRewardNt).toBe(20);
   });
 
   it('回傳每題拆解明細', () => {

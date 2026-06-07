@@ -41,6 +41,15 @@ interface SurveyJsQuestion {
   labelFalse?: string;
   rowsVisibleIf?: string;
   visibleIf?: string;
+  // 「其他（請填寫）」選項 → SurveyJS 原生 other item（自動跳出文字輸入框）
+  showOtherItem?: boolean;
+  otherText?: string;
+  otherPlaceholder?: string;
+}
+
+// 選項 label 視為「其他」的判定（其他 / 其他（請填寫）/ 其它…）
+export function findOtherOption<T extends { id: string; label: string }>(options: T[]): T | undefined {
+  return options.find((o) => /^其[他它]/.test(o.label.trim()));
 }
 
 interface SurveyJsPage {
@@ -174,18 +183,26 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
       }
 
       const isDropdown = renderAs === 'dropdown';
+      const otherOpt = findOtherOption(q.options);
       return {
         ...base,
         type: isDropdown ? 'dropdown' : 'radiogroup',
-        choices: q.options.map((o) => ({ value: o.id, text: o.label })),
+        choices: q.options.filter((o) => o !== otherOpt).map((o) => ({ value: o.id, text: o.label })),
+        ...(otherOpt
+          ? { showOtherItem: true, otherText: otherOpt.label, otherPlaceholder: '請填寫' }
+          : {}),
       };
     }
 
     case 'multiple_choice': {
+      const otherOpt = findOtherOption(q.options);
       return {
         ...base,
         type: 'checkbox',
-        choices: q.options.map((o) => ({ value: o.id, text: o.label })),
+        choices: q.options.filter((o) => o !== otherOpt).map((o) => ({ value: o.id, text: o.label })),
+        ...(otherOpt
+          ? { showOtherItem: true, otherText: otherOpt.label, otherPlaceholder: '請填寫' }
+          : {}),
       };
     }
 
@@ -298,7 +315,17 @@ export function extractAnswers(
           answer.selectedOptionIds = val === true ? ['yes'] : val === false ? ['no'] : undefined;
         } else {
           if (typeof raw === 'string') {
-            answer.selectedOptionIds = [raw];
+            // SurveyJS 的「其他」選項回傳值為 'other'，輸入內容在 `${id}-Comment`
+            if (raw === 'other') {
+              const otherOpt = findOtherOption(q.options);
+              if (otherOpt) {
+                answer.selectedOptionIds = [otherOpt.id];
+                const comment = surveyJsData[`${q.id}-Comment`];
+                if (typeof comment === 'string' && comment.trim()) answer.textAnswer = comment.trim();
+              }
+            } else {
+              answer.selectedOptionIds = [raw];
+            }
           }
         }
         break;
@@ -306,7 +333,19 @@ export function extractAnswers(
 
       case 'multiple_choice': {
         if (Array.isArray(raw)) {
-          answer.selectedOptionIds = raw.map(String);
+          const ids = raw.map(String);
+          const otherIdx = ids.indexOf('other');
+          if (otherIdx !== -1) {
+            const otherOpt = findOtherOption(q.options);
+            if (otherOpt) {
+              ids[otherIdx] = otherOpt.id;
+              const comment = surveyJsData[`${q.id}-Comment`];
+              if (typeof comment === 'string' && comment.trim()) answer.textAnswer = comment.trim();
+            } else {
+              ids.splice(otherIdx, 1);
+            }
+          }
+          answer.selectedOptionIds = ids;
         }
         break;
       }
