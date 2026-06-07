@@ -12,6 +12,11 @@ concurrency:
   group: vercel-production
   cancel-in-progress: true
 
+# 預設 GITHUB_TOKEN 唯讀；action 建立 GitHub deployment 記錄需要 deployments: write
+permissions:
+  contents: read
+  deployments: write
+
 jobs:
   deploy-production:
     runs-on: ubuntu-latest

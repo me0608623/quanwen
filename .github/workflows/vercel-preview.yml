@@ -12,6 +12,12 @@ on:
       - "feature/**"
       - "fix/**"
 
+# 預設 GITHUB_TOKEN 唯讀；action 需要建 deployment 記錄 + 在 PR 留 Preview URL 留言
+permissions:
+  contents: read
+  deployments: write
+  pull-requests: write
+
 jobs:
   deploy-preview:
     runs-on: ubuntu-latest
