@@ -13,6 +13,9 @@ import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 const SuspendUserSchema = z.object({ reason: z.string().trim().min(5).max(500) });
 type SuspendUserDto = z.infer<typeof SuspendUserSchema>;
 
+const UpdateUserTierSchema = z.object({ tier: z.enum(['free', 'vip', 'vvip']) });
+type UpdateUserTierDto = z.infer<typeof UpdateUserTierSchema>;
+
 const SearchUsersQuerySchema = z.object({
   q: z.string().trim().max(255).optional(),
   status: z.enum(['active', 'suspended', 'pending_verify']).optional(),
@@ -36,6 +39,18 @@ export class AdminUsersController {
   @Get('users/:id')
   getUserDetail(@Param('id') id: string) {
     return this.adminUsers.getUserDetail(id);
+  }
+
+  /** POST /admin/users/:id/tier — 調整使用者 VIP 等級並通知使用者 */
+  @Post('users/:id/tier')
+  @HttpCode(HttpStatus.OK)
+  updateUserTier(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(UpdateUserTierSchema)) dto: UpdateUserTierDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    return this.adminUsers.updateUserTier(user.id, id, dto.tier);
   }
 
   /** POST /admin/users/:id/suspend — 停權（不可停權 admin / 自己；需理由） */

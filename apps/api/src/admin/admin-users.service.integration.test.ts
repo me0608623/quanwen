@@ -70,7 +70,7 @@ describe('AdminUsersService (integration)', () => {
   let client: PGlite;
   let db: AppDb;
   let service: AdminUsersService;
-  let notificationsSent: Array<{ userId: string; title: string }>;
+  let notificationsSent: Array<{ userId: string; title: string; body?: string }>;
   let failNotification: boolean;
 
   let adminId: string;
@@ -86,9 +86,9 @@ describe('AdminUsersService (integration)', () => {
     notificationsSent = [];
     failNotification = false;
     const notifications = {
-      create: async (dto: { userId: string; title: string }) => {
+      create: async (dto: { userId: string; title: string; body?: string }) => {
         if (failNotification) throw new Error('notification unavailable');
-        notificationsSent.push({ userId: dto.userId, title: dto.title });
+        notificationsSent.push({ userId: dto.userId, title: dto.title, body: dto.body });
       },
     } as unknown as NotificationsService;
 
@@ -179,6 +179,41 @@ describe('AdminUsersService (integration)', () => {
 
     it('throws NotFound for unknown user', async () => {
       await expect(service.getUserDetail('00000000-0000-0000-0000-000000000000'))
+        .rejects.toThrow('使用者不存在');
+    });
+  });
+
+  describe('updateUserTier', () => {
+    it('updates user tier and sends notification', async () => {
+      const result = await service.updateUserTier(adminId, aliceId, 'vip');
+      expect(result).toMatchObject({ id: aliceId, previousTier: 'free', tier: 'vip' });
+
+      const [row] = await db.select().from(schema.users).where(eq(schema.users.id, aliceId));
+      expect(row.tier).toBe('vip');
+      expect(notificationsSent).toHaveLength(1);
+      expect(notificationsSent[0]).toMatchObject({
+        userId: aliceId,
+        title: 'VIP 等級已更新',
+      });
+      expect(notificationsSent[0].body).toContain('VIP');
+    });
+
+    it('tier update persists even if notification fails', async () => {
+      failNotification = true;
+      const result = await service.updateUserTier(adminId, aliceId, 'vvip');
+      expect(result.tier).toBe('vvip');
+
+      const [row] = await db.select().from(schema.users).where(eq(schema.users.id, aliceId));
+      expect(row.tier).toBe('vvip');
+    });
+
+    it('rejects changing to the same tier', async () => {
+      await expect(service.updateUserTier(adminId, aliceId, 'free'))
+        .rejects.toThrow('使用者已是此 VIP 等級');
+    });
+
+    it('throws NotFound for unknown user', async () => {
+      await expect(service.updateUserTier(adminId, '00000000-0000-0000-0000-000000000000', 'vip'))
         .rejects.toThrow('使用者不存在');
     });
   });

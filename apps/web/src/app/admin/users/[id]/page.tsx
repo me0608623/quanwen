@@ -1,14 +1,15 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
-  AdminUserDetail,
   useAdminUserDetail,
   useMultiAccountScan,
   useSuspendUser,
   useUnsuspendUser,
+  useUpdateUserTier,
 } from '@/hooks/use-admin-users';
+import type { AdminUserDetail, AdminUserTier } from '@/hooks/use-admin-users';
 import { extractApiError } from '@/lib/extract-error';
 
 const STATUS_LABELS: Record<string, string> = {
@@ -51,8 +52,20 @@ const TYPE_LABELS: Record<string, string> = {
   points_spend: '積分支出',
 };
 
+const TIER_LABELS: Record<AdminUserTier, string> = {
+  free: 'Free',
+  vip: 'VIP',
+  vvip: 'VVIP',
+};
+
+const TIER_OPTIONS: AdminUserTier[] = ['free', 'vip', 'vvip'];
+
 function money(n: number) {
   return `NT$${n.toLocaleString()}`;
+}
+
+function isAdminUserTier(value: string): value is AdminUserTier {
+  return TIER_OPTIONS.includes(value as AdminUserTier);
 }
 
 export default function AdminUserDetailPage() {
@@ -65,8 +78,16 @@ export default function AdminUserDetailPage() {
   const scan = useMultiAccountScan(id, scanEnabled);
   const suspend = useSuspendUser();
   const unsuspend = useUnsuspendUser();
+  const updateTier = useUpdateUserTier();
+  const [selectedTier, setSelectedTier] = useState<AdminUserTier>('free');
 
   const user = detail.data?.user;
+
+  useEffect(() => {
+    if (user?.tier && isAdminUserTier(user.tier)) {
+      setSelectedTier(user.tier);
+    }
+  }, [user?.tier]);
 
   const runScan = () => {
     if (!scanEnabled) {
@@ -81,6 +102,11 @@ export default function AdminUserDetailPage() {
       { id, reason },
       { onSuccess: () => setSuspendOpen(false) },
     );
+  };
+
+  const handleUpdateTier = () => {
+    if (!user || selectedTier === user.tier) return;
+    updateTier.mutate({ id, tier: selectedTier });
   };
 
   return (
@@ -133,10 +159,45 @@ export default function AdminUserDetailPage() {
           {extractApiError(unsuspend.error, '復權失敗')}
         </div>
       )}
+      {updateTier.error && (
+        <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {extractApiError(updateTier.error, 'VIP 等級更新失敗')}
+        </div>
+      )}
 
       {detail.data && (
         <div className="space-y-6">
           <TopCards data={detail.data} />
+
+          {user && (
+            <section className="rounded-lg border border-border bg-card p-5">
+              <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+                <div>
+                  <h2 className="text-base font-semibold">VIP 等級</h2>
+                  <p className="mt-1 text-sm text-muted-foreground">{user.displayName || user.email}</p>
+                </div>
+                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
+                  <select
+                    value={selectedTier}
+                    onChange={(e) => setSelectedTier(e.target.value as AdminUserTier)}
+                    className="h-10 min-w-[160px] rounded-md border border-border bg-background px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                    disabled={updateTier.isPending || detail.isFetching}
+                  >
+                    {TIER_OPTIONS.map((tier) => (
+                      <option key={tier} value={tier}>{TIER_LABELS[tier]}</option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={handleUpdateTier}
+                    disabled={updateTier.isPending || detail.isFetching || selectedTier === user.tier}
+                    className="h-10 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {updateTier.isPending ? '更新中…' : '更新等級'}
+                  </button>
+                </div>
+              </div>
+            </section>
+          )}
 
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -210,7 +271,8 @@ function TopCards({ data }: { data: AdminUserDetail }) {
           <Info label="名稱" value={data.user.displayName || '未命名使用者'} />
           <Info label="Email" value={data.user.email} />
           <Info label="狀態" value={<StatusBadge status={data.user.status} />} />
-          <Info label="Role / Tier" value={`${data.user.role} / ${data.user.tier}`} />
+          <Info label="Role" value={data.user.role} />
+          <Info label="VIP 等級" value={isAdminUserTier(data.user.tier) ? TIER_LABELS[data.user.tier] : data.user.tier} />
           <Info label="Email 驗證" value={data.user.emailVerified ? '已驗證' : '未驗證'} />
           <Info label="OAuth" value={data.oauthProviders.length > 0 ? data.oauthProviders.join(', ') : '無'} />
           <Info label="信譽分" value={data.reputationScore === null ? '無資料' : data.reputationScore.toString()} />

@@ -29,6 +29,14 @@ export interface AdminUserSearchParams {
   limit: number;
 }
 
+export type UserTier = 'free' | 'vip' | 'vvip';
+
+const TIER_LABELS: Record<UserTier, string> = {
+  free: 'Free',
+  vip: 'VIP',
+  vvip: 'VVIP',
+};
+
 @Injectable()
 export class AdminUsersService {
   private readonly logger = new Logger(AdminUsersService.name);
@@ -189,6 +197,48 @@ export class AdminUsersService {
       approvedResponseCount: approvedRows[0]?.n ?? 0,
       appealCount: appealRows[0]?.n ?? 0,
     };
+  }
+
+  // ─── VIP 等級調整 ────────────────────────────────────────────────────────
+
+  async updateUserTier(adminId: string, userId: string, tier: UserTier) {
+    const [target] = await this.db
+      .select({ id: users.id, tier: users.tier })
+      .from(users)
+      .where(and(eq(users.id, userId), isNull(users.deletedAt)))
+      .limit(1);
+
+    if (!target) throw new NotFoundException('使用者不存在');
+    if (target.tier === tier) throw new ConflictException('使用者已是此 VIP 等級');
+
+    const [updated] = await this.db
+      .update(users)
+      .set({ tier, updatedAt: new Date() })
+      .where(and(eq(users.id, userId), eq(users.tier, target.tier), isNull(users.deletedAt)))
+      .returning({ id: users.id, tier: users.tier });
+
+    if (!updated) throw new ConflictException('使用者 VIP 等級已被其他操作更新，請重新整理後再試');
+
+    this.logger.log(`Admin ${adminId} updated user ${userId} tier: ${target.tier} -> ${tier}`);
+
+    try {
+      await this.notifications.create({
+        userId,
+        type: 'system',
+        title: 'VIP 等級已更新',
+        body: `您的會員等級已由管理員調整為 ${TIER_LABELS[tier]}。`,
+        metadata: {
+          adminAction: 'update_tier',
+          adminId,
+          previousTier: target.tier,
+          tier,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Tier update notification failed for ${userId}: ${err}`);
+    }
+
+    return { id: userId, tier: updated.tier, previousTier: target.tier };
   }
 
   // ─── 停權 / 復權 ─────────────────────────────────────────────────────────

@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
 export type AdminUserStatus = 'active' | 'suspended' | 'pending_verify';
+export type AdminUserTier = 'free' | 'vip' | 'vvip';
 
 export interface AdminUsersParams {
   q?: string;
@@ -17,7 +18,7 @@ export interface AdminUserRow {
   email: string;
   displayName: string | null;
   role: string;
-  tier: string;
+  tier: AdminUserTier | string;
   status: AdminUserStatus | string;
   emailVerified: boolean;
   createdAt: string;
@@ -41,7 +42,7 @@ export interface AdminUserDetail {
     displayName: string | null;
     avatarUrl: string | null;
     role: string;
-    tier: string;
+    tier: AdminUserTier | string;
     status: AdminUserStatus | string;
     emailVerified: boolean;
     createdAt: string;
@@ -100,6 +101,12 @@ export interface MultiAccountScan {
   [key: string]: unknown;
 }
 
+export interface UpdateUserTierResult {
+  id: string;
+  tier: AdminUserTier;
+  previousTier: AdminUserTier;
+}
+
 export function useAdminUsers(params: AdminUsersParams) {
   return useQuery<AdminUsersResponse>({
     queryKey: ['admin', 'users', params],
@@ -148,6 +155,21 @@ export function useUnsuspendUser() {
     onSuccess: (_, id) => {
       queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'users', id] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
+    },
+  });
+}
+
+export function useUpdateUserTier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, tier }: { id: string; tier: AdminUserTier }) => {
+      const { data } = await api.post<UpdateUserTierResult>(`/admin/users/${id}/tier`, { tier });
+      return data;
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users', variables.id] });
       queryClient.invalidateQueries({ queryKey: ['admin', 'stats'] });
     },
   });
