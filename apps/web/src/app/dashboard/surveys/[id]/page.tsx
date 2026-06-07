@@ -276,6 +276,9 @@ export default function SurveyDetailPage() {
         ...(type === 'single_choice' || type === 'multiple_choice'
           ? { options: [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }] }
           : {}),
+        ...(type === 'matrix'
+          ? { config: { matrix: { rows: [''], columns: ['非常不同意', '不同意', '普通', '同意', '非常同意'] } } }
+          : {}),
       };
       newIndex = prev.length;
       return [...prev, newQ];

@@ -11,7 +11,8 @@ type DisplayQuestionType =
   | 'rating'
   | 'numeric'
   | 'yes_no'
-  | 'dropdown';
+  | 'dropdown'
+  | 'matrix';
 
 const TYPE_LABELS: Record<DisplayQuestionType, string> = {
   single_choice: '單選',
@@ -21,7 +22,10 @@ const TYPE_LABELS: Record<DisplayQuestionType, string> = {
   numeric: '數字',
   yes_no: '是/否',
   dropdown: '下拉選單',
+  matrix: '矩陣量表',
 };
+
+const DEFAULT_MATRIX_COLUMNS = ['非常不同意', '不同意', '普通', '同意', '非常同意'];
 
 interface SkipLogicRule {
   selectedOptionId?: string;
@@ -96,6 +100,19 @@ export function QuestionEditor({
   const isChoiceType = displayType === 'single_choice' || displayType === 'multiple_choice' || displayType === 'yes_no' || displayType === 'dropdown';
   const isRatingLike = displayType === 'rating';
   const isNumeric = displayType === 'numeric';
+  const isMatrix = displayType === 'matrix';
+
+  const matrixConfig = (question.config?.matrix ?? {}) as { rows?: string[]; columns?: string[] };
+  const matrixRows = matrixConfig.rows ?? [];
+  const matrixColumns = matrixConfig.columns ?? [];
+  const writeMatrix = (rows: string[], columns: string[]) =>
+    patchConfig({ ...(question.config ?? {}), matrix: { rows, columns } });
+  const updateMatrixRow = (i: number, v: string) => writeMatrix(matrixRows.map((r, idx) => (idx === i ? v : r)), matrixColumns);
+  const addMatrixRow = () => writeMatrix([...matrixRows, ''], matrixColumns);
+  const removeMatrixRow = (i: number) => writeMatrix(matrixRows.filter((_, idx) => idx !== i), matrixColumns);
+  const updateMatrixColumn = (i: number, v: string) => writeMatrix(matrixRows, matrixColumns.map((c, idx) => (idx === i ? v : c)));
+  const addMatrixColumn = () => writeMatrix(matrixRows, [...matrixColumns, '']);
+  const removeMatrixColumn = (i: number) => writeMatrix(matrixRows, matrixColumns.filter((_, idx) => idx !== i));
 
   const addRule = () => {
     const next: SkipLogicRule = {};
@@ -129,6 +146,25 @@ export function QuestionEditor({
     delete baseConfig.variant;
     delete baseConfig.renderAs;
     delete baseConfig.inputType;
+
+    if (nextType === 'matrix') {
+      const existing = question.config?.matrix as { rows?: string[]; columns?: string[] } | undefined;
+      onChange({
+        ...question,
+        type: 'matrix',
+        options: undefined,
+        config: {
+          ...baseConfig,
+          matrix: {
+            rows: existing?.rows?.length ? existing.rows : [''],
+            columns: existing?.columns?.length ? existing.columns : [...DEFAULT_MATRIX_COLUMNS],
+          },
+        },
+      });
+      return;
+    }
+    // 切換到非矩陣題型時，移除矩陣設定避免殘留
+    delete baseConfig.matrix;
 
     if (nextType === 'numeric') {
       onChange({
@@ -345,6 +381,61 @@ export function QuestionEditor({
                   className="w-20 rounded border border-input bg-background px-2 py-1 text-sm"
                 />
               </div>
+            </div>
+          )}
+
+          {isMatrix && (
+            <div className="space-y-3 pl-2">
+              <div>
+                <p className="mb-1 text-xs font-medium text-foreground">量表選項（欄）</p>
+                <div className="space-y-1.5">
+                  {matrixColumns.map((col, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-5 text-xs text-muted-foreground">{i + 1}.</span>
+                      <input
+                        type="text"
+                        value={col}
+                        onChange={(e) => updateMatrixColumn(i, e.target.value)}
+                        placeholder={`選項 ${i + 1}（如：非常不同意）`}
+                        className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+                      />
+                      <button type="button" onClick={() => removeMatrixColumn(i)} className="text-xs text-muted-foreground hover:text-destructive">
+                        X
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addMatrixColumn} className="mt-1 text-xs text-primary hover:underline">
+                  + 新增量表選項
+                </button>
+              </div>
+
+              <div>
+                <p className="mb-1 text-xs font-medium text-foreground">陳述／子題（列）</p>
+                <div className="space-y-1.5">
+                  {matrixRows.map((row, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <span className="w-5 text-xs text-muted-foreground">{i + 1}.</span>
+                      <input
+                        type="text"
+                        value={row}
+                        onChange={(e) => updateMatrixRow(i, e.target.value)}
+                        placeholder={`陳述 ${i + 1}`}
+                        className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+                      />
+                      <button type="button" onClick={() => removeMatrixRow(i)} className="text-xs text-muted-foreground hover:text-destructive">
+                        X
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <button type="button" onClick={addMatrixRow} className="mt-1 text-xs text-primary hover:underline">
+                  + 新增陳述
+                </button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                矩陣題：填答者會對每一列「陳述」，從上方「量表選項」各選一個。
+              </p>
             </div>
           )}
 

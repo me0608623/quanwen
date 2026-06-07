@@ -6,12 +6,13 @@
  * 本模組把該 JSON 的 subjects 對映為 QuanWen 題目格式。
  *
  * 題型對映:
- *   CHOICEONE / DROPDOWN     → single_choice
- *   CHOICEMULTI              → multiple_choice
- *   TXTSHORT / TXTLONG       → text
- *   NEST(+ 後續 NESTCHILD)   → matrix(columns=NEST options, rows=NESTCHILD texts)
- *   STATEMENT / QUOTE        → 非題目,跳過
- *   其他                      → text(fallback,收 warning)
+ *   CHOICEONE / DROPDOWN                          → single_choice
+ *   CHOICEMULTI / PICKFROM / ADVANCED_SELECTION_BASED → multiple_choice（SurveyCake 共用同一複選 renderer）
+ *   TXTSHORT / TXTLONG                            → text
+ *   NEST(+ 後續 NESTCHILD)                         → matrix(columns=NEST options, rows=NESTCHILD texts)
+ *   NEST_MULTI                                     → matrix（複選矩陣降級為單選矩陣,收 warning）
+ *   STATEMENT / QUOTE / DIVIDER                    → 非題目,跳過
+ *   其他                                            → text(fallback,收 warning)
  */
 
 interface NativeOption {
@@ -46,9 +47,9 @@ export interface ParsedSurveyCake {
 }
 
 const SINGLE = new Set(['CHOICEONE', 'DROPDOWN']);
-const MULTI = new Set(['CHOICEMULTI']);
+const MULTI = new Set(['CHOICEMULTI', 'PICKFROM', 'ADVANCED_SELECTION_BASED']);
 const TEXT = new Set(['TXTSHORT', 'TXTLONG']);
-const SKIP = new Set(['STATEMENT', 'QUOTE', 'NESTCHILD']);
+const SKIP = new Set(['STATEMENT', 'QUOTE', 'NESTCHILD', 'DIVIDER']);
 
 const MAX_OPTIONS = 50;
 const MAX_TITLE = 1000;
@@ -96,7 +97,7 @@ export function parseSurveyCakeNative(raw: unknown): ParsedSurveyCake {
       config: {} as Record<string, unknown>,
     };
 
-    if (type === 'NEST') {
+    if (type === 'NEST' || type === 'NEST_MULTI') {
       // 後續連續的 NESTCHILD 是矩陣列;NEST 自身 options 是量表欄
       const rows: string[] = [];
       for (let j = i + 1; j < subjects.length; j++) {
@@ -111,6 +112,9 @@ export function parseSurveyCakeNative(raw: unknown): ParsedSurveyCake {
         warnings.push(`第 ${i + 1} 題「${text}」矩陣缺少列或欄,已轉為文字題`);
         questions.push({ ...base, type: 'text' });
         continue;
+      }
+      if (type === 'NEST_MULTI') {
+        warnings.push(`第 ${i + 1} 題「${text}」為複選矩陣,已降級為單選矩陣(每列僅能選一項)`);
       }
       questions.push({ ...base, type: 'matrix', config: { matrix: { rows, columns } } });
       continue;

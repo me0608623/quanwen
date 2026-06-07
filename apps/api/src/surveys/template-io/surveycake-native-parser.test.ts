@@ -92,4 +92,40 @@ describe('parseSurveyCakeNative', () => {
     const r = parseSurveyCakeNative({ title: 'x', subjects: [] });
     expect(r.questions).toEqual([]);
   });
+
+  it('PICKFROM / ADVANCED_SELECTION_BASED → multiple_choice', () => {
+    const r = parseSurveyCakeNative({
+      title: 'x',
+      subjects: [
+        { type: 'PICKFROM', text: '重複核選題', orders: 0, required: 0, invisible: 0, options: [opt('A', 0), opt('B', 1)] },
+        { type: 'ADVANCED_SELECTION_BASED', text: '進階選擇題', orders: 1, required: 0, invisible: 0, options: [opt('X', 0), opt('Y', 1)] },
+      ],
+    });
+    expect(r.questions.map((q) => q.type)).toEqual(['multiple_choice', 'multiple_choice']);
+  });
+
+  it('NEST_MULTI(複選矩陣) → matrix 並收 warning', () => {
+    const r = parseSurveyCakeNative({
+      title: 'x',
+      subjects: [
+        { type: 'NEST_MULTI', text: '複選矩陣', orders: 0, required: 1, invisible: 0, options: [opt('選項1', 0), opt('選項2', 1)] },
+        { type: 'NESTCHILD', text: '子題A', orders: 1, required: 0, invisible: 0, options: null },
+        { type: 'NESTCHILD', text: '子題B', orders: 2, required: 0, invisible: 0, options: null },
+      ],
+    });
+    const q = r.questions.find((x) => x.title === '複選矩陣');
+    expect(q?.type).toBe('matrix');
+    const matrix = (q?.config as { matrix?: { rows?: string[]; columns?: string[] } })?.matrix;
+    expect(matrix?.rows).toEqual(['子題A', '子題B']);
+    expect(matrix?.columns).toEqual(['選項1', '選項2']);
+    expect(r.warnings.some((w) => w.includes('複選矩陣'))).toBe(true);
+  });
+
+  it('DIVIDER 跳過,不產生題目', () => {
+    const r = parseSurveyCakeNative({
+      title: 'x',
+      subjects: [{ type: 'DIVIDER', text: '分隔線', orders: 0, required: 0, invisible: 0, options: null }],
+    });
+    expect(r.questions).toEqual([]);
+  });
 });

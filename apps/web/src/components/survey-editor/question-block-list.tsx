@@ -29,6 +29,7 @@ const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string; icon: string 
   { value: 'multiple_choice', label: '多選', icon: '☑' },
   { value: 'text', label: '問答', icon: '☰' },
   { value: 'rating', label: '評分', icon: '★' },
+  { value: 'matrix', label: '矩陣量表', icon: '▦' },
 ];
 
 // 題型中文名稱對照（用於側邊欄 block 顯示）
@@ -40,6 +41,7 @@ const TYPE_DISPLAY: Record<string, string> = {
   numeric: '數字',
   yes_no: '是/否',
   dropdown: '下拉選單',
+  matrix: '矩陣量表',
 };
 
 // ─── Component ──────────────────────────────────────────────────────────────
