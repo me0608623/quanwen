@@ -346,6 +346,13 @@ export default function SurveyStatsPage() {
               >
                 開啟填答頁 ↗
               </a>
+              <Link
+                href={`/dashboard/surveys/${id}?edit=1`}
+                className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+                title="可修改標題、說明、圖片、樣式、感謝頁與受眾條件；題目與獎勵已鎖定"
+              >
+                ✏️ 編輯問卷資訊
+              </Link>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[520px]">

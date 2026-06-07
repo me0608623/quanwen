@@ -12,8 +12,10 @@ interface SurveyEditorShellProps {
   surveyTitle: string;
   /** Callback when the title is edited */
   onTitleChange: (title: string) => void;
-  /** Whether the survey can be edited (draft / rejected) */
+  /** Whether the survey can be edited (draft / rejected，或已發布的資訊編輯模式) */
   canEdit: boolean;
+  /** Whether the publish button is available（已發布資訊編輯模式 = false）。預設同 canEdit */
+  canPublish?: boolean;
   /** Status badge label */
   statusLabel: string;
   /** Whether there are unsaved changes */
@@ -53,6 +55,7 @@ export function SurveyEditorShell({
   surveyTitle,
   onTitleChange,
   canEdit,
+  canPublish = canEdit,
   statusLabel,
   dirty,
   savePending,
@@ -179,11 +182,11 @@ export function SurveyEditorShell({
               disabled={savePending || !dirty}
               className="rounded-md border border-primary px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10 disabled:opacity-60"
             >
-              {savePending ? '儲存中…' : dirty ? '儲存草稿' : '已儲存'}
+              {savePending ? '儲存中…' : dirty ? (canPublish ? '儲存草稿' : '儲存變更') : '已儲存'}
             </button>
           )}
 
-          {canEdit && (
+          {canPublish && (
             <button
               type="button"
               onClick={onPublish}

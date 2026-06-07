@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   type AudienceCriteria,
   type DeadlineTier,
@@ -17,7 +17,7 @@ import {
 import { AiDraftPanel } from '@/components/survey-editor/ai-draft-panel';
 import { AiImprovePanel } from '@/components/survey-editor/ai-improve-panel';
 import { AntiCheatPanel } from '@/components/survey-editor/anti-cheat-panel';
-import { AudienceTargeting } from '@/components/survey-editor/audience-targeting';
+import { AudienceTargeting, ReputationInfoIcon } from '@/components/survey-editor/audience-targeting';
 import { ImageUploader } from '@/components/survey-editor/image-uploader';
 import { WelcomeImagesEditor } from '@/components/survey-editor/welcome-images-editor';
 import { QuestionBlockList } from '@/components/survey-editor/question-block-list';
@@ -62,6 +62,9 @@ const localInputToIso = (v: string): string | null => (v ? new Date(v).toISOStri
 
 export default function SurveyDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
+  // 已發布問卷的「資訊編輯模式」：可改標題/說明/圖片/樣式/感謝頁/受眾，題目與獎勵鎖定
+  const editInfoMode = searchParams.get('edit') === '1';
   const router = useRouter();
   const { data: survey, isLoading } = useSurvey(id);
   const updateSurvey = useUpdateSurvey(id);
@@ -101,7 +104,8 @@ export default function SurveyDetailPage() {
 
   useEffect(() => {
     if (!survey) return;
-    if (survey.status === 'published' || survey.status === 'closed') {
+    // 已發布問卷帶 ?edit=1 → 進入「資訊編輯模式」（不轉跳統計頁）
+    if (survey.status === 'closed' || (survey.status === 'published' && !editInfoMode)) {
       router.replace(`/dashboard/surveys/${survey.id}/stats`);
       return;
     }
@@ -130,9 +134,12 @@ export default function SurveyDetailPage() {
     setThankYouImages(survey.thankYouImages ?? []);
     setThankYouRedirectUrl(survey.thankYouRedirectUrl ?? '');
     setInitialized(true);
-  }, [dirty, initialized, router, survey]);
+  }, [dirty, initialized, router, survey, editInfoMode]);
 
   const canEdit = survey?.status === 'draft' || survey?.status === 'rejected';
+  // 資訊編輯模式（已發布）：標題/說明/圖片/樣式/感謝頁/受眾可改；題目與獎勵鎖定
+  const isPublishedEditing = survey?.status === 'published' && editInfoMode;
+  const canEditInfo = canEdit || isPublishedEditing;
   const livePreviewDraft = useDebouncedValue({ title, description, questions, theme, coverImageUrl }, 350);
 
   // 定價顧問：依題目估算建議單份獎勵（debounced，僅 standard 問卷）
@@ -212,22 +219,32 @@ export default function SurveyDetailPage() {
     };
 
     try {
-      await updateSurvey.mutateAsync({
-        title, description, questions, audienceCriteria, theme, coverImageUrl, welcomeImages,
-        thankYouMessage: thankYouMessage.trim() || undefined,
-        thankYouImages,
-        thankYouRedirectUrl: thankYouRedirectUrl.trim() || undefined,
-        ...rewardFields, ...scheduleFields,
-      });
+      if (isPublishedEditing) {
+        // 已發布問卷：只送資訊類白名單欄位（題目/獎勵/排程鎖定，後端亦會擋）
+        await updateSurvey.mutateAsync({
+          title, description, audienceCriteria, theme, coverImageUrl, welcomeImages,
+          thankYouMessage: thankYouMessage.trim() || undefined,
+          thankYouImages,
+          thankYouRedirectUrl: thankYouRedirectUrl.trim() || undefined,
+        });
+      } else {
+        await updateSurvey.mutateAsync({
+          title, description, questions, audienceCriteria, theme, coverImageUrl, welcomeImages,
+          thankYouMessage: thankYouMessage.trim() || undefined,
+          thankYouImages,
+          thankYouRedirectUrl: thankYouRedirectUrl.trim() || undefined,
+          ...rewardFields, ...scheduleFields,
+        });
+      }
       setDirty(false);
     } catch (err) {
-      showAxiosError(err, '儲存草稿失敗，請稍後再試。');
+      showAxiosError(err, '儲存失敗，請稍後再試。');
     }
   };
 
   // Cmd/Ctrl+S 快速儲存草稿
   useEffect(() => {
-    if (!canEdit) return;
+    if (!canEditInfo) return;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
@@ -237,7 +254,7 @@ export default function SurveyDetailPage() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canEdit, dirty, updateSurvey.isPending]);
+  }, [canEditInfo, dirty, updateSurvey.isPending]);
 
   const handlePublish = async () => {
     try {
@@ -400,7 +417,7 @@ export default function SurveyDetailPage() {
         setTheme(next);
         markDirty();
       }}
-      disabled={!canEdit}
+      disabled={!canEditInfo}
     />
   );
 
@@ -474,14 +491,17 @@ export default function SurveyDetailPage() {
             markDirty();
           }}
           showReputation={false}
-          disabled={!canEdit}
+          disabled={!canEditInfo}
         />
       </div>
 
       <div>
-        <h3 className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-          最低信譽分
-        </h3>
+        <div className="mb-2 flex items-center gap-1.5">
+          <h3 className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+            最低信譽分
+          </h3>
+          <ReputationInfoIcon />
+        </div>
         <input
           type="range"
           min={0}
@@ -492,7 +512,7 @@ export default function SurveyDetailPage() {
             setMinReputation(Number(e.target.value));
             markDirty();
           }}
-          disabled={!canEdit}
+          disabled={!canEditInfo}
           className="w-full"
         />
         <span className="text-xs text-muted-foreground">{minReputation}</span>
@@ -573,7 +593,7 @@ export default function SurveyDetailPage() {
             <textarea
               value={thankYouMessage}
               onChange={(e) => { setThankYouMessage(e.target.value); markDirty(); }}
-              disabled={!canEdit}
+              disabled={!canEditInfo}
               maxLength={1000}
               placeholder="例：感謝你的填寫！你的意見對我們非常重要。"
               className="h-28 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
@@ -581,7 +601,7 @@ export default function SurveyDetailPage() {
             <p className="mt-1 text-right text-[11px] text-muted-foreground">{thankYouMessage.length}/1000</p>
           </div>
 
-          {canEdit && (
+          {canEditInfo && (
             <div>
               <label className="mb-1 block text-sm font-medium">感謝頁圖片（選填，依序顯示）</label>
               <WelcomeImagesEditor
@@ -597,7 +617,7 @@ export default function SurveyDetailPage() {
               type="url"
               value={thankYouRedirectUrl}
               onChange={(e) => { setThankYouRedirectUrl(e.target.value); markDirty(); }}
-              disabled={!canEdit}
+              disabled={!canEditInfo}
               placeholder="https://example.com/thanks"
               className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
             />
@@ -638,6 +658,16 @@ export default function SurveyDetailPage() {
     // Default: show all content (overview mode)
     return (
       <div className="space-y-6">
+        {/* 已發布資訊編輯模式提示 */}
+        {isPublishedEditing && (
+          <div className="rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            ✏️ <span className="font-semibold">資訊編輯模式</span> —
+            可修改標題、說明、圖片、樣式、感謝頁與受眾條件；
+            <span className="font-semibold">題目與獎勵已鎖定</span>（修改會使既有填答失效）。
+            改完按右上角「儲存變更」立即生效。
+          </div>
+        )}
+
         {/* Budget warning */}
         {canEdit && budgetCheck && !budgetCheck.sufficient && budgetCheck.requiredAmount > 0 && (
           <div className="rounded-lg border border-yellow-300 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
@@ -683,7 +713,7 @@ export default function SurveyDetailPage() {
               setTitle(e.target.value);
               markDirty();
             }}
-            disabled={!canEdit}
+            disabled={!canEditInfo}
             aria-label="問卷標題"
             className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm disabled:opacity-60"
           />
@@ -693,7 +723,7 @@ export default function SurveyDetailPage() {
               setDescription(e.target.value);
               markDirty();
             }}
-            disabled={!canEdit}
+            disabled={!canEditInfo}
             rows={3}
             maxLength={2000}
             aria-label="問卷說明"
@@ -777,7 +807,8 @@ export default function SurveyDetailPage() {
           setTitle(t);
           markDirty();
         }}
-        canEdit={canEdit}
+        canEdit={canEditInfo}
+        canPublish={canEdit}
         statusLabel={STATUS_LABELS[survey.status] ?? survey.status}
         dirty={dirty}
         savePending={updateSurvey.isPending}

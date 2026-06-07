@@ -75,3 +75,59 @@ describe('SurveysService — 結束設定（感謝頁面）持久化 (integratio
     expect(result.success).toBe(false);
   });
 });
+
+describe('SurveysService — 已發布問卷有限度編輯 (integration)', () => {
+  let client: PGlite;
+  let db: AppDb;
+  let service: SurveysService;
+  const SURVEYOR2 = '11111111-1111-1111-1111-111111111112';
+
+  beforeEach(async () => {
+    client = new PGlite();
+    await client.exec(FULL_SCHEMA_DDL);
+    db = drizzle(client, { schema }) as unknown as AppDb;
+    service = new SurveysService(db, {} as ZaiClient, {} as AiAuditService, {} as WalletService);
+    await client.exec(`
+      INSERT INTO users (id, email, role, display_name) VALUES
+        ('${SURVEYOR}', 'c@example.com', 'surveyor', 'C'),
+        ('${SURVEYOR2}', 'other@example.com', 'surveyor', 'O');
+    `);
+  });
+
+  async function createPublished(): Promise<string> {
+    const created = (await service.create(SURVEYOR, {
+      title: '已發布問卷', type: 'standard',
+      questions: [{ type: 'text', title: 'Q1' }],
+    } as unknown as CreateSurveyDto)) as unknown as { id: string };
+    await client.exec(`UPDATE surveys SET status='published', published_at=NOW() WHERE id='${created.id}';`);
+    return created.id;
+  }
+
+  it('1. 已發布可改資訊類欄位（標題/說明/感謝頁/受眾）', async () => {
+    const id = await createPublished();
+    const r = (await service.update(id, SURVEYOR, {
+      title: '改過的標題', description: '新說明',
+      thankYouMessage: '謝謝！',
+      audienceCriteria: { gender: ['female'] },
+    } as never)) as unknown as { title: string; description: string; thankYouMessage: string };
+    expect(r.title).toBe('改過的標題');
+    expect(r.description).toBe('新說明');
+    expect(r.thankYouMessage).toBe('謝謝！');
+  });
+
+  it('2. 已發布不可改題目或獎勵 → BadRequest', async () => {
+    const id = await createPublished();
+    await expect(service.update(id, SURVEYOR, {
+      questions: [{ type: 'text', title: '換掉的題目' }],
+    } as never)).rejects.toThrow('已發布問卷僅能修改');
+    await expect(service.update(id, SURVEYOR, {
+      rewardPoints: 999,
+    } as never)).rejects.toThrow('已發布問卷僅能修改');
+  });
+
+  it('3. 非擁有者不可編輯已發布問卷', async () => {
+    const id = await createPublished();
+    await expect(service.update(id, SURVEYOR2, { title: '駭' } as never))
+      .rejects.toThrow('無權操作此問卷');
+  });
+});

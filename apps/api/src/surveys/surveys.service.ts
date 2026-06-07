@@ -263,7 +263,52 @@ export class SurveysService {
     };
   }
 
+  /** 已發布問卷可改的「資訊類」欄位白名單（不影響既有填答有效性與獎勵承諾） */
+  private static readonly PUBLISHED_EDITABLE_FIELDS = [
+    'title', 'description', 'category',
+    'coverImageUrl', 'welcomeImages', 'theme',
+    'thankYouMessage', 'thankYouImages', 'thankYouRedirectUrl',
+    'audienceCriteria',
+  ] as const;
+
+  /**
+   * 已發布問卷的有限度編輯：只允許資訊類欄位。
+   * 題目/選項/獎勵/抽獎設定一律鎖定 — 否則已收集的填答會失效，
+   * 且可能被濫用（先低價收答案再換題目/降獎勵）。
+   */
+  private async updatePublishedInfo(surveyId: string, dto: UpdateSurveyDto) {
+    const allowed = new Set<string>(SurveysService.PUBLISHED_EDITABLE_FIELDS);
+    const blocked = Object.keys(dto).filter(
+      (k) => !allowed.has(k) && (dto as Record<string, unknown>)[k] !== undefined,
+    );
+    if (blocked.length > 0) {
+      throw new BadRequestException(
+        `已發布問卷僅能修改標題、說明、圖片、樣式、感謝頁與受眾條件；不可修改：${blocked.join('、')}`,
+      );
+    }
+
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    for (const key of SurveysService.PUBLISHED_EDITABLE_FIELDS) {
+      const v = (dto as Record<string, unknown>)[key];
+      if (v !== undefined) updateData[key] = v;
+    }
+    await this.db.update(surveys).set(updateData).where(eq(surveys.id, surveyId));
+  }
+
   async update(surveyId: string, surveyorId: string, dto: UpdateSurveyDto) {
+    // 已發布問卷 → 走有限度編輯（資訊類欄位白名單）
+    const [existing] = await this.db
+      .select({ surveyorId: surveys.surveyorId, status: surveys.status })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!existing) throw new NotFoundException('問卷不存在');
+    if (existing.surveyorId !== surveyorId) throw new ForbiddenException('無權操作此問卷');
+    if (existing.status === 'published') {
+      await this.updatePublishedInfo(surveyId, dto);
+      return this.findOneDetailed(surveyId, surveyorId);
+    }
+
     const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
 
     const { questions, logicRules, ...surveyFields } = dto;
