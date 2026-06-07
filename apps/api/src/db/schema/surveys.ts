@@ -123,6 +123,11 @@ export const surveys = pgTable(
     // 歡迎頁（作答第一頁）可插入的多張圖片，依陣列順序顯示於描述之後
     welcomeImages: jsonb('welcome_images').$type<string[]>(),
 
+    // 結束設定（感謝頁面）：自訂感謝文字 / 插圖 / 完成後導向連結
+    thankYouMessage: text('thank_you_message'),
+    thankYouImages: jsonb('thank_you_images').$type<string[]>(),
+    thankYouRedirectUrl: text('thank_you_redirect_url'),
+
     // 樣式主題（JSON）：accentColor / backgroundColor / fontFamily，套用到填答頁與預覽
     theme: jsonb('theme'),
 

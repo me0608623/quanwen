@@ -70,6 +70,35 @@ export default function PublicSurveyPage() {
             ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
             : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`}
         </p>
+        {/* 建立者自訂的感謝頁內容（結束設定） */}
+        {done && survey.thankYouMessage && (
+          <p className="mx-auto mt-4 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {survey.thankYouMessage}
+          </p>
+        )}
+        {done && (survey.thankYouImages?.length ?? 0) > 0 && (
+          <div className="mx-auto mt-4 max-w-md space-y-3">
+            {survey.thankYouImages!.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${url}-${i}`}
+                src={resolveAssetUrl(url)}
+                alt={`感謝頁圖片 ${i + 1}`}
+                className="w-full rounded-xl object-contain"
+              />
+            ))}
+          </div>
+        )}
+        {done && survey.thankYouRedirectUrl && (
+          <a
+            href={survey.thankYouRedirectUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-4 inline-block rounded-md border border-[#126b8a] px-5 py-2 text-sm font-semibold text-[#126b8a] hover:bg-[#126b8a]/5"
+          >
+            前往指定頁面 ↗
+          </a>
+        )}
         <div className="mt-6 rounded-xl border border-[#126b8a]/20 bg-[#126b8a]/5 p-4">
           <p className="text-sm font-medium text-[#126b8a]">想填更多問卷賺獎勵，或自己發問卷找受試者？</p>
           <Link

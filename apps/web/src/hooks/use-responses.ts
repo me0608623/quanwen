@@ -71,6 +71,10 @@ export interface PublicSurvey {
   coverImageUrl?: string | null;
   /** 歡迎頁可插入的多張圖片，依序顯示於描述之後 */
   welcomeImages?: string[];
+  /** 結束設定（感謝頁面）：自訂文字 / 圖片 / 完成後導向連結 */
+  thankYouMessage?: string | null;
+  thankYouImages?: string[];
+  thankYouRedirectUrl?: string | null;
   alreadySubmitted: boolean;
   questions: PublicQuestion[];
 }

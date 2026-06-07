@@ -152,7 +152,36 @@ export default function SurveyFillPage() {
             品質審核通過後，您會取得「{survey.lotteryPrize}」抽獎資格，開獎後會收到系統通知。
           </p>
         )}
+        {/* 建立者自訂的感謝頁內容（結束設定） */}
+        {!survey.alreadySubmitted && survey.thankYouMessage && (
+          <p className="mx-auto mb-4 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+            {survey.thankYouMessage}
+          </p>
+        )}
+        {!survey.alreadySubmitted && (survey.thankYouImages?.length ?? 0) > 0 && (
+          <div className="mx-auto mb-6 max-w-md space-y-3">
+            {survey.thankYouImages!.map((url, i) => (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                key={`${url}-${i}`}
+                src={resolveAssetUrl(url)}
+                alt={`感謝頁圖片 ${i + 1}`}
+                className="w-full rounded-xl object-contain"
+              />
+            ))}
+          </div>
+        )}
         <div className="flex flex-wrap items-center justify-center gap-3">
+          {!survey.alreadySubmitted && survey.thankYouRedirectUrl && (
+            <a
+              href={survey.thankYouRedirectUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-[#126b8a] px-5 py-2 text-sm font-semibold text-[#126b8a] hover:bg-[#126b8a]/5"
+            >
+              前往指定頁面 ↗
+            </a>
+          )}
           <button
             onClick={() => router.push('/tasks')}
             className="rounded-md bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90"

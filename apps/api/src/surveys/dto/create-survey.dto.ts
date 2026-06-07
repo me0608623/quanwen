@@ -89,6 +89,12 @@ export const CreateSurveyBaseSchema = z.object({
   coverImageUrl: z.string().max(500).optional(),
   // 歡迎頁（作答第一頁）可插入的多張圖片，依序顯示於描述之後
   welcomeImages: z.array(z.string().max(500)).max(12).optional(),
+  // 結束設定（感謝頁面）：自訂感謝文字 / 插圖 / 完成後導向連結
+  thankYouMessage: z.string().max(1000).optional(),
+  thankYouImages: z.array(z.string().max(500)).max(12).optional(),
+  thankYouRedirectUrl: z.string().url().max(1000)
+    .refine((u) => /^https?:\/\//i.test(u), { message: 'URL 必須使用 http 或 https 協議' })
+    .optional(),
   // 樣式主題：填答頁/預覽外觀
   theme: SurveyThemeSchema.optional(),
   audienceCriteria: AudienceCriteriaSchema.optional(),

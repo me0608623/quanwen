@@ -249,16 +249,24 @@ export function QuestionBlockList({
         );
       })}
 
-      {/* Endings block (static) */}
-      <div className="rounded-md border border-border bg-white px-3 py-2 text-xs">
+      {/* Endings block — 可點擊開啟感謝頁編輯面板（selectedIndex === -2） */}
+      <button
+        type="button"
+        onClick={() => onSelect?.(-2)}
+        className={cn(
+          'w-full rounded-md border bg-white px-3 py-2 text-left text-xs transition-all',
+          selectedIndex === -2 ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/30',
+        )}
+      >
         <div className="flex items-center gap-2">
           <span className="text-muted-foreground">🏁</span>
           <span className="font-medium text-foreground">結束設定</span>
+          <span className="ml-auto text-[10px] text-muted-foreground">文字 · 圖片 · 導向</span>
         </div>
         <p className="mt-0.5 text-[10px] text-muted-foreground">
           感謝頁面 & 重新導向
         </p>
-      </div>
+      </button>
 
       {/* Add Question button with type selector */}
       {canEdit && (

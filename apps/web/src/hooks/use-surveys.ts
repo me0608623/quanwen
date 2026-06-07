@@ -220,6 +220,10 @@ export interface Survey {
   coverImageUrl?: string;
   // 歡迎頁（作答第一頁）可插入的多張圖片，依序顯示
   welcomeImages?: string[];
+  // 結束設定（感謝頁面）：自訂文字 / 圖片 / 完成後導向連結
+  thankYouMessage?: string;
+  thankYouImages?: string[];
+  thankYouRedirectUrl?: string;
   // QUA-201: Scheduled publish and auto-close
   scheduledPublishAt?: string | null;
   autoCloseAt?: string | null;

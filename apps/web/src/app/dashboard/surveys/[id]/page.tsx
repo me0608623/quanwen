@@ -89,6 +89,10 @@ export default function SurveyDetailPage() {
   const [theme, setTheme] = useState<SurveyTheme>({});
   const [coverImageUrl, setCoverImageUrl] = useState<string | undefined>(undefined);
   const [welcomeImages, setWelcomeImages] = useState<string[]>([]);
+  // 結束設定（感謝頁面）
+  const [thankYouMessage, setThankYouMessage] = useState('');
+  const [thankYouImages, setThankYouImages] = useState<string[]>([]);
+  const [thankYouRedirectUrl, setThankYouRedirectUrl] = useState('');
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
@@ -122,6 +126,9 @@ export default function SurveyDetailPage() {
     setTheme(survey.theme ?? {});
     setCoverImageUrl(survey.coverImageUrl ?? undefined);
     setWelcomeImages(survey.welcomeImages ?? []);
+    setThankYouMessage(survey.thankYouMessage ?? '');
+    setThankYouImages(survey.thankYouImages ?? []);
+    setThankYouRedirectUrl(survey.thankYouRedirectUrl ?? '');
     setInitialized(true);
   }, [dirty, initialized, router, survey]);
 
@@ -205,7 +212,13 @@ export default function SurveyDetailPage() {
     };
 
     try {
-      await updateSurvey.mutateAsync({ title, description, questions, audienceCriteria, theme, coverImageUrl, welcomeImages, ...rewardFields, ...scheduleFields });
+      await updateSurvey.mutateAsync({
+        title, description, questions, audienceCriteria, theme, coverImageUrl, welcomeImages,
+        thankYouMessage: thankYouMessage.trim() || undefined,
+        thankYouImages,
+        thankYouRedirectUrl: thankYouRedirectUrl.trim() || undefined,
+        ...rewardFields, ...scheduleFields,
+      });
       setDirty(false);
     } catch (err) {
       showAxiosError(err, '儲存草稿失敗，請稍後再試。');
@@ -544,7 +557,59 @@ export default function SurveyDetailPage() {
   // ─── Determine what to show in center content ──────────────────
   const centerContent = (() => {
     // If a specific question is selected, show its editor
-    if (selectedQuestionIndex !== null && selectedQuestionIndex < questions.length) {
+    // 結束設定（感謝頁面）面板：selectedQuestionIndex === -2
+    if (selectedQuestionIndex === -2) {
+      return (
+        <div className="space-y-5">
+          <div>
+            <h2 className="text-base font-semibold">🏁 結束設定</h2>
+            <p className="mt-1 text-xs text-muted-foreground">
+              填答者完成問卷後看到的感謝頁面。可自訂文字、插入圖片，或設定完成後導向的網址。留空則使用預設感謝畫面。
+            </p>
+          </div>
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">感謝文字（選填）</label>
+            <textarea
+              value={thankYouMessage}
+              onChange={(e) => { setThankYouMessage(e.target.value); markDirty(); }}
+              disabled={!canEdit}
+              maxLength={1000}
+              placeholder="例：感謝你的填寫！你的意見對我們非常重要。"
+              className="h-28 w-full resize-none rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+            />
+            <p className="mt-1 text-right text-[11px] text-muted-foreground">{thankYouMessage.length}/1000</p>
+          </div>
+
+          {canEdit && (
+            <div>
+              <label className="mb-1 block text-sm font-medium">感謝頁圖片（選填，依序顯示）</label>
+              <WelcomeImagesEditor
+                value={thankYouImages}
+                onChange={(next) => { setThankYouImages(next); markDirty(); }}
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="mb-1 block text-sm font-medium">完成後導向網址（選填）</label>
+            <input
+              type="url"
+              value={thankYouRedirectUrl}
+              onChange={(e) => { setThankYouRedirectUrl(e.target.value); markDirty(); }}
+              disabled={!canEdit}
+              placeholder="https://example.com/thanks"
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+            />
+            <p className="mt-1 text-xs text-muted-foreground">
+              設定後感謝頁會顯示「前往」按鈕讓填答者跳轉（不會強制自動跳轉）。僅支援 http / https。
+            </p>
+          </div>
+        </div>
+      );
+    }
+
+    if (selectedQuestionIndex !== null && selectedQuestionIndex >= 0 && selectedQuestionIndex < questions.length) {
       const q = questions[selectedQuestionIndex];
       return canEdit ? (
         <QuestionEditor

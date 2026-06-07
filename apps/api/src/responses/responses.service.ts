@@ -267,6 +267,10 @@ export class ResponsesService {
       coverImageUrl: survey.coverImageUrl,
       // 歡迎頁可插入的多張圖片（依序顯示於描述之後）
       welcomeImages: survey.welcomeImages ?? [],
+      // 結束設定（感謝頁面）：完成填答後顯示的自訂內容
+      thankYouMessage: survey.thankYouMessage ?? null,
+      thankYouImages: survey.thankYouImages ?? [],
+      thankYouRedirectUrl: survey.thankYouRedirectUrl ?? null,
       alreadySubmitted,
       randomizationSeed: previewSeed,
       questions: questions.map((q) => {

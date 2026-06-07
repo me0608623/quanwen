@@ -100,6 +100,10 @@ export class SurveysService {
           coverImageUrl: dto.coverImageUrl,
           // 歡迎頁多圖
           welcomeImages: dto.welcomeImages,
+          // 結束設定（感謝頁面）
+          thankYouMessage: dto.thankYouMessage,
+          thankYouImages: dto.thankYouImages,
+          thankYouRedirectUrl: dto.thankYouRedirectUrl,
           // 樣式主題
           theme: dto.theme,
           // 企業品牌問卷 + 優惠券設定
@@ -192,6 +196,9 @@ export class SurveysService {
       questionShuffleMode: src.questionShuffleMode ?? undefined,
       coverImageUrl: src.coverImageUrl ?? undefined,
       welcomeImages: src.welcomeImages ?? undefined,
+      thankYouMessage: src.thankYouMessage ?? undefined,
+      thankYouImages: src.thankYouImages ?? undefined,
+      thankYouRedirectUrl: src.thankYouRedirectUrl ?? undefined,
       theme: src.theme ?? undefined,
       audienceCriteria: src.audienceCriteria ?? undefined,
       questions: src.questions.map((q) => ({
@@ -332,6 +339,10 @@ export class SurveysService {
     if (surveyFields.coverImageUrl !== undefined) updateData.coverImageUrl = surveyFields.coverImageUrl;
     // 歡迎頁多圖
     if (surveyFields.welcomeImages !== undefined) updateData.welcomeImages = surveyFields.welcomeImages;
+    // 結束設定（感謝頁面）
+    if (surveyFields.thankYouMessage !== undefined) updateData.thankYouMessage = surveyFields.thankYouMessage;
+    if (surveyFields.thankYouImages !== undefined) updateData.thankYouImages = surveyFields.thankYouImages;
+    if (surveyFields.thankYouRedirectUrl !== undefined) updateData.thankYouRedirectUrl = surveyFields.thankYouRedirectUrl;
     if (surveyFields.theme !== undefined) updateData.theme = surveyFields.theme;
 
     // Wrap survey update + question replacement in a single transaction:
