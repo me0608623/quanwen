@@ -1,0 +1,29 @@
+name: Vercel Production Deployment
+
+# 正式站（quanwen.vercel.app）只能由 main 分支更新。
+# 任何 session / agent 禁止本機直接跑 `vercel --prod` — 見 CLAUDE.md「部署規則」。
+on:
+  push:
+    branches:
+      - main
+
+# 序列化 production 部署：新 push 進來時取消還在跑的舊部署（舊的必為過時快照）
+concurrency:
+  group: vercel-production
+  cancel-in-progress: true
+
+jobs:
+  deploy-production:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy Production to Vercel
+        uses: BetaHuhn/deploy-to-vercel-action@v1
+        with:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          PRODUCTION: true

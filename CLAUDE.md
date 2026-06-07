@@ -623,18 +623,32 @@ docker compose -f docker-compose.hub.yml down
 
 **本機改 code ≠ 正式站更新。** 每次代碼改動完成並驗證後，依改動範圍部署，否則使用者在公開網站看不到變化：
 
-| 改了什麼 | 要部署到 | 指令 |
+| 改了什麼 | 要部署到 | 方式 |
 |----------|---------|------|
-| `apps/web`（前端/首頁/UI） | **Vercel** | `cd /home/aa/projects/quanwen && vercel --prod --yes --scope 409500476s-projects` |
+| `apps/web`（前端/首頁/UI） | **Vercel** | **經 GitHub Actions**（見下方「部署規則」）— 禁止本機 `vercel --prod` |
 | `apps/api`（後端/API） | **Render**（經 Docker Hub） | 見下方「更新正式 API」三步驟 |
 | `packages/*`（共用） | **兩邊都要** | 先 API 再前端 |
 | DB schema | **Neon** | `cd apps/api && DATABASE_URL=$NEON_DATABASE_URL npx drizzle-kit push` |
 
+### 🚫 Vercel 部署規則（2026-06-08 起，多 session 防互蓋）
+
+正式站 `quanwen.vercel.app` **只能由 `main` 分支經 GitHub Actions 更新**
+（`.github/workflows/vercel-production.yml`；repo secrets `VERCEL_TOKEN/ORG_ID/PROJECT_ID` 已設定）。
+
+- ❌ 禁止本機跑 `vercel --prod` / `vercel deploy --prod` / `vercel alias set` — Vercel 是「快照上傳、最後一個贏」，
+  從舊 commit 部署會**蓋掉別的 session 已上線的改動**（2026-06-07 差點發生過）。
+- ❌ 禁止未經用戶同意 push `main`。
+- ✅ 正規流程：`pnpm verify` 全綠 → `git commit` → push feature branch（`feat/**`、`fix/**`、`agent/**` 自動出 **Preview** URL，
+  見 `.github/workflows/vercel-preview.yml`）→ 驗證 Preview → 經用戶同意 merge/ff `main` → Actions 自動部署 production。
+- ✅ 為何能防衝突：production 永遠從 `main` tip 建置；git 對 non-fast-forward push 會拒絕（序列化由 git 保證）；
+  Actions `concurrency: vercel-production` 確保不會兩個 production 部署互搶。
+- ⚠️ 緊急 fallback（Actions 故障且用戶明確指示時才可用 CLI）：先 `git fetch` 確認自己在 **branch 最新 tip**，
+  從乾淨 worktree 部署：`git worktree add /tmp/quanwen-deploy <tip> && cp -r .vercel /tmp/quanwen-deploy/`，
+  完事 `git worktree remove --force /tmp/quanwen-deploy`。
+- ⚠️ **API image 同樣是 last-wins**：`me0608623/quanwen-api:latest` 被誰 push 就是誰的快照。
+  docker build 前必須確認 HEAD 包含所有已部署的 commits（從 branch tip 的乾淨 worktree build）；尚未遷移到 Actions。
+
 - 流程順序：`pnpm verify` 全綠 → `git commit` → 部署（先 commit 正式站才有 git 對應可回溯）。
-- Vercel 部署是上傳**整個本地 working tree**（未 commit 的改動也會上線）；docker build 也吃 working tree。
-  若工作樹混有其他 session 的半成品 → **從乾淨 worktree 部署**：
-  `git worktree add /tmp/quanwen-deploy HEAD && cp -r .vercel /tmp/quanwen-deploy/`，
-  從那裡 docker build / `vercel --prod`，完事 `git worktree remove --force /tmp/quanwen-deploy`。
 - 部署後驗證：前端 `curl -sI https://quanwen.vercel.app | head -1`；API `curl -s https://quanwen-api.onrender.com/health`
   （⚠️ health 在**根路徑** `/health`，不是 `/api/v1/health` — 後者 404。冷啟動可能要等 30-60s）。
 - Render redeploy 用 API 觸發後，可 poll `GET /v1/services/$RENDER_SERVICE_ID/deploys/<dep-id>` 直到 `"status":"live"` 再驗證。
@@ -681,13 +695,12 @@ curl -s -X POST "https://api.render.com/v1/services/srv-d8hsdilckfvc73b4r8a0/dep
 
 ## 更新正式前端
 
-Vercel 專案**沒連 git**，只能從 **repo 根**用 CLI 部署（從 `apps/web` 跑會連錯專案 + frozen-lockfile 失敗）：
-```bash
-cd /home/aa/projects/quanwen
-vercel --prod --yes --scope 409500476s-projects --token="$VERCEL_TOKEN"
-```
+**2026-06-08 起改走 GitHub Actions**（見上方「🚫 Vercel 部署規則」）：merge/ff `main` → `.github/workflows/vercel-production.yml` 自動部署。
+**禁止本機 `vercel --prod`**（僅 Actions 故障 + 用戶明確指示時 fallback，且必須從 branch tip 的乾淨 worktree、repo 根執行 —
+從 `apps/web` 跑會連錯專案 + frozen-lockfile 失敗）。
+
 - 專案設定 `rootDirectory=apps/web`、`installCommand=cd ../.. && pnpm install --no-frozen-lockfile`。
-- `NEXT_PUBLIC_*` 是 build-time 烘進去的 → 改 env 後**必須重部署**。
+- `NEXT_PUBLIC_*` 是 build-time 烘進去的 → 改 env 後**必須重部署**（push 空 commit 到 main 或在 Actions 頁手動 re-run）。
 
 ## Neon DB 操作
 
