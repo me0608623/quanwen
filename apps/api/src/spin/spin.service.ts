@@ -19,15 +19,18 @@ export interface SpinSegment {
   color: string;  // 前端轉盤色塊
 }
 
+// 2026-06-07 重新配率：原表期望值 ≈25 點/轉（≈NT$12.5）過於慷慨，
+// 降到 ≈6.6 點/轉（≈NT$3.3），並增加獎項數讓轉盤更有層次。1 積分 = NT$0.5。
 export const SPIN_SEGMENTS: SpinSegment[] = [
-  { key: 'p5',     label: '5 點',        points: 5,   weight: 26, color: '#94a3b8' },
-  { key: 'p10',    label: '10 點',       points: 10,  weight: 24, color: '#38bdf8' },
-  { key: 'p20',    label: '20 點',       points: 20,  weight: 18, color: '#34d399' },
-  { key: 'p30',    label: '30 點',       points: 30,  weight: 13, color: '#a78bfa' },
-  { key: 'double', label: '2 倍！50 點', points: 50,  weight: 10, color: '#fbbf24' },
-  { key: 'p100',   label: '100 點',      points: 100, weight: 5,  color: '#fb7185' },
-  { key: 'zero',   label: '銘謝惠顧',     points: 0,   weight: 2,  color: '#cbd5e1' },
-  { key: 'jackpot',label: '大獎 200 點', points: 200, weight: 2,  color: '#f59e0b' },
+  { key: 'p1',     label: '1 點',        points: 1,   weight: 24, color: '#94a3b8' },
+  { key: 'p3',     label: '3 點',        points: 3,   weight: 22, color: '#38bdf8' },
+  { key: 'p5',     label: '5 點',        points: 5,   weight: 18, color: '#34d399' },
+  { key: 'zero',   label: '銘謝惠顧',     points: 0,   weight: 12, color: '#cbd5e1' },
+  { key: 'p8',     label: '8 點',        points: 8,   weight: 12, color: '#60a5fa' },
+  { key: 'p15',    label: '15 點',       points: 15,  weight: 6,  color: '#a78bfa' },
+  { key: 'p30',    label: '30 點',       points: 30,  weight: 3,  color: '#fbbf24' },
+  { key: 'p50',    label: '50 點',       points: 50,  weight: 2,  color: '#fb7185' },
+  { key: 'jackpot',label: '大獎 100 點', points: 100, weight: 1,  color: '#f59e0b' },
 ];
 
 export interface SpinStatus {

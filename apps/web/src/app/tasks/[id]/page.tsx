@@ -127,38 +127,42 @@ export default function SurveyFillPage() {
   }
 
   if (submitted || survey.alreadySubmitted) {
+    // 注意：submitted（本次剛送出）優先於 alreadySubmitted —
+    // 送出後 query invalidation 會讓 alreadySubmitted 變 true，
+    // 若以它優先判斷，感謝畫面會在 0.5 秒內被翻成「您已填過此問卷」。
+    const justSubmitted = submitted;
     return (
       <main className="mx-auto max-w-xl px-4 py-16 text-center">
-        <div className="text-5xl mb-4">{flagged ? '⚠️' : survey.alreadySubmitted ? '📋' : '🎉'}</div>
+        <div className="text-5xl mb-4">{flagged ? '⚠️' : justSubmitted ? '🎉' : '📋'}</div>
         <h1 className="text-2xl font-bold mb-2">
-          {survey.alreadySubmitted
-            ? '您已填過此問卷'
-            : flagged
-            ? '填答已記錄'
-            : '填答已送出！'}
+          {justSubmitted
+            ? flagged
+              ? '填答已記錄'
+              : '填答已送出！'
+            : '您已填過此問卷'}
         </h1>
         {flagged && (
           <p className="text-orange-600 text-sm mb-4">
             系統偵測到填答異常，請確保認真作答以維持您的信譽分數。
           </p>
         )}
-        {!survey.alreadySubmitted && !flagged && survey.rewardPoints > 0 && (
+        {justSubmitted && !flagged && survey.rewardPoints > 0 && (
           <p className="text-muted-foreground mb-6">
             NT${survey.rewardPoints} 獎勵將在審核後發放至您的帳戶。
           </p>
         )}
-        {!survey.alreadySubmitted && !flagged && survey.rewardMode === 'lottery' && (
+        {justSubmitted && !flagged && survey.rewardMode === 'lottery' && (
           <p className="text-muted-foreground mb-6">
             品質審核通過後，您會取得「{survey.lotteryPrize}」抽獎資格，開獎後會收到系統通知。
           </p>
         )}
         {/* 建立者自訂的感謝頁內容（結束設定） */}
-        {!survey.alreadySubmitted && survey.thankYouMessage && (
+        {justSubmitted && survey.thankYouMessage && (
           <p className="mx-auto mb-4 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-foreground">
             {survey.thankYouMessage}
           </p>
         )}
-        {!survey.alreadySubmitted && (survey.thankYouImages?.length ?? 0) > 0 && (
+        {justSubmitted && (survey.thankYouImages?.length ?? 0) > 0 && (
           <div className="mx-auto mb-6 max-w-md space-y-3">
             {survey.thankYouImages!.map((url, i) => (
               // eslint-disable-next-line @next/next/no-img-element
@@ -172,7 +176,7 @@ export default function SurveyFillPage() {
           </div>
         )}
         <div className="flex flex-wrap items-center justify-center gap-3">
-          {!survey.alreadySubmitted && survey.thankYouRedirectUrl && (
+          {justSubmitted && survey.thankYouRedirectUrl && (
             <a
               href={survey.thankYouRedirectUrl}
               target="_blank"
@@ -188,7 +192,7 @@ export default function SurveyFillPage() {
           >
             回到問卷列表
           </button>
-          {!survey.alreadySubmitted && !flagged && (
+          {justSubmitted && !flagged && (
             <button
               onClick={() => router.push('/spin')}
               className="rounded-md border border-amber-300 bg-amber-50 px-5 py-2 text-sm font-semibold text-amber-700 hover:bg-amber-100"

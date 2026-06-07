@@ -30,11 +30,11 @@ function Avatar({ src, name }: { src: string | null | undefined; name: string })
   );
 }
 
-// 非 admin 共用 nav
+// 非 admin 共用 nav（icon 全員補齊，視覺一致）
 const USER_TABS = [
-  { href: '/dashboard', label: '發問卷', matches: ['/dashboard', '/surveys'] },
-  { href: '/tasks',     label: '填問卷', matches: ['/tasks', '/earnings', '/shop'] },
-  { href: '/mutual',    label: '互惠',   matches: ['/mutual'] },
+  { href: '/dashboard', label: '📝 發問卷', matches: ['/dashboard', '/surveys'] },
+  { href: '/tasks',     label: '✍️ 填問卷', matches: ['/tasks', '/earnings', '/shop'] },
+  { href: '/mutual',    label: '🤝 互惠',   matches: ['/mutual'] },
   { href: '/spin',      label: '🎡 轉盤', matches: ['/spin'] },
   { href: '/dashboard/shop', label: '🛍️ 商店', matches: ['/dashboard/shop'] },
   { href: '/guide',     label: '📖 使用說明', matches: ['/guide'] },
@@ -198,11 +198,11 @@ export function Navbar() {
                       <p className="text-sm font-medium truncate">{me.displayName}</p>
                       <p className="text-xs text-muted-foreground truncate">{me.email}</p>
                     </div>
-                    <Link href="/profile" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">個人資料</Link>
+                    <Link href="/profile" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">👤 個人資料</Link>
                     <Link href="/guide" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">📖 使用說明</Link>
-                    <Link href="/wallet" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">錢包</Link>
-                    <Link href="/settings/accounts" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">帳號設定</Link>
-                    <Link href="/settings/security" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">安全</Link>
+                    <Link href="/wallet" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">👛 錢包</Link>
+                    <Link href="/settings/accounts" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">⚙️ 帳號設定</Link>
+                    <Link href="/settings/security" onClick={() => setMenuOpen(false)} className="block px-3 py-2 text-sm hover:bg-muted">🔒 安全</Link>
                     <button
                       onClick={() => { setMenuOpen(false); logout(); }}
                       className="block w-full text-left px-3 py-2 text-sm text-destructive hover:bg-muted border-t border-border"
@@ -270,19 +270,17 @@ export function Navbar() {
               );
             })}
 
+            {/* 使用說明已含在 USER_TABS 迴圈內，這裡不再重複列出 */}
             {!isAdmin && (
               <Link href="/wallet" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
-                錢包
+                👛 錢包
               </Link>
             )}
             <Link href="/profile" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
-              個人資料
-            </Link>
-            <Link href="/guide" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
-              📖 使用說明
+              👤 個人資料
             </Link>
             <Link href="/settings/accounts" onClick={() => setMobileOpen(false)} className="block rounded-md px-3 py-2 text-sm text-muted-foreground hover:text-foreground hover:bg-muted">
-              帳號設定
+              ⚙️ 帳號設定
             </Link>
 
             <button

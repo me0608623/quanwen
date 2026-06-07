@@ -817,6 +817,22 @@ export class ResponsesService {
         );
       }
 
+      // 轉盤次數：完成填答即 +1（只有被判 rejected 不給）。
+      // 之前只有過審（submitted/rewarded）才給，灰區 pending_review 的填答者
+      // 明明認真填完卻拿不到轉盤，與指南「每完成一份問卷 +1 次轉盤」不符。
+      // previous.qualityScore === null 守衛確保只在「首次審核」發放（re-audit 不重複給）。
+      if (
+        previous
+        && previous.qualityScore === null
+        && newStatus !== 'rejected'
+      ) {
+        this.spin
+          .grantChance(previous.respondentId, 1, '完成填答')
+          .catch((err: unknown) =>
+            this.logger.error(`轉盤次數發放失敗 respondentId=${previous.respondentId}`, err),
+          );
+      }
+
       if (
         previous
         && ['submitted', 'rewarded'].includes(previous.status)
@@ -889,11 +905,8 @@ export class ResponsesService {
         );
     }
     await this.updateRespondentStats(survey.respondentId);
-    this.spin
-      .grantChance(survey.respondentId, 1, '完成標準填答')
-      .catch((err: unknown) =>
-        this.logger.error(`轉盤次數發放失敗 respondentId=${survey.respondentId}`, err),
-      );
+    // 轉盤次數已改在「首次審核完成（非 rejected）」時統一發放（見 applyAudit 後的區塊），
+    // 此處不再發放，避免 pending_review → 人工核准 路徑重複 +1。
     // 企業品牌問卷:審核通過發優惠券到優惠券夾(同一 response 冪等)
     if (survey.isBrandSurvey && survey.couponTitle) {
       this.coupons
