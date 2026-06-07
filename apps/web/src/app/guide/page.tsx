@@ -54,7 +54,7 @@ export default function GuidePage() {
             每張任務卡會標示預估填寫分鐘、獎勵內容、剩餘份數，外部問卷另有「🔗 外部問卷」標記。
           </Item>
           <Item label="轉盤加碼：">
-            每完成一份問卷 +1 次轉盤抽獎機會，最高 200 點。
+            每完成一份問卷 +1 次轉盤抽獎機會，最高 100 點。
           </Item>
         </Section>
 
@@ -82,7 +82,7 @@ export default function GuidePage() {
         </Section>
 
         <Section title="⑥ 轉盤、積分商城與訂閱">
-          <Item label="轉盤抽獎：">完成問卷累積抽獎次數，轉一次最高 200 點，獎項即時入帳。</Item>
+          <Item label="轉盤抽獎：">完成問卷累積抽獎次數，轉一次最高 100 點（共 9 種獎項），獎項即時入帳。</Item>
           <Item label="積分商城：">用累積的積分兌換禮券、折抵或訂閱天數。</Item>
           <Item label="VIP / VVIP：">付費訂閱可提高每日 AI 功能（草稿生成、洞察等）使用額度。Free 5 次/日、VIP 50 次/日、VVIP 300 次/日。</Item>
         </Section>
@@ -100,7 +100,7 @@ export default function GuidePage() {
             <li>問卷發布即上架，AI 只提供品質建議、不退件不擋發布</li>
             <li>平台手續費 10%；金額一律新台幣整數</li>
             <li>儲值 NT$100–100,000；提領 NT$300 起、每日上限 NT$30,000、≥NT$2,000 需 KYC</li>
-            <li>每完成一份問卷 +1 次轉盤；轉盤最高 200 點</li>
+            <li>每完成一份問卷 +1 次轉盤；轉盤最高 100 點</li>
             <li>外部問卷由建立者自行發放獎勵，平台不代為審核</li>
           </ul>
         </Section>

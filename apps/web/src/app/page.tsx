@@ -138,7 +138,7 @@ export default function HomePage() {
               <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">填問卷 · 直接賺回報</h3>
               <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
                 完成問卷拿現金、7-11／全家／星巴克禮券或積分；積分可在商城兌換、或折抵。
-                每天還能免費轉一次轉盤加碼，最高 200 點。
+                每天還能免費轉一次轉盤加碼，最高 100 點。
               </p>
             </article>
             <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">

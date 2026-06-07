@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import type { AudienceCriteria } from '@/hooks/use-surveys';
 import {
   INDUSTRY_OPTIONS,
@@ -82,22 +83,26 @@ export function AudienceTargeting({ value, onChange, showReputation = true, disa
               )}
             </div>
             <div className="flex flex-wrap gap-1.5">
-              {/* 「不限（全部）」chip — 一鍵清空此維度（= 所有人可見） */}
+              {/* 「全部」chip — 按下去把此維度所有選項全選；再按一次取消全選（= 不限） */}
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => {
                   const draft = { ...value };
-                  delete draft[field];
+                  if (selected.length === options.length) {
+                    delete draft[field]; // 已全選 → 再按一次取消（= 不限）
+                  } else {
+                    draft[field] = options.map((o) => o.value); // 全選所有選項
+                  }
                   onChange(draft);
                 }}
-                className={`rounded-full border px-3 py-1 text-xs transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
-                  selected.length === 0
+                className={`rounded-full border px-3 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${
+                  selected.length === options.length || selected.length === 0
                     ? 'border-primary bg-primary text-primary-foreground'
                     : 'border-border bg-background text-foreground hover:border-primary/50'
                 }`}
               >
-                不限（全部）
+                全部
               </button>
               {options.map((o) => {
                 const active = selected.includes(o.value);
@@ -124,7 +129,10 @@ export function AudienceTargeting({ value, onChange, showReputation = true, disa
 
       {showReputation && (
         <div>
-          <label className="mb-1 block text-sm font-medium">最低信譽分（選填）</label>
+          <div className="mb-1 flex items-center gap-1.5">
+            <label className="block text-sm font-medium">最低信譽分（選填）</label>
+            <ReputationInfoIcon />
+          </div>
           <input
             type="number"
             min={0}
@@ -147,5 +155,45 @@ export function AudienceTargeting({ value, onChange, showReputation = true, disa
         </p>
       )}
     </section>
+  );
+}
+
+/** 信譽分計算說明：小 ⓘ icon，點擊/hover 展開浮窗（規則對齊後端 ReputationService 調整點） */
+export function ReputationInfoIcon() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        aria-label="信譽分如何計算？"
+        aria-expanded={open}
+        onClick={() => setOpen((v) => !v)}
+        onBlur={() => setOpen(false)}
+        onMouseEnter={() => setOpen(true)}
+        onMouseLeave={() => setOpen(false)}
+        className="inline-flex h-4 w-4 items-center justify-center rounded-full border border-muted-foreground/40 text-[10px] font-semibold text-muted-foreground transition-colors hover:border-primary hover:text-primary"
+      >
+        i
+      </button>
+      {open && (
+        <div
+          role="tooltip"
+          className="absolute left-1/2 top-6 z-20 w-72 -translate-x-1/2 rounded-lg border border-border bg-popover p-3 text-left shadow-lg"
+        >
+          <p className="text-xs font-semibold text-foreground">信譽分如何計算？</p>
+          <ul className="mt-1.5 space-y-1 text-[11px] leading-relaxed text-muted-foreground">
+            <li>• 每位填答者從 <b className="text-foreground">60 分</b>起算，範圍 0–100</li>
+            <li>• 填答通過品質審核：<b className="text-emerald-600">+1</b> / 份</li>
+            <li>• 填答未通過審核（亂答、機器人特徵）：<b className="text-red-600">−5</b></li>
+            <li>• 互惠問卷：通過 <b className="text-emerald-600">+1</b>、未通過 <b className="text-red-600">−3</b>、互評星等也會加減分</li>
+            <li>• 申訴成功：補回 <b className="text-emerald-600">+5</b></li>
+          </ul>
+          <p className="mt-1.5 text-[11px] text-muted-foreground">
+            門檻設越高，樣本品質越好、但觸及人數越少。建議 60–70。
+          </p>
+        </div>
+      )}
+    </span>
   );
 }
