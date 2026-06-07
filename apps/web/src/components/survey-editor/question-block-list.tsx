@@ -13,7 +13,7 @@ interface QuestionBlockListProps {
   canEdit: boolean;
   onReorder: (questions: SurveyQuestion[]) => void;
   onDelete: (index: number) => void;
-  onAdd: (type: QuestionType) => void;
+  onAdd: (type: QuestionType, presetConfig?: Record<string, unknown>) => void;
   /** Optional: callback to duplicate a question */
   onDuplicate?: (index: number) => void;
   /** Optional: currently selected question index */
@@ -24,12 +24,24 @@ interface QuestionBlockListProps {
 
 // ─── Question type selector options ─────────────────────────────────────────
 
-const QUESTION_TYPE_OPTIONS: { value: QuestionType; label: string; icon: string }[] = [
-  { value: 'single_choice', label: '單選', icon: '◉' },
-  { value: 'multiple_choice', label: '多選', icon: '☑' },
-  { value: 'text', label: '問答', icon: '☰' },
-  { value: 'rating', label: '評分', icon: '★' },
-  { value: 'matrix', label: '矩陣量表', icon: '▦' },
+// 題型總覽：只列出平台真正能渲染的題型；變體（下拉/是否/數字/複選矩陣）帶 preset config。
+const QUESTION_TYPE_OPTIONS: {
+  key: string;
+  value: QuestionType;
+  label: string;
+  icon: string;
+  description: string;
+  config?: Record<string, unknown>;
+}[] = [
+  { key: 'single_choice', value: 'single_choice', label: '單選題', icon: '◉', description: '填答者僅能選擇一個選項' },
+  { key: 'multiple_choice', value: 'multiple_choice', label: '複選題', icon: '☑', description: '填答者可選擇一至多個選項' },
+  { key: 'dropdown', value: 'single_choice', label: '下拉選單', icon: '▾', description: '選項收合成下拉清單，適合選項較多時', config: { renderAs: 'dropdown' } },
+  { key: 'yes_no', value: 'single_choice', label: '是／否題', icon: '◐', description: '二選一的是非題', config: { variant: 'yes_no' } },
+  { key: 'text', value: 'text', label: '文字題', icon: '☰', description: '開放式文字作答（簡答或詳答）' },
+  { key: 'numeric', value: 'text', label: '數字題', icon: '#', description: '僅能輸入數字，蒐集純數值回覆', config: { inputType: 'numeric' } },
+  { key: 'rating', value: 'rating', label: '評分題', icon: '★', description: '星級／分數量表（1–N 分）' },
+  { key: 'matrix', value: 'matrix', label: '單選矩陣', icon: '▦', description: '多個子題共用同一量表，每列單選' },
+  { key: 'matrix_multi', value: 'matrix', label: '複選矩陣', icon: '▤', description: '多個子題共用同一量表，每列可複選', config: { matrix: { multiple: true } } },
 ];
 
 // 題型中文名稱對照（用於側邊欄 block 顯示）
@@ -250,21 +262,25 @@ export function QuestionBlockList({
             + 新增題目
           </button>
 
-          {/* Type selector dropdown */}
+          {/* Type selector dropdown — 題型總覽（含說明）*/}
           {showTypeSelector && (
-            <div className="absolute left-0 right-0 top-full z-10 mt-1 rounded-md border border-border bg-white p-1 shadow-lg">
+            <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-80 overflow-y-auto rounded-md border border-border bg-white p-1 shadow-lg">
+              <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">題型總覽</p>
               {QUESTION_TYPE_OPTIONS.map((opt) => (
                 <button
-                  key={opt.value}
+                  key={opt.key}
                   type="button"
                   onClick={() => {
-                    onAdd(opt.value);
+                    onAdd(opt.value, opt.config);
                     setShowTypeSelector(false);
                   }}
-                  className="flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-xs text-foreground hover:bg-muted transition-colors"
+                  className="flex w-full items-start gap-2 rounded-sm px-2 py-1.5 text-left text-xs text-foreground hover:bg-muted transition-colors"
                 >
-                  <span className="text-sm">{opt.icon}</span>
-                  <span className="font-medium">{opt.label}</span>
+                  <span className="mt-0.5 text-sm">{opt.icon}</span>
+                  <span className="min-w-0">
+                    <span className="block font-medium">{opt.label}</span>
+                    <span className="block text-[10px] leading-snug text-muted-foreground">{opt.description}</span>
+                  </span>
                 </button>
               ))}
             </div>

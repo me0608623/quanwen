@@ -265,20 +265,39 @@ export default function SurveyDetailPage() {
     markDirty();
   };
 
-  const addQuestion = (type: SurveyQuestion['type'] = 'single_choice') => {
+  const addQuestion = (
+    type: SurveyQuestion['type'] = 'single_choice',
+    presetConfig?: Record<string, unknown>,
+  ) => {
     let newIndex = 0;
     setQuestions((prev) => {
+      const isYesNo = presetConfig?.variant === 'yes_no';
+      const isChoice = type === 'single_choice' || type === 'multiple_choice';
+      const options = isYesNo
+        ? [{ id: 'yes', label: '是', sortOrder: 0 }, { id: 'no', label: '否', sortOrder: 1 }]
+        : isChoice
+          ? [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }]
+          : undefined;
+
+      let config: Record<string, unknown> | undefined = presetConfig ? { ...presetConfig } : undefined;
+      if (type === 'matrix') {
+        const preMatrix = (presetConfig?.matrix as { multiple?: boolean } | undefined) ?? {};
+        config = {
+          matrix: {
+            rows: [''],
+            columns: ['非常不同意', '不同意', '普通', '同意', '非常同意'],
+            ...(preMatrix.multiple ? { multiple: true } : {}),
+          },
+        };
+      }
+
       const newQ: SurveyQuestion = {
         type,
         title: '',
         sortOrder: prev.length,
         isRequired: true,
-        ...(type === 'single_choice' || type === 'multiple_choice'
-          ? { options: [{ id: crypto.randomUUID(), label: '', sortOrder: 0 }, { id: crypto.randomUUID(), label: '', sortOrder: 1 }] }
-          : {}),
-        ...(type === 'matrix'
-          ? { config: { matrix: { rows: [''], columns: ['非常不同意', '不同意', '普通', '同意', '非常同意'] } } }
-          : {}),
+        ...(options ? { options } : {}),
+        ...(config ? { config } : {}),
       };
       newIndex = prev.length;
       return [...prev, newQ];
