@@ -7,10 +7,17 @@ on:
   pull_request:
     branches:
       - main
+    paths-ignore:
+      - 'quanwen/**'
+      - '**/*.md'
   push:
     branches-ignore:
       - main
       - develop
+    # 純文件變動不出 Preview（Obsidian vault、任何 .md）— 省 build
+    paths-ignore:
+      - 'quanwen/**'
+      - '**/*.md'
 
 # 預設 GITHUB_TOKEN 唯讀；action 需要建 deployment 記錄 + 在 PR 留 Preview URL 留言
 permissions:

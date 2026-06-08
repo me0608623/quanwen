@@ -6,6 +6,10 @@ on:
   push:
     branches:
       - main
+    # 純文件變動不部署（Obsidian vault、任何 .md）— 省 build
+    paths-ignore:
+      - 'quanwen/**'
+      - '**/*.md'
 
 # 序列化 production 部署：新 push 進來時取消還在跑的舊部署（舊的必為過時快照）
 concurrency:
