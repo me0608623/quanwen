@@ -2,6 +2,24 @@
 
 import { useState } from 'react';
 import { useAdminSurveys, useApproveSurvey, useRejectSurvey, useSurveyAiReview, AdminSurvey } from '@/hooks/use-admin';
+import {
+  AdminPageHeader,
+  Pill,
+  PrimaryButton,
+  DangerButton,
+  AiToggleButton,
+  AiPanel,
+  AiPanelLabel,
+  AiSkeleton,
+  AiError,
+  AiPara,
+  AiSubLabel,
+  FlagList,
+  AiDisclaimer,
+  RowsSkeleton,
+  EmptyState,
+  ReasonDialog,
+} from '@/components/admin/ui';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -12,59 +30,14 @@ const STATUS_LABELS: Record<string, string> = {
   rejected: '已拒絕',
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  pending_review: 'bg-yellow-100 text-yellow-800',
-  published: 'bg-green-100 text-green-800',
-  rejected: 'bg-red-100 text-red-800',
-  closed: 'bg-gray-100 text-gray-600',
-  paused: 'bg-orange-100 text-orange-800',
-  draft: 'bg-gray-100 text-gray-500',
+const STATUS_TONE: Record<string, 'green' | 'amber' | 'red' | 'neutral'> = {
+  pending_review: 'amber',
+  published: 'green',
+  rejected: 'red',
+  closed: 'neutral',
+  paused: 'amber',
+  draft: 'neutral',
 };
-
-function RejectDialog({
-  survey,
-  onConfirm,
-  onCancel,
-  isPending,
-}: {
-  survey: AdminSurvey;
-  onConfirm: (reason: string) => void;
-  onCancel: () => void;
-  isPending: boolean;
-}) {
-  const [reason, setReason] = useState('');
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
-        <h3 className="text-base font-semibold mb-1">拒絕問卷</h3>
-        <p className="text-sm text-muted-foreground mb-4 truncate">「{survey.title}」</p>
-        <label className="block text-sm font-medium mb-1">拒絕原因（必填）</label>
-        <textarea
-          className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm resize-none h-24 focus:outline-none focus:ring-2 focus:ring-primary"
-          placeholder="請輸入拒絕理由，將通知問券方"
-          value={reason}
-          onChange={(e) => setReason(e.target.value)}
-        />
-        <div className="flex justify-end gap-2 mt-4">
-          <button
-            onClick={onCancel}
-            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted"
-          >
-            取消
-          </button>
-          <button
-            onClick={() => onConfirm(reason)}
-            disabled={!reason.trim() || isPending}
-            className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-white disabled:opacity-50 hover:bg-destructive/90"
-          >
-            確認拒絕
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export default function AdminSurveysPage() {
   const [statusFilter, setStatusFilter] = useState<string>('pending_review');
@@ -83,38 +56,41 @@ export default function AdminSurveysPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-10">
+    <main className="mx-auto max-w-5xl px-4 py-8">
       {rejectTarget && (
-        <RejectDialog
-          survey={rejectTarget}
+        <ReasonDialog
+          title="拒絕問卷"
+          subtitle={`「${rejectTarget.title}」`}
+          label="拒絕原因（必填）"
+          placeholder="請輸入拒絕理由，將通知問券方"
+          confirmLabel="確認拒絕"
           onConfirm={handleRejectConfirm}
           onCancel={() => setRejectTarget(null)}
           isPending={reject.isPending}
         />
       )}
 
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">問卷審核</h1>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="rounded-md border border-border bg-background px-3 py-1.5 text-sm"
-        >
-          <option value="pending_review">待審核</option>
-          <option value="published">已發布</option>
-          <option value="rejected">已拒絕</option>
-          <option value="closed">已關閉</option>
-          <option value="">全部</option>
-        </select>
-      </div>
+      <AdminPageHeader
+        title="問卷審核"
+        subtitle="審核問券方送出的問卷，可請 AI 給意見"
+        right={
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="rounded-md border border-border bg-background px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#126b8a]"
+          >
+            <option value="pending_review">待審核</option>
+            <option value="published">已發布</option>
+            <option value="rejected">已拒絕</option>
+            <option value="closed">已關閉</option>
+            <option value="">全部</option>
+          </select>
+        }
+      />
 
-      {isLoading && <p className="text-sm text-muted-foreground">載入中…</p>}
+      {isLoading && <RowsSkeleton rows={4} />}
 
-      {!isLoading && surveys.length === 0 && (
-        <div className="rounded-lg border-2 border-dashed border-border p-12 text-center">
-          <p className="text-muted-foreground">目前沒有符合條件的問卷</p>
-        </div>
-      )}
+      {!isLoading && surveys.length === 0 && <EmptyState>目前沒有符合條件的問卷</EmptyState>}
 
       <div className="space-y-3">
         {surveys.map((survey) => (
@@ -145,118 +121,70 @@ function SurveyRow({
   const { data: aiReview, isLoading: aiLoading, error: aiError } = useSurveyAiReview(survey.id, reviewOpen);
 
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
+    <div className="rounded-xl border border-border bg-card p-4">
       <div className="flex items-start justify-between gap-4">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-sm font-semibold truncate">{survey.title}</h2>
-            <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[survey.status] ?? 'bg-gray-100 text-gray-600'}`}>
-              {STATUS_LABELS[survey.status] ?? survey.status}
-            </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="truncate text-sm font-semibold">{survey.title}</h2>
+            <Pill tone={STATUS_TONE[survey.status] ?? 'neutral'}>{STATUS_LABELS[survey.status] ?? survey.status}</Pill>
             {survey.aiScore !== null && (
-              <span className={`shrink-0 text-xs font-medium ${survey.aiScore >= 60 ? 'text-green-600' : 'text-red-600'}`}>
+              <span className={`shrink-0 text-xs font-medium tabular-nums ${survey.aiScore >= 60 ? 'text-green-600' : 'text-red-600'}`}>
                 AI 分數 {survey.aiScore}
               </span>
             )}
           </div>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="mt-1 text-xs text-muted-foreground">
             {survey.questionCount} 題 · 建立於 {new Date(survey.createdAt).toLocaleDateString('zh-TW')}
             {survey.publishedAt && ` · 發布於 ${new Date(survey.publishedAt).toLocaleDateString('zh-TW')}`}
           </p>
         </div>
 
-        <div className="flex shrink-0 gap-2 items-center">
-          {survey.status === 'pending_review' && (
-            <button
-              onClick={() => setReviewOpen((v) => !v)}
-              className="inline-flex items-center gap-1 rounded-md border border-[#126b8a]/30 bg-[#126b8a]/5 px-3 py-1.5 text-xs font-medium text-[#126b8a] hover:bg-[#126b8a]/10"
-            >
-              ✨ {reviewOpen ? '收起' : '請 AI 給意見'}
-            </button>
-          )}
+        <div className="flex shrink-0 items-center gap-2">
           {survey.status === 'pending_review' && (
             <>
-              <button
-                onClick={onApprove}
-                disabled={approving}
-                className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
-              >
-                通過
-              </button>
-              <button
-                onClick={onReject}
-                className="rounded-md border border-destructive px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
-              >
-                拒絕
-              </button>
+              <AiToggleButton open={reviewOpen} onClick={() => setReviewOpen((v) => !v)} label="請 AI 給意見" />
+              <PrimaryButton onClick={onApprove} disabled={approving}>通過</PrimaryButton>
+              <DangerButton onClick={onReject}>拒絕</DangerButton>
             </>
           )}
         </div>
       </div>
 
-      {/* AI Review panel (inline expand) */}
       {reviewOpen && (
-        <div className="mt-4 rounded-lg border border-[#126b8a]/30 bg-gradient-to-br from-[#0F2A5C]/[0.03] via-[#126b8a]/[0.05] to-[#8B5CF6]/[0.03] p-4">
-          {aiLoading && (
-            <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[#126b8a]">
-                ✨ AI 審核諮詢中...（LLM 通常 15-30 秒）
-              </p>
-              <div className="space-y-1.5">
-                {[1, 2, 3].map((i) => (
-                  <div key={i} className="h-2.5 animate-pulse rounded bg-slate-200" style={{ width: `${100 - i * 10}%` }} />
-                ))}
-              </div>
-            </div>
-          )}
-          {aiError && (
-            <p className="text-xs text-red-600">AI 服務暫時無法使用，請以人工判斷為主</p>
-          )}
+        <AiPanel>
+          {aiLoading && <AiSkeleton label="AI 審核諮詢中…（通常 15-30 秒）" />}
+          {aiError && <AiError />}
           {aiReview && (
             <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-[#126b8a]">
-                  ✨ AI 審核建議
-                </p>
-                <div className="flex items-center gap-1.5">
-                  <span className={`text-2xl font-extrabold ${aiReview.score >= 80 ? 'text-green-600' : aiReview.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+              <div className="flex flex-wrap items-center gap-3">
+                <AiPanelLabel>AI 審核建議</AiPanelLabel>
+                <div className="flex items-baseline gap-1">
+                  <span className={`text-2xl font-extrabold tabular-nums ${aiReview.score >= 80 ? 'text-green-600' : aiReview.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
                     {aiReview.score}
                   </span>
-                  <span className="text-xs text-slate-500">/ 100</span>
+                  <span className="text-xs text-muted-foreground">/ 100</span>
                 </div>
-                <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${aiReview.passed ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                  {aiReview.passed ? '建議核准' : '建議退回'}
-                </span>
+                <Pill tone={aiReview.passed ? 'green' : 'red'}>{aiReview.passed ? '建議核准' : '建議退回'}</Pill>
               </div>
 
               {aiReview.issues.length > 0 && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">問題</p>
-                  <ul className="space-y-1">
-                    {aiReview.issues.map((issue, i) => (
-                      <li key={i} className="text-xs text-slate-700 border-l-2 border-amber-400 bg-amber-50/40 pl-2 py-1">
-                        {issue}
-                      </li>
-                    ))}
-                  </ul>
+                  <AiSubLabel>問題</AiSubLabel>
+                  <FlagList items={aiReview.issues} tone="amber" />
                 </div>
               )}
 
               {aiReview.suggestion && (
                 <div>
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400 mb-1">改進建議</p>
-                  <p className="text-xs text-slate-700 leading-relaxed bg-white/60 rounded p-2 border border-[#126b8a]/15">
-                    {aiReview.suggestion}
-                  </p>
+                  <AiSubLabel>改進建議</AiSubLabel>
+                  <AiPara>{aiReview.suggestion}</AiPara>
                 </div>
               )}
 
-              <p className="text-[10px] text-slate-400 text-right">
-                ⓘ 此為 AI 諮詢意見，最終由人工判斷
-              </p>
+              <AiDisclaimer />
             </div>
           )}
-        </div>
+        </AiPanel>
       )}
     </div>
   );
