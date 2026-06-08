@@ -27,6 +27,18 @@
       "esbuild",
       "sharp",
       "unrs-resolver"
-    ]
+    ],
+    "overrides": {
+      "multer": ">=2.1.1",
+      "minimatch": ">=9.0.7",
+      "lodash": ">=4.17.24",
+      "glob": ">=10.5.0",
+      "picomatch": ">=4.0.4",
+      "tmp": ">=0.2.6",
+      "esbuild": ">=0.25.0",
+      "vite": ">=6.4.2",
+      "postcss": ">=8.5.10",
+      "uuid": ">=11.1.1"
+    }
   }
 }
