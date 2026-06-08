@@ -182,6 +182,43 @@ pnpm --filter web dev    # http://localhost:3000
 > 資料不會持久化（重啟即清空），適合開發測試。
 > 要切換真實 PostgreSQL，設定 `USE_PG_MEM=false` 並填入 `DATABASE_URL`。
 
+
+### 本機快速開發指令速查表
+
+以下指令請在 monorepo 根目錄執行；需要啟動服務時，建議先確認 `.env` 已由 `.env.example` 複製並完成必要欄位設定。
+
+| 類別 | 指令 | 說明 |
+|------|------|------|
+| 安裝 | `pnpm install` | 安裝所有 workspace 依賴 |
+| 開發 | `pnpm dev` | 同時啟動 `apps/api` 與 `apps/web` |
+| 開發 | `pnpm --filter api dev` | 只啟動 NestJS API，預設 `http://localhost:3001` |
+| 開發 | `pnpm --filter web dev` | 只啟動 Next.js Web，預設 `http://localhost:3000` |
+| 建置 | `pnpm build` | 先建置 `packages/*`，再建置 `apps/*` |
+| 建置 | `pnpm --filter api build` | 只建置 API |
+| 建置 | `pnpm --filter web build` | 只建置 Web |
+| 靜態檢查 | `pnpm lint` | 執行所有 app 的 ESLint |
+| 靜態檢查 | `pnpm type-check` | 執行所有 app 的 TypeScript type check |
+| 驗證 | `pnpm verify` | 依序執行 `pnpm type-check` 與 `pnpm test` |
+| 測試 | `pnpm test` | 執行所有 app 的 Vitest 單元測試 |
+| 測試 | `pnpm --filter api test` | 只跑 API 測試 |
+| 測試 | `pnpm --filter web test` | 只跑 Web 測試 |
+| 測試 | `pnpm --filter api test:watch` | API 測試 watch mode |
+| 測試 | `pnpm --filter api test:coverage` | API coverage |
+| 測試 | `pnpm --filter web test:coverage` | Web coverage |
+| E2E | `pnpm --filter web test:e2e` | 執行 Playwright E2E |
+| E2E | `pnpm --filter web test:e2e --headed` | 以有頭瀏覽器執行 Playwright E2E |
+| 單檔測試 | `pnpm --filter api test src/wallet/wallet.service.test.ts` | 執行指定 API 測試檔 |
+| E2E 篩選 | `pnpm --filter web test:e2e -- --grep "happy-path"` | 依測試名稱片段篩選 Playwright spec |
+| DB | `pnpm db:push` | 同步 Drizzle schema 到真實 PostgreSQL；需 `USE_PG_MEM=false` 與 `DATABASE_URL` |
+| DB | `pnpm db:seed` | 建立 3 個測試帳號 |
+| DB | `pnpm db:studio` | 開啟 Drizzle Studio GUI |
+| DB | `pnpm --filter api db:generate` | 產生 Drizzle migration files |
+| DB | `pnpm --filter api db:migrate` | 執行 Drizzle migrations |
+| DB | `pnpm --filter api db:reset` | 清空資料庫並重新 seed |
+| DB | `pnpm --filter api db:seed-surveys` | 建立測試問卷資料 |
+
+> `USE_PG_MEM=true` 的本機 PGlite 模式會在 API 啟動時自動建立 schema，通常不需要跑 `db:push`；`db:*` 指令主要用於真實 PostgreSQL 開發資料庫。
+
 ---
 
 ## 5. 免費上線部署（Vercel + Render）
