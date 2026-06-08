@@ -182,6 +182,41 @@ pnpm --filter web dev    # http://localhost:3000
 > 資料不會持久化（重啟即清空），適合開發測試。
 > 要切換真實 PostgreSQL，設定 `USE_PG_MEM=false` 並填入 `DATABASE_URL`。
 
+### 本機快速開發指令速查表
+
+> 以下指令請從 monorepo 根目錄執行；單一 app 可用 `pnpm --filter api ...` 或 `pnpm --filter web ...`。
+
+| 情境 | 指令 | 備註 |
+|------|------|------|
+| 安裝依賴 | `pnpm install` | 第一次 clone 或 lockfile 更新後執行 |
+| 同時啟動前後端 | `pnpm dev` | 併行啟動 `apps/api` 與 `apps/web` |
+| 啟動 API | `pnpm --filter api dev` | NestJS watch mode，預設 `http://localhost:3001` |
+| 啟動 Web | `pnpm --filter web dev` | Next.js dev server，預設 `http://localhost:3000` |
+| 建置全部 | `pnpm build` | 先建置 `packages/*`，再建置 `apps/*` |
+| 建置 API | `pnpm --filter api build` | 只建置後端 |
+| 建置 Web | `pnpm --filter web build` | 只建置前端 |
+| Lint 全部 | `pnpm lint` | 對所有 app 執行 ESLint |
+| Type check 全部 | `pnpm type-check` | 注意：目前根層 script 名稱是 `type-check` |
+| 單元測試全部 | `pnpm test` | 對所有 app 執行 Vitest |
+| API 測試 | `pnpm --filter api test` | API unit / integration tests |
+| Web 測試 | `pnpm --filter web test` | Web unit tests |
+| API watch 測試 | `pnpm --filter api test:watch` | 開發時連續跑 Vitest |
+| 覆蓋率 | `pnpm --filter api test:coverage` / `pnpm --filter web test:coverage` | 依 package 分開產生 coverage |
+| Web E2E | `pnpm --filter web test:e2e` | Playwright；可加 `--headed` 顯示瀏覽器 |
+| 單一 API 測試檔 | `pnpm --filter api test src/wallet/wallet.service.test.ts` | 將路徑換成目標測試檔 |
+| 單一 E2E spec | `cd apps/web && npx playwright test e2e/happy-path-qua11.spec.ts` | 或用 `pnpm --filter web test:e2e -- --grep "happy-path"` |
+| 驗證（type-check + test） | `pnpm verify` | 根層 script，適合提交前快速檢查 |
+| DB schema push | `pnpm db:push` | 等同 `pnpm --filter api db:push`；需 `USE_PG_MEM=false` + `DATABASE_URL` |
+| DB seed | `pnpm db:seed` | 建立測試使用者；需連真實 PostgreSQL |
+| DB Studio | `pnpm db:studio` | 開啟 Drizzle Studio GUI |
+| 產生 migration | `pnpm --filter api db:generate` | 產生 Drizzle migration files |
+| 執行 migration | `pnpm --filter api db:migrate` | 套用已產生 migrations |
+| 重設 DB | `pnpm --filter api db:reset` | 清空並重新 seed，請勿對正式 DB 執行 |
+| 啟動 Docker 依賴 | `docker compose up -d postgres redis` | 可選：需要真實 PostgreSQL / Redis 時使用 |
+| 停止 Docker 依賴 | `docker compose down` | 停止本機 compose services |
+
+**常用測試帳號**（密碼皆為 `000`）：`user@quanwen.com`（admin → `/admin`）、`user1@quanwen.com`（surveyor → `/dashboard`）、`user2@quanwen.com`（respondent → `/dashboard`）。
+
 ---
 
 ## 5. 免費上線部署（Vercel + Render）
