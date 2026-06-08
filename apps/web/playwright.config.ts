@@ -42,7 +42,9 @@ export default defineConfig({
           // 不能用 `dev`(nest start --watch)：nest-cli deleteOutDir 會先刪掉 build 的 dist
           // 再重編，race 導致 node dist/main MODULE_NOT_FOUND → webServer timeout。
           command: 'pnpm --filter api start',
-          url: 'http://localhost:3001/api/v1/health',
+          // health 在根路徑 /health（main.ts setGlobalPrefix exclude: ['health','ready']）；
+          // 用 /api/v1/health 會 404 → Playwright 永遠等不到 ready → webServer timeout。
+          url: 'http://localhost:3001/health',
           reuseExistingServer: false,
           timeout: 120_000,
         },
