@@ -19,29 +19,24 @@ on:
       - 'quanwen/**'
       - '**/*.md'
 
-# 預設 GITHUB_TOKEN 唯讀；action 需要建 deployment 記錄 + 在 PR 留 Preview URL 留言
 permissions:
   contents: read
-  deployments: write
-  pull-requests: write
+
+# Vercel CLI 用這兩個 env 連結到正確的 team/project（取代 .vercel/project.json）
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
   deploy-preview:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      # action 直接 spawn `vercel`，runner 預設沒有 → 需先全域安裝
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      - name: Deploy Preview to Vercel
-        uses: BetaHuhn/deploy-to-vercel-action@v1
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          # 明確關閉 production — 此 action 在 push 事件預設會部署 production
-          PRODUCTION: false
+      # 官方 CLI preview 部署（無 --prod = preview）。CLI 自行等到 READY 才回傳，URL 印在 log。
+      - name: Deploy preview to Vercel
+        run: vercel deploy --yes --token="${{ secrets.VERCEL_TOKEN }}"

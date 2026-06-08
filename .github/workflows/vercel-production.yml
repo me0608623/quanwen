@@ -16,27 +16,26 @@ concurrency:
   group: vercel-production
   cancel-in-progress: true
 
-# 預設 GITHUB_TOKEN 唯讀；action 建立 GitHub deployment 記錄需要 deployments: write
 permissions:
   contents: read
-  deployments: write
+
+# Vercel CLI 用這兩個 env 連結到正確的 team/project（取代 .vercel/project.json）
+env:
+  VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+  VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
 
 jobs:
   deploy-production:
     runs-on: ubuntu-latest
-
+    # 保險：官方 CLI 部署正常 1-2 分；超過代表異常，自動停而非無限掛（取代 BetaHuhn 的 hang）
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
-      # action 直接 spawn `vercel`，runner 預設沒有 → 需先全域安裝
       - name: Install Vercel CLI
         run: npm install -g vercel
 
-      - name: Deploy Production to Vercel
-        uses: BetaHuhn/deploy-to-vercel-action@v1
-        with:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-          PRODUCTION: true
+      # 直接用 Vercel 官方 CLI 部署（remote build）。CLI 自行等到 READY 才回傳，
+      # 不靠第三方 action 的 readiness 輪詢（BetaHuhn 會撞 deployment protection 的 401 而無限 hang）。
+      - name: Deploy to Vercel production
+        run: vercel deploy --prod --yes --token="${{ secrets.VERCEL_TOKEN }}"
