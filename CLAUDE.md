@@ -626,8 +626,8 @@ docker compose -f docker-compose.hub.yml down
 | 改了什麼 | 要部署到 | 方式 |
 |----------|---------|------|
 | `apps/web`（前端/首頁/UI） | **Vercel** | **經 GitHub Actions**（見下方「部署規則」）— 禁止本機 `vercel --prod` |
-| `apps/api`（後端/API） | **Render**（經 Docker Hub） | 見下方「更新正式 API」三步驟 |
-| `packages/*`（共用） | **兩邊都要** | 先 API 再前端 |
+| `apps/api`（後端/API） | **Render**（經 Docker Hub） | **經 GitHub Actions**（`render-api-deploy.yml`）— 禁止本機 `docker push` |
+| `packages/*`（共用） | **兩邊都要** | push main 自動觸發兩條 workflow（web + api） |
 | DB schema | **Neon** | `cd apps/api && DATABASE_URL=$NEON_DATABASE_URL npx drizzle-kit push` |
 
 ### 🚫 Vercel 部署規則（2026-06-08 起，多 session 防互蓋）
@@ -637,16 +637,43 @@ docker compose -f docker-compose.hub.yml down
 
 - ❌ 禁止本機跑 `vercel --prod` / `vercel deploy --prod` / `vercel alias set` — Vercel 是「快照上傳、最後一個贏」，
   從舊 commit 部署會**蓋掉別的 session 已上線的改動**（2026-06-07 差點發生過）。
+- ❌ shell 搜尋部署禁令時，不要把含反引號的 pattern 放在雙引號中（例如 `rg "部署用 `vercel --prod`"` 會執行反引號內命令）。
+  搜尋含命令片段的文字一律用單引號或 here-doc。
 - ❌ 禁止未經用戶同意 push `main`。
 - ✅ 正規流程：`pnpm verify` 全綠 → `git commit` → push feature branch（`feat/**`、`fix/**`、`agent/**` 自動出 **Preview** URL，
   見 `.github/workflows/vercel-preview.yml`）→ 驗證 Preview → 經用戶同意 merge/ff `main` → Actions 自動部署 production。
 - ✅ 為何能防衝突：production 永遠從 `main` tip 建置；git 對 non-fast-forward push 會拒絕（序列化由 git 保證）；
   Actions `concurrency: vercel-production` 確保不會兩個 production 部署互搶。
+- ⚠️ GitHub private repo 目前未啟用 Pro/public branch protection；classic branch protection / rulesets API 會回
+  `Upgrade to GitHub Pro or make this repository public to enable this feature`。因此「不可 push main」目前主要靠 agent 規則與人工流程約束；
+  升級 GitHub Pro 或改 public 後，應立刻對 `main` 啟用 PR review / status checks。
 - ⚠️ 緊急 fallback（Actions 故障且用戶明確指示時才可用 CLI）：先 `git fetch` 確認自己在 **branch 最新 tip**，
   從乾淨 worktree 部署：`git worktree add /tmp/quanwen-deploy <tip> && cp -r .vercel /tmp/quanwen-deploy/`，
   完事 `git worktree remove --force /tmp/quanwen-deploy`。
-- ⚠️ **API image 同樣是 last-wins**：`me0608623/quanwen-api:latest` 被誰 push 就是誰的快照。
-  docker build 前必須確認 HEAD 包含所有已部署的 commits（從 branch tip 的乾淨 worktree build）；尚未遷移到 Actions。
+- ✅ **API 也已搬進 Actions**（2026-06-08）：`apps/api`/`packages`/lockfile/Dockerfile 改動 push `main`
+  → `.github/workflows/render-api-deploy.yml` 自動 build image → push Docker Hub → 觸發 Render redeploy。
+  `concurrency: render-api-production` 序列化，解決 image last-push-wins 互蓋。**禁止本機 `docker push me0608623/quanwen-api`**。
+  repo secrets：`DOCKERHUB_USERNAME`、`DOCKERHUB_TOKEN`、`RENDER_API_KEY`、`RENDER_SERVICE_ID`。
+
+### 多 agent / worktree 衝突檢查（Clash）
+
+多個 Claude Code / Codex session 平行工作時，優先用 `clash-sh/clash` 提前偵測 worktree 間的 merge conflict：
+
+```bash
+# 編輯單檔前
+clash check apps/web/src/app/admin/users/[id]/page.tsx
+
+# commit / handoff 前看整體矩陣
+clash status
+
+# 給腳本或 agent 消費
+clash status --json
+```
+
+- `clash` 是 read-only，只模擬 worktree 之間的 merge，不會改 repo。
+- 若 `clash check <file>` 回報 conflict 或另一個 worktree 有 active changes，先檢查對方 branch，再決定是否改同一檔。
+- Claude Code 可裝 plugin / hook；Codex 沒有同等 hook 時，依規則在大範圍編輯前手動跑 `clash status`。
+- 若本機尚未安裝 `clash`，退回 `git worktree list`、`git status --short`、針對目標檔案的 `git diff` 檢查。
 
 - 流程順序：`pnpm verify` 全綠 → `git commit` → 部署（先 commit 正式站才有 git 對應可回溯）。
 - 部署後驗證：前端 `curl -sI https://quanwen.vercel.app | head -1`；API `curl -s https://quanwen-api.onrender.com/health`
@@ -676,18 +703,24 @@ source /home/aa/.config/quanwen/secrets.env
 curl -s -X POST "https://api.render.com/v1/services/$RENDER_SERVICE_ID/deploys" \
   -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" -d '{}'
 ```
-- Vercel token 不在此檔，`vercel` CLI 會自動讀 `/home/aa/.local/share/com.vercel.cli/auth.json`（部署用 `vercel --prod --yes --scope 409500476s-projects`）。
+- Vercel production 不使用本機 CLI 部署；正式前端只由 GitHub Actions 從 `main` 部署。不要依賴本機 `vercel` auth 狀態更新 production。
 - 私密檔內容：`RENDER_API_KEY`、`RENDER_SERVICE_ID`、`NEON_DATABASE_URL`。
 
 ## 更新正式 API（程式碼改動後）
 
-Render 跑的是 **Docker Hub image**（repo 是 private、未連 git），不是 git build：
+**2026-06-08 起改走 GitHub Actions**（`.github/workflows/render-api-deploy.yml`）：
+改 `apps/api`（或 `packages`/lockfile/Dockerfile）→ commit → ff `main` → workflow 自動
+build Docker image → push Docker Hub `me0608623/quanwen-api:latest` → 觸發 Render redeploy。
+**禁止本機 `docker push`**（last-push-wins，會蓋別人）。
+
+驗證：`gh run list -R me0608623/quanwen --workflow render-api-deploy.yml --limit 1`；
+Render deploy poll 到 `"status":"live"`；冷啟動後 `curl https://quanwen-api.onrender.com/health`。
+
+緊急 CLI fallback（僅 Actions 故障 + 用戶明確指示）：
 ```bash
-cd /home/aa/projects/quanwen
-docker compose -f docker-compose.yml -f docker-compose.full.yml build api
-docker tag quanwen-api:latest me0608623/quanwen-api:latest
+cd /home/aa/projects/quanwen   # 必須在 branch 最新 tip 的乾淨狀態
+docker build -f apps/api/Dockerfile -t me0608623/quanwen-api:latest .
 docker push me0608623/quanwen-api:latest
-# 觸發 Render 重部署
 curl -s -X POST "https://api.render.com/v1/services/srv-d8hsdilckfvc73b4r8a0/deploys" \
   -H "Authorization: Bearer $RENDER_API_KEY" -H "Content-Type: application/json" -d '{}'
 ```

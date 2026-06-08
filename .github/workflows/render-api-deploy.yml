@@ -1,0 +1,61 @@
+name: Render API Deployment
+
+# 後端 API（quanwen-api.onrender.com）部署：
+# apps/api（或共用 packages / lockfile / Dockerfile / 本 workflow）push 到 main
+# → build Docker image → push Docker Hub → 觸發 Render redeploy。
+# 與前端一致：只有 main 能更新正式 API，禁止本機 docker push。見 CLAUDE.md「部署規則」。
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'apps/api/**'
+      - 'packages/**'
+      - 'pnpm-lock.yaml'
+      - 'pnpm-workspace.yaml'
+      - 'package.json'
+      - '.github/workflows/render-api-deploy.yml'
+
+# image 是 last-push-wins → 序列化，新 push 取消還在跑的舊 build（舊的必為過時快照）
+concurrency:
+  group: render-api-production
+  cancel-in-progress: true
+
+jobs:
+  deploy-api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # context=repo 根、dockerfile=apps/api/Dockerfile（與 docker-compose.full.yml 一致，無 build-arg）
+      # gha cache 讓後續 build 從幾分鐘降到數十秒
+      - name: Build and push API image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/api/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/quanwen-api:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Render service autoDeploy=no → 必須用 API 觸發；deploy 會重新 pull latest image
+      - name: Trigger Render redeploy
+        run: |
+          echo "觸發 Render 重部署 (service ${{ secrets.RENDER_SERVICE_ID }})..."
+          RESP=$(curl -fsS -X POST \
+            "https://api.render.com/v1/services/${{ secrets.RENDER_SERVICE_ID }}/deploys" \
+            -H "Authorization: Bearer ${{ secrets.RENDER_API_KEY }}" \
+            -H "Content-Type: application/json" \
+            -d '{"clearCache":"do_not_clear"}')
+          DEP_ID=$(echo "$RESP" | grep -oE '"id":"[^"]+"' | head -1 | cut -d'"' -f4)
+          echo "Render deploy 已建立: $DEP_ID"
