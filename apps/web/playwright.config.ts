@@ -16,7 +16,10 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false, // demo 共用同個 DB，串行避免互卡
   forbidOnly: !!process.env.CI,
-  retries: process.env.CI ? 2 : 0,
+  // E2E 暫非阻擋（見 ci.yml）；關掉 CI retries 讓失敗 spec 只跑一次、整體在 timeout 內完成
+  // （否則 16 個過時斷言 ×3 次重試 + 串行會超過 job timeout → cancelled，continue-on-error 無法吸收）。
+  // 待修好斷言、恢復 gate 時可改回 retries: 2。
+  retries: 0,
   workers: 1,
   reporter: process.env.CI
     ? [['github'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]
@@ -38,8 +41,13 @@ export default defineConfig({
   webServer: process.env.CI
     ? [
         {
-          command: 'pnpm --filter api dev',
-          url: 'http://localhost:3001/api/v1/health',
+          // CI 用 build 產物啟動（job 已跑 pnpm --filter api build）。
+          // 不能用 `dev`(nest start --watch)：nest-cli deleteOutDir 會先刪掉 build 的 dist
+          // 再重編，race 導致 node dist/main MODULE_NOT_FOUND → webServer timeout。
+          command: 'pnpm --filter api start',
+          // health 在根路徑 /health（main.ts setGlobalPrefix exclude: ['health','ready']）；
+          // 用 /api/v1/health 會 404 → Playwright 永遠等不到 ready → webServer timeout。
+          url: 'http://localhost:3001/health',
           reuseExistingServer: false,
           timeout: 120_000,
         },
