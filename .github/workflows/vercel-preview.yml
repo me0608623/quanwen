@@ -1,16 +1,16 @@
 name: Vercel Preview Deployment
 
-# feature/agent 分支與 PR 只產生 Preview URL，不碰正式站。
+# 除了 main/develop，任何分支 push 都產生 Preview URL（支援 parallel-code 多 agent worktree
+# 自動產生的任意分支名，如 feature-agent-1 / hotfix-agent-3），但碰不到正式站。
+# main 走 vercel-production.yml；develop 是 legacy 不部署。
 on:
   pull_request:
     branches:
       - main
   push:
-    branches:
-      - "agent/**"
-      - "feat/**"
-      - "feature/**"
-      - "fix/**"
+    branches-ignore:
+      - main
+      - develop
 
 # 預設 GITHUB_TOKEN 唯讀；action 需要建 deployment 記錄 + 在 PR 留 Preview URL 留言
 permissions:
