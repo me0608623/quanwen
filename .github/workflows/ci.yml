@@ -250,6 +250,10 @@ jobs:
           WEB_URL: http://localhost:3000
           NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
           NODE_ENV: development
+          # Google passport strategy 在 clientID 為空時 boot 崩（OAuth2Strategy requires a
+          # clientID option）；給非空 placeholder 讓 API 能啟動（e2e 不測 OAuth 流程）。
+          GOOGLE_CLIENT_ID: placeholder_disabled
+          GOOGLE_CLIENT_SECRET: placeholder_disabled
 
       - name: Upload Playwright report on failure
         if: failure()
