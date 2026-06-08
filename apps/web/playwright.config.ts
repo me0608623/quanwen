@@ -38,7 +38,10 @@ export default defineConfig({
   webServer: process.env.CI
     ? [
         {
-          command: 'pnpm --filter api dev',
+          // CI 用 build 產物啟動（job 已跑 pnpm --filter api build）。
+          // 不能用 `dev`(nest start --watch)：nest-cli deleteOutDir 會先刪掉 build 的 dist
+          // 再重編，race 導致 node dist/main MODULE_NOT_FOUND → webServer timeout。
+          command: 'pnpm --filter api start',
           url: 'http://localhost:3001/api/v1/health',
           reuseExistingServer: false,
           timeout: 120_000,
