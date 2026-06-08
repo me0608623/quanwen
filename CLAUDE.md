@@ -625,31 +625,31 @@ docker compose -f docker-compose.hub.yml down
 
 | 改了什麼 | 要部署到 | 方式 |
 |----------|---------|------|
-| `apps/web`（前端/首頁/UI） | **Vercel** | **經 GitHub Actions**（見下方「部署規則」）— 禁止本機 `vercel --prod` |
+| `apps/web`（前端/首頁/UI） | **Vercel** | **Vercel 原生 Git 整合**（push main → Vercel 自動 build+部署 production；其他分支 → preview）— 禁止本機 `vercel --prod` |
 | `apps/api`（後端/API） | **Render**（經 Docker Hub） | **經 GitHub Actions**（`render-api-deploy.yml`）— 禁止本機 `docker push` |
-| `packages/*`（共用） | **兩邊都要** | push main 自動觸發兩條 workflow（web + api） |
+| `packages/*`（共用） | **兩邊都要** | push main：Vercel 原生部署 web + Actions 部署 api |
 | DB schema | **Neon** | `cd apps/api && DATABASE_URL=$NEON_DATABASE_URL npx drizzle-kit push` |
 
-### 🚫 Vercel 部署規則（2026-06-08 起，多 session 防互蓋）
+### 🚫 Vercel 部署規則（2026-06-08 起改 Vercel 原生 Git 整合）
 
-正式站 `quanwen.vercel.app` **只能由 `main` 分支經 GitHub Actions 更新**
-（`.github/workflows/vercel-production.yml`；repo secrets `VERCEL_TOKEN/ORG_ID/PROJECT_ID` 已設定）。
+正式站 `quanwen.vercel.app` 由 **Vercel 原生 Git 整合**更新：Vercel 專案連 GitHub `me0608623/quanwen`、
+**Production Branch = main**。push `main` → Vercel 自己 build + 部署 production；其他分支 → 自動 preview。
+（先前用 GitHub Actions + BetaHuhn action / `vercel deploy` CLI，但 CLI 在 runner 等 remote build 的 log 串流會卡死、
+build 其實 1 分就好；改回 Vercel 原生整合最穩、零維護。Actions vercel workflow 已移除。）
 
 - ❌ 禁止本機跑 `vercel --prod` / `vercel deploy --prod` / `vercel alias set` — Vercel 是「快照上傳、最後一個贏」，
-  從舊 commit 部署會**蓋掉別的 session 已上線的改動**（2026-06-07 差點發生過）。
-- ❌ shell 搜尋部署禁令時，不要把含反引號的 pattern 放在雙引號中（例如 `rg "部署用 `vercel --prod`"` 會執行反引號內命令）。
-  搜尋含命令片段的文字一律用單引號或 here-doc。
+  從舊 commit 部署會**蓋掉別的 session 已上線的改動**（2026-06-07 差點發生過）。讓 Vercel 從 git 建置才安全。
+- ❌ shell 搜尋部署禁令時，不要把含反引號的 pattern 放在雙引號中（會執行反引號內命令）；用單引號或 here-doc。
 - ❌ 禁止未經用戶同意 push `main`。
-- ✅ 正規流程：`pnpm verify` 全綠 → `git commit` → push feature branch（`feat/**`、`fix/**`、`agent/**` 自動出 **Preview** URL，
-  見 `.github/workflows/vercel-preview.yml`）→ 驗證 Preview → 經用戶同意 merge/ff `main` → Actions 自動部署 production。
-- ✅ 為何能防衝突：production 永遠從 `main` tip 建置；git 對 non-fast-forward push 會拒絕（序列化由 git 保證）；
-  Actions `concurrency: vercel-production` 確保不會兩個 production 部署互搶。
-- ⚠️ GitHub private repo 目前未啟用 Pro/public branch protection；classic branch protection / rulesets API 會回
-  `Upgrade to GitHub Pro or make this repository public to enable this feature`。因此「不可 push main」目前主要靠 agent 規則與人工流程約束；
-  升級 GitHub Pro 或改 public 後，應立刻對 `main` 啟用 PR review / status checks。
-- ⚠️ 緊急 fallback（Actions 故障且用戶明確指示時才可用 CLI）：先 `git fetch` 確認自己在 **branch 最新 tip**，
+- ✅ 正規流程：`pnpm verify` 全綠 → `git commit` → push feature branch（Vercel 自動出 **Preview** URL）
+  → 驗證 Preview → 經用戶同意 merge/PR 進 `main` → Vercel 原生自動部署 production。
+- ✅ 為何能防衝突：production 永遠由 Vercel 從 `main` tip 建置（不吃本機工作樹，半成品 WIP 不會洩漏）；
+  git 對 non-fast-forward push 會拒絕（序列化由 git 保證）。
+- ⚠️ GitHub private repo 未啟用 branch protection（需 Pro/public）；「不可 push main」目前靠 agent 規則 + 人工約束。
+- ⚠️ 緊急 fallback（Vercel git 整合故障且用戶明確指示時才用 CLI）：先 `git fetch` 確認在 **branch 最新 tip**，
   從乾淨 worktree 部署：`git worktree add /tmp/quanwen-deploy <tip> && cp -r .vercel /tmp/quanwen-deploy/`，
-  完事 `git worktree remove --force /tmp/quanwen-deploy`。
+  `vercel --prod --yes --scope 409500476s-projects`，完事 `git worktree remove --force /tmp/quanwen-deploy`。
+  （CLI 手動部署本機正常 ~1-2 分；只有在 GitHub Actions runner 裡的 remote-build 串流會 hang。）
 - ✅ **API 也已搬進 Actions**（2026-06-08）：`apps/api`/`packages`/lockfile/Dockerfile 改動 push `main`
   → `.github/workflows/render-api-deploy.yml` 自動 build image → push Docker Hub → 觸發 Render redeploy。
   `concurrency: render-api-production` 序列化，解決 image last-push-wins 互蓋。**禁止本機 `docker push me0608623/quanwen-api`**。
@@ -728,12 +728,10 @@ curl -s -X POST "https://api.render.com/v1/services/srv-d8hsdilckfvc73b4r8a0/dep
 
 ## 更新正式前端
 
-**2026-06-08 起改走 GitHub Actions**（見上方「🚫 Vercel 部署規則」）：merge/ff `main` → `.github/workflows/vercel-production.yml` 自動部署。
-**禁止本機 `vercel --prod`**（僅 Actions 故障 + 用戶明確指示時 fallback，且必須從 branch tip 的乾淨 worktree、repo 根執行 —
-從 `apps/web` 跑會連錯專案 + frozen-lockfile 失敗）。
+**2026-06-08 起改用 Vercel 原生 Git 整合**（見上方「🚫 Vercel 部署規則」）：merge/PR 進 `main` → Vercel 自動 build + 部署 production。**不需手動操作，禁止本機 `vercel --prod`**（僅 Vercel git 整合故障 + 用戶明確指示時 fallback）。
 
-- 專案設定 `rootDirectory=apps/web`、`installCommand=cd ../.. && pnpm install --no-frozen-lockfile`。
-- `NEXT_PUBLIC_*` 是 build-time 烘進去的 → 改 env 後**必須重部署**（push 空 commit 到 main 或在 Actions 頁手動 re-run）。
+- Vercel 後台一次性設定：專案 Settings → Git 連 `me0608623/quanwen`、**Production Branch = main**；Root Directory = `apps/web`。
+- `NEXT_PUBLIC_*` 是 build-time 烘進去的 → 改 env 後**必須重部署**（push 空 commit 到 main，或在 Vercel 後台 Redeploy）。
 
 ## Neon DB 操作
 
