@@ -163,7 +163,7 @@ export default function HomePage() {
             </p>
             <h1
               data-hero-title
-              className="mt-5 text-balance font-serif text-[clamp(3.15rem,5.4vw,5rem)] font-semibold leading-[0.92] tracking-[-0.055em] text-[var(--q-ink)]"
+              className="mt-5 text-balance font-serif text-[clamp(3rem,4.8vw,4.3rem)] font-semibold leading-[0.92] tracking-[-0.055em] text-[var(--q-ink)]"
             >
               發問卷找對的人，
               <br />
