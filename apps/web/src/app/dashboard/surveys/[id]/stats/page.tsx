@@ -301,6 +301,12 @@ export default function SurveyStatsPage() {
       cleanOnly ? `survey_${id}_responses_clean.xlsx` : `survey_${id}_responses.xlsx`,
     );
 
+  const handleExportStatsXlsx = (cleanOnly = false) =>
+    downloadBinary(
+      `/surveys/${id}/export.stats.xlsx${cleanOnly ? '?clean=1' : ''}`,
+      cleanOnly ? `survey_${id}_jasp_spss_clean.xlsx` : `survey_${id}_jasp_spss.xlsx`,
+    );
+
   const handleExportJson = () =>
     downloadBinary(`/surveys/${id}/export.json`, `survey_${id}_responses.json`);
 
@@ -391,6 +397,13 @@ export default function SurveyStatsPage() {
             <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
           </button>
           <button
+            onClick={() => handleExportStatsXlsx(false)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+            title="JASP / SPSS：數值編碼、Value Labels、多選題 0/1 拆欄"
+          >
+            <FileSpreadsheet className="h-3.5 w-3.5" /> JASP/SPSS
+          </button>
+          <button
             onClick={handleExportPdf}
             className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100"
             title="PDF 統計總覽報表"
@@ -403,6 +416,13 @@ export default function SurveyStatsPage() {
             title="只匯出品質分數 ≥ 70 的高品質樣本（Excel）"
           >
             <Sparkles className="h-3.5 w-3.5" /> 乾淨 Excel
+          </button>
+          <button
+            onClick={() => handleExportStatsXlsx(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
+            title="只匯出品質分數 ≥ 70 的高品質樣本（JASP / SPSS Excel）"
+          >
+            <Sparkles className="h-3.5 w-3.5" /> 乾淨 JASP/SPSS
           </button>
         </div>
       </section>

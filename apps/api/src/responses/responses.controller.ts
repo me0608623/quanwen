@@ -328,6 +328,28 @@ export class ResponsesController {
     res.send(buf);
   }
 
+  /** GET /surveys/:id/export.stats.xlsx — JASP / SPSS 友善統計軟體匯入格式 */
+  @Get(':id/export.stats.xlsx')
+  async exportStatSoftwareXlsx(
+    @Param('id') id: string,
+    @Req() req: Request,
+    @Res() res: ExpressResponse,
+    @Query('clean') clean?: string,
+    @Query('minScore') minScore?: string,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    const isClean = clean === '1' || clean === 'true';
+    const buf = await this.exportSvc.generateStatSoftwareExcel(id, user.id, {
+      cleanOnly: isClean,
+      minQualityScore: minScore ? Number(minScore) : undefined,
+    });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    const suffix = isClean ? '_clean' : '';
+    const safeId = id.replace(/[^a-zA-Z0-9\-_]/g, '');
+    res.setHeader('Content-Disposition', `attachment; filename="survey_${safeId}_jasp_spss${suffix}.xlsx"`);
+    res.send(buf);
+  }
+
   /** GET /surveys/:id/export.json — 匯出結構化 JSON（survey + questions + 每筆 answers） */
   @Get(':id/export.json')
   async exportJson(

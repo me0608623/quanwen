@@ -14,7 +14,7 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
-import { PassThrough } from 'stream';
+import { PassThrough } from 'node:stream';
 import * as schema from '../db/schema';
 import { FULL_SCHEMA_DDL } from '../test-helpers/pglite-ddl';
 import { ExportService } from './export.service';
@@ -27,8 +27,11 @@ const Q_TEXT = 'dddddddd-dddd-dddd-dddd-dddddddddd01';
 const Q_CHOICE = 'dddddddd-dddd-dddd-dddd-dddddddddd02';
 const Q_OPTIONAL_TEXT = 'dddddddd-dddd-dddd-dddd-dddddddddd03';
 const Q_YES_NO = 'dddddddd-dddd-dddd-dddd-dddddddddd04';
+const Q_MULTI = 'dddddddd-dddd-dddd-dddd-dddddddddd05';
 const OPT_YES = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee01';
 const OPT_NO = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee02';
+const OPT_MULTI_A = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee03';
+const OPT_MULTI_B = 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeee04';
 const RESP_1 = 'ffffffff-ffff-ffff-ffff-fffffffffff1';
 const RESP_2 = 'ffffffff-ffff-ffff-ffff-fffffffffff2';
 
@@ -55,12 +58,15 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         ('${Q_TEXT}',   '${SURVEY_ID}', 'text',          '開放題', 0, NULL),
         ('${Q_CHOICE}', '${SURVEY_ID}', 'single_choice', '選擇題', 1, NULL),
         ('${Q_OPTIONAL_TEXT}', '${SURVEY_ID}', 'text', '空白選填題', 2, NULL),
-        ('${Q_YES_NO}', '${SURVEY_ID}', 'single_choice', '是否推薦', 3, '{"variant":"yes_no"}');
+        ('${Q_YES_NO}', '${SURVEY_ID}', 'single_choice', '是否推薦', 3, '{"variant":"yes_no"}'),
+        ('${Q_MULTI}', '${SURVEY_ID}', 'multiple_choice', '喜歡的功能', 4, NULL);
 
       INSERT INTO question_options (id, question_id, label, sort_order)
       VALUES
         ('${OPT_YES}', '${Q_CHOICE}', 'Yes', 0),
-        ('${OPT_NO}',  '${Q_CHOICE}', 'No',  1);
+        ('${OPT_NO}',  '${Q_CHOICE}', 'No',  1),
+        ('${OPT_MULTI_A}', '${Q_MULTI}', '報表', 0),
+        ('${OPT_MULTI_B}', '${Q_MULTI}', '匯出', 1);
 
       -- Respondent 1: quality_score=85 (passed), answered "Hello world" + Yes
       INSERT INTO survey_responses (id, survey_id, respondent_id, status, submitted_at, quality_score, fill_duration_seconds)
@@ -91,6 +97,11 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
       VALUES
         ('${RESP_1}', '${Q_YES_NO}', '${SURVEY_ID}', '["yes"]'),
         ('${RESP_2}', '${Q_YES_NO}', '${SURVEY_ID}', '["no"]');
+
+      INSERT INTO response_answers (response_id, question_id, survey_id, selected_option_ids)
+      VALUES
+        ('${RESP_1}', '${Q_MULTI}', '${SURVEY_ID}', '["${OPT_MULTI_A}", "${OPT_MULTI_B}"]'),
+        ('${RESP_2}', '${Q_MULTI}', '${SURVEY_ID}', '["${OPT_MULTI_B}"]');
     `);
 
     db = drizzle(client, { schema });
@@ -108,7 +119,6 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
     expect(buf).toBeInstanceOf(Buffer);
     expect(buf.byteLength).toBeGreaterThan(0);
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buf);
@@ -132,7 +142,6 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
   it('Excel export quality_score column matches DB value', async () => {
     const buf = await service.generateResponsesExcel(SURVEY_ID, SURVEYOR_ID);
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buf);
@@ -152,7 +161,6 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
       minQualityScore: 70,
     });
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(buf);
@@ -178,7 +186,6 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
     expect(buf).toBeInstanceOf(Buffer);
     expect(buf.byteLength).toBeGreaterThan(0);
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const XLSX = require('xlsx');
     const workbook = XLSX.read(buf, { type: 'buffer' });
     expect(workbook.SheetNames).toEqual(expect.arrayContaining(['Responses', 'Summary']));
@@ -236,7 +243,7 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
 
   it('Summary sheet Passed/Suspicious/Rejected counts sum to total', async () => {
     const buf = await service.generateResponsesExcel(SURVEY_ID, SURVEYOR_ID);
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const ExcelJS = require('exceljs');
     const wb = new ExcelJS.Workbook();
     await wb.xlsx.load(buf);
@@ -281,6 +288,65 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
           { id: 'no', label: '否', count: 1 },
         ],
       }),
+    ]));
+  });
+
+  it('JASP/SPSS Excel uses numeric codes, value labels, and dummy columns for multiple choice', async () => {
+    const buf = await service.generateStatSoftwareExcel(SURVEY_ID, SURVEYOR_ID);
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buf);
+
+    const data = workbook.getWorksheet('Data');
+    const variables = workbook.getWorksheet('Variables');
+    const labels = workbook.getWorksheet('Value Labels');
+    expect(data).toBeTruthy();
+    expect(variables).toBeTruthy();
+    expect(labels).toBeTruthy();
+
+    const headers = (data.getRow(1).values as unknown[]).slice(1);
+    expect(headers).toEqual([
+      'response_id',
+      'submitted_at',
+      'fill_duration_sec',
+      'quality_score',
+      'response_status',
+      'q001',
+      'q002',
+      'q003',
+      'q004',
+      'q005_opt001',
+      'q005_opt002',
+    ]);
+
+    const choiceValues: number[] = [];
+    const yesNoValues: number[] = [];
+    const multiSecondOptionValues: number[] = [];
+    data.eachRow((row: { getCell: (n: number) => { value: unknown } }, idx: number) => {
+      if (idx > 1) {
+        choiceValues.push(Number(row.getCell(7).value));
+        yesNoValues.push(Number(row.getCell(9).value));
+        multiSecondOptionValues.push(Number(row.getCell(11).value));
+      }
+    });
+    choiceValues.sort((a, b) => a - b);
+    yesNoValues.sort((a, b) => a - b);
+    expect(choiceValues).toEqual([1, 2]);
+    expect(yesNoValues).toEqual([1, 2]);
+    expect(multiSecondOptionValues).toEqual([1, 1]);
+
+    const valueLabelRows: unknown[][] = [];
+    labels.eachRow((row: { values: unknown[] }, idx: number) => {
+      if (idx > 1) valueLabelRows.push(row.values.slice(1));
+    });
+    expect(valueLabelRows).toEqual(expect.arrayContaining([
+      ['q002', 1, 'Yes'],
+      ['q002', 2, 'No'],
+      ['q004', 1, '是'],
+      ['q004', 2, '否'],
+      ['q005_opt001', 1, 'Selected'],
+      ['response_status', 2, 'rewarded'],
     ]));
   });
 });
