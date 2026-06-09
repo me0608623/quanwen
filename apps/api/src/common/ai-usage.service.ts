@@ -1,8 +1,10 @@
-import { Inject, Injectable } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable } from '@nestjs/common';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { dailyUsage, users } from '../db/schema';
+import { dailyUsage, users, wallets } from '../db/schema';
 import { eq, and, gte, sql } from 'drizzle-orm';
+import type { BatchAnalysisCostPreview } from '../ai/dto/interpret-statistics-batch.dto.js';
+import { POINTS_PER_AI_ANALYSIS } from '../ai/dto/interpret-statistics-batch.dto.js';
 
 export type AI_FEATURE_TYPE = 'optimize_survey' | 'generate_questions' | 'analyze_responses';
 
@@ -162,5 +164,59 @@ export class AiUsageService {
 
       await this.db.insert(dailyUsage).values(insertData);
     }
+  }
+
+  async checkBatchCost(userId: string, count: number): Promise<BatchAnalysisCostPreview> {
+    const [usage, walletRow] = await Promise.all([
+      this.getTodayUsage(userId),
+      this.db
+        .select({ pointsBalance: wallets.pointsBalance })
+        .from(wallets)
+        .where(eq(wallets.userId, userId))
+        .limit(1),
+    ]);
+
+    const aiRemaining =
+      usage.remaining.analyzeResponses === Infinity ? count : usage.remaining.analyzeResponses;
+    const aiCovered = Math.min(count, aiRemaining);
+    const pointsCovered = count - aiCovered;
+    const pointsRequired = pointsCovered * POINTS_PER_AI_ANALYSIS;
+    const pointsAvailable = walletRow[0]?.pointsBalance ?? 0;
+
+    return {
+      total: count,
+      aiCovered,
+      pointsCovered,
+      pointsRequired,
+      pointsAvailable,
+      canProceed: pointsAvailable >= pointsRequired,
+    };
+  }
+
+  async deductBatchCost(userId: string, aiCount: number, pointsCount: number): Promise<void> {
+    const tasks: Promise<unknown>[] = [];
+
+    if (aiCount > 0) {
+      for (let i = 0; i < aiCount; i++) {
+        tasks.push(this.incrementUsage(userId, 'analyze_responses'));
+      }
+    }
+
+    if (pointsCount > 0) {
+      const deductPoints = async () => {
+        const rows = await this.db
+          .update(wallets)
+          .set({ pointsBalance: sql`${wallets.pointsBalance} - ${pointsCount}` })
+          .where(and(eq(wallets.userId, userId), gte(wallets.pointsBalance, pointsCount)))
+          .returning({ id: wallets.id });
+
+        if (rows.length === 0) {
+          throw new BadRequestException('積分不足');
+        }
+      };
+      tasks.push(deductPoints());
+    }
+
+    await Promise.all(tasks);
   }
 }
