@@ -1,8 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ClipboardList,
+  Clock3,
+  ExternalLink,
+  Gift,
+  LogIn,
+  SearchX,
+} from 'lucide-react';
 import { usePublicLinkSurvey, useSubmitPublicResponse } from '@/hooks/use-responses';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
 import { lotteryDisclosure } from '@/lib/lottery-display';
@@ -12,6 +22,47 @@ import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import { getToken } from '@/lib/token';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
+
+function PublicSurveyShell({
+  children,
+  className = '',
+  style,
+}: {
+  children: ReactNode;
+  className?: string;
+  style?: CSSProperties;
+}) {
+  return (
+    <main
+      className={`relative min-h-[100dvh] overflow-hidden bg-[#f7f8f8] px-4 py-6 text-slate-950 sm:px-6 sm:py-10 ${className}`}
+      style={style}
+    >
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_20%_20%,rgba(18,107,138,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0))]" />
+      <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:linear-gradient(to_bottom,black,transparent_72%)]" />
+      <div className="relative mx-auto w-full max-w-3xl">{children}</div>
+    </main>
+  );
+}
+
+function PublicMetaPill({
+  children,
+  tone = 'neutral',
+}: {
+  children: ReactNode;
+  tone?: 'neutral' | 'accent' | 'warm';
+}) {
+  const toneClass =
+    tone === 'accent'
+      ? 'border-[#126b8a]/20 bg-[#126b8a]/10 text-[#0f5d78]'
+      : tone === 'warm'
+        ? 'border-amber-200 bg-amber-50 text-amber-800'
+        : 'border-slate-200 bg-white/70 text-slate-600';
+  return (
+    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${toneClass}`}>
+      {children}
+    </span>
+  );
+}
 
 function getAnonToken() {
   if (typeof window === 'undefined') return '';
@@ -35,94 +86,134 @@ export default function PublicSurveyPage() {
   const [hasToken, setHasToken] = useState(false);
   useEffect(() => setHasToken(!!getToken()), []);
 
-  if (isLoading) return <main className="p-6"><LoadingSpinner /></main>;
+  if (isLoading) {
+    return (
+      <PublicSurveyShell>
+        <div className="mx-auto mt-24 flex w-full max-w-sm items-center justify-center rounded-3xl border border-slate-200 bg-white/80 p-8 text-sm text-slate-500 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+          <LoadingSpinner />
+          <span className="ml-3">載入問卷中…</span>
+        </div>
+      </PublicSurveyShell>
+    );
+  }
   if (!survey)
     return (
-      <main className="mx-auto max-w-md px-4 py-16 text-center">
-        <div className="text-4xl mb-3">🔍</div>
-        <h1 className="text-lg font-bold">找不到這份問卷</h1>
-        <p className="mt-2 text-sm text-muted-foreground">問卷可能已下架、截止，或連結有誤。</p>
+      <PublicSurveyShell>
+        <div className="mx-auto mt-16 max-w-md rounded-[28px] border border-slate-200 bg-white/88 p-8 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
+          <SearchX className="h-5 w-5" strokeWidth={1.8} />
+        </div>
+        <h1 className="text-xl font-semibold tracking-tight">找不到這份問卷</h1>
+        <p className="mt-2 text-sm leading-6 text-slate-500">問卷可能已下架、截止，或連結有誤。</p>
         <Link
           href="/auth/register"
-          className="mt-6 inline-block rounded-md bg-[#126b8a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
+          className="mt-6 inline-flex items-center justify-center rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#126b8a]/30"
         >
-          免費註冊券問，填問卷賺獎勵 →
+          免費註冊券問，填問卷賺獎勵
         </Link>
-      </main>
+        </div>
+      </PublicSurveyShell>
     );
   if (survey.rewardMode === 'lottery') {
     return (
-      <main className="mx-auto max-w-xl px-4 py-8">
-        {survey.coverImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolveAssetUrl(survey.coverImageUrl)}
-            alt=""
-            className="mb-4 max-h-60 w-full rounded-xl object-cover"
-          />
-        )}
-        <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
-        {survey.description && (
-          <p className="mb-2 whitespace-pre-wrap text-sm text-muted-foreground">{survey.description}</p>
-        )}
-        {survey.welcomeImages && survey.welcomeImages.length > 0 && (
-          <div className="mb-3 space-y-3">
-            {survey.welcomeImages.map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={`${url}-${i}`}
-                src={resolveAssetUrl(url)}
-                alt={`歡迎圖 ${i + 1}`}
-                className="w-full rounded-xl object-contain"
-              />
-            ))}
+      <PublicSurveyShell>
+        <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+          {survey.coverImageUrl && (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={resolveAssetUrl(survey.coverImageUrl)}
+              alt=""
+              className="max-h-72 w-full object-cover"
+            />
+          )}
+          <div className="p-5 sm:p-7">
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
+            <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
+            {survey.description && (
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
+            )}
+            {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+              <div className="mt-5 space-y-3">
+                {survey.welcomeImages.map((url, i) => (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    key={`${url}-${i}`}
+                    src={resolveAssetUrl(url)}
+                    alt={`歡迎圖 ${i + 1}`}
+                    className="w-full rounded-2xl border border-slate-100 object-contain"
+                  />
+                ))}
+              </div>
+            )}
+            <div className="mt-6 flex flex-wrap items-center gap-2">
+              <PublicMetaPill>
+                <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.8} />
+                {survey.questions.length} 題
+              </PublicMetaPill>
+              {survey.questions.length > 0 && (
+                <PublicMetaPill>
+                  <Clock3 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  預估約 {estimateFillMinutes(survey.questions.length)} 分鐘
+                </PublicMetaPill>
+              )}
+            </div>
           </div>
-        )}
-        <p className="mb-4 text-xs text-muted-foreground">
-          {survey.questions.length} 題
-          {survey.questions.length > 0 && ` · 預估約 ${estimateFillMinutes(survey.questions.length)} 分鐘`}
-        </p>
-        <div className="rounded-xl border border-amber-300 bg-amber-50 p-4">
-          <p className="text-sm font-semibold text-amber-900">🎁 抽獎回饋：{survey.lotteryPrize}</p>
-          <p className="mt-1 text-sm text-amber-800">抽獎規則：{lotteryDisclosure(survey)}</p>
+        </section>
+        <div className="mt-5 rounded-2xl border border-amber-200 bg-amber-50/90 p-4 text-sm leading-6 text-amber-900 shadow-sm">
+          <p className="flex items-center gap-2 font-semibold">
+            <Gift className="h-4 w-4" strokeWidth={1.8} />
+            抽獎回饋：{survey.lotteryPrize}
+          </p>
+          <p className="mt-1">抽獎規則：{lotteryDisclosure(survey)}</p>
         </div>
-        <div className="mt-4 rounded-xl border border-border bg-muted/40 p-4 text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="mt-5 rounded-[28px] border border-slate-200 bg-white/88 p-5 text-center shadow-[0_16px_60px_rgba(15,23,42,0.07)] backdrop-blur">
+          <p className="text-sm leading-6 text-slate-500">
             {hasToken
               ? '你已登入券問，前往填答即可參與抽獎。'
               : '需要登入券問帳號填答，系統才能在開獎後通知你是否中獎。'}
           </p>
           <Link
             href={hasToken ? `/tasks/${id}` : `/auth/login?redirect=${encodeURIComponent(`/tasks/${id}`)}`}
-            className="mt-3 inline-flex rounded-lg bg-amber-600 px-5 py-2 text-sm font-semibold text-white hover:bg-amber-700"
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#126b8a]/30"
           >
+            <LogIn className="h-4 w-4" strokeWidth={1.8} />
             {hasToken ? '前往填答參與抽獎' : '登入後參與抽獎'}
           </Link>
           {!hasToken && (
-            <p className="mt-2 text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-slate-500">
               還沒有帳號？
               <Link href="/auth/register" className="ml-1 font-medium text-[#126b8a] hover:underline">
-                免費註冊 →
+                免費註冊
               </Link>
             </p>
           )}
         </div>
-      </main>
+      </PublicSurveyShell>
     );
   }
 
   if (done || survey.alreadySubmitted) {
     return (
-      <main className="mx-auto max-w-xl px-4 py-12 text-center">
-        <h1 className="text-2xl font-bold">{done ? (done.flagged ? 'AI 審核中' : '填答已送出') : '已完成'}</h1>
-        <p className="mt-3 text-sm text-muted-foreground">
+      <PublicSurveyShell>
+        <div className="mx-auto mt-12 rounded-[32px] border border-slate-200 bg-white/88 p-6 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-8">
+        <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${
+          done?.flagged ? 'bg-amber-100 text-amber-700' : 'bg-[#126b8a]/10 text-[#126b8a]'
+        }`}>
+          {done?.flagged ? (
+            <AlertTriangle className="h-6 w-6" strokeWidth={1.8} />
+          ) : (
+            <CheckCircle2 className="h-6 w-6" strokeWidth={1.8} />
+          )}
+        </div>
+        <h1 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{done ? (done.flagged ? 'AI 審核中' : '填答已送出') : '已完成'}</h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500">
           {done
             ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
             : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`}
         </p>
         {/* 建立者自訂的感謝頁內容（結束設定） */}
         {done && survey.thankYouMessage && (
-          <p className="mx-auto mt-4 max-w-md whitespace-pre-wrap text-sm leading-relaxed text-foreground">
+          <p className="mx-auto mt-4 max-w-md whitespace-pre-wrap text-sm leading-7 text-slate-700">
             {survey.thankYouMessage}
           </p>
         )}
@@ -134,7 +225,7 @@ export default function PublicSurveyPage() {
                 key={`${url}-${i}`}
                 src={resolveAssetUrl(url)}
                 alt={`感謝頁圖片 ${i + 1}`}
-                className="w-full rounded-xl object-contain"
+                className="w-full rounded-2xl border border-slate-100 object-contain"
               />
             ))}
           </div>
@@ -144,21 +235,23 @@ export default function PublicSurveyPage() {
             href={survey.thankYouRedirectUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-4 inline-block rounded-md border border-[#126b8a] px-5 py-2 text-sm font-semibold text-[#126b8a] hover:bg-[#126b8a]/5"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#126b8a]/30 bg-white px-5 py-2.5 text-sm font-semibold text-[#126b8a] transition hover:bg-[#126b8a]/5"
           >
-            前往指定頁面 ↗
+            前往指定頁面
+            <ExternalLink className="h-4 w-4" strokeWidth={1.8} />
           </a>
         )}
-        <div className="mt-6 rounded-xl border border-[#126b8a]/20 bg-[#126b8a]/5 p-4">
+        <div className="mt-6 rounded-2xl border border-[#126b8a]/20 bg-[#126b8a]/5 p-4">
           <p className="text-sm font-medium text-[#126b8a]">想填更多問卷賺獎勵，或自己發問卷找受試者？</p>
           <Link
             href="/auth/register"
-            className="mt-3 inline-block rounded-md bg-[#126b8a] px-5 py-2 text-sm font-semibold text-white hover:bg-[#0f5d78]"
+            className="mt-3 inline-flex rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78]"
           >
-            免費註冊券問 →
+            免費註冊券問
           </Link>
         </div>
-      </main>
+        </div>
+      </PublicSurveyShell>
     );
   }
 
@@ -175,44 +268,63 @@ export default function PublicSurveyPage() {
   };
 
   return (
-    <main className="mx-auto max-w-xl px-4 py-8">
-      {survey.coverImageUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={resolveAssetUrl(survey.coverImageUrl)}
-          alt=""
-          className="mb-4 max-h-60 w-full rounded-xl object-cover"
-        />
-      )}
-      <h1 className="mb-2 text-2xl font-bold">{survey.title}</h1>
-      {survey.description && (
-        <p className="mb-2 text-sm text-muted-foreground">{survey.description}</p>
-      )}
-      {survey.welcomeImages && survey.welcomeImages.length > 0 && (
-        <div className="mb-3 space-y-3">
-          {survey.welcomeImages.map((url, i) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={`${url}-${i}`}
-              src={resolveAssetUrl(url)}
-              alt={`歡迎圖 ${i + 1}`}
-              className="w-full rounded-xl object-contain"
-            />
-          ))}
+    <PublicSurveyShell>
+      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+        {survey.coverImageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={resolveAssetUrl(survey.coverImageUrl)}
+            alt=""
+            className="max-h-72 w-full object-cover"
+          />
+        )}
+        <div className="p-5 sm:p-7">
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
+          <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
+          {survey.description && (
+            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
+          )}
+          {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+            <div className="mt-5 space-y-3">
+              {survey.welcomeImages.map((url, i) => (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img
+                  key={`${url}-${i}`}
+                  src={resolveAssetUrl(url)}
+                  alt={`歡迎圖 ${i + 1}`}
+                  className="w-full rounded-2xl border border-slate-100 object-contain"
+                />
+              ))}
+            </div>
+          )}
+          <div className="mt-6 flex flex-wrap items-center gap-2">
+            <PublicMetaPill>
+              <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.8} />
+              {survey.questions.length} 題
+            </PublicMetaPill>
+            {survey.questions.length > 0 && (
+              <PublicMetaPill>
+                <Clock3 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                預估約 {estimateFillMinutes(survey.questions.length)} 分鐘
+              </PublicMetaPill>
+            )}
+            {survey.rewardPoints > 0 && (
+              <PublicMetaPill tone="accent">
+                <Gift className="h-3.5 w-3.5" strokeWidth={1.8} />
+                NT${survey.rewardPoints}
+              </PublicMetaPill>
+            )}
+          </div>
         </div>
-      )}
-      <p className="mb-6 text-xs text-muted-foreground">
-        {survey.questions.length} 題
-        {survey.questions.length > 0 && ` · 預估約 ${estimateFillMinutes(survey.questions.length)} 分鐘`}
-      </p>
+      </section>
       {submit.error && (() => {
         const err = submit.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
         const status = err?.response?.status;
         const backendMsg = err?.response?.data?.message;
         return (
-          <p className="mb-4 text-sm text-destructive">
-            {status === 409 ? '⚠️ 這份問卷你已經填過了'
-              : status === 400 ? '⚠️ ' + (backendMsg ?? '送出資料有誤，請檢查後重試')
+          <p className="my-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {status === 409 ? '這份問卷你已經填過了'
+              : status === 400 ? backendMsg ?? '送出資料有誤，請檢查後重試'
               : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
           </p>
         );
@@ -222,6 +334,6 @@ export default function PublicSurveyPage() {
         onSubmit={handleSubmit}
         submitting={submit.isPending}
       />
-    </main>
+    </PublicSurveyShell>
   );
 }
