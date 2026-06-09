@@ -239,6 +239,11 @@ jobs:
       - name: Build api (for production-like e2e)
         run: pnpm --filter api build
 
+      - name: Build web (production build — playwright webServer 用 next start)
+        run: pnpm --filter web build
+        env:
+          NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
+
       - name: Run E2E
         run: pnpm --filter web test:e2e
         env:

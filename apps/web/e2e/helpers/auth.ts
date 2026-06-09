@@ -17,11 +17,11 @@ export async function login(page: Page, who: keyof typeof ACCOUNTS) {
   await page.locator('button[type="submit"]').first().click();
 
   if (who === 'admin') {
-    await page.waitForURL(/\/(admin|dashboard)/, { timeout: 15_000 });
+    await page.waitForURL(/\/(admin|dashboard)/, { timeout: 15_000, waitUntil: 'commit' });
     return;
   }
 
-  await page.waitForURL(new RegExp(acc.landing), { timeout: 15_000 });
+  await page.waitForURL(new RegExp(acc.landing), { timeout: 15_000, waitUntil: 'commit' });
 }
 
 export async function logout(page: Page) {

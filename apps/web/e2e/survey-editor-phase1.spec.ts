@@ -19,27 +19,27 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
     await page.goto("/dashboard/surveys/new");
     await page.waitForLoadState("networkidle");
     await titleInput(page).fill(`QUA-35 AC1 ${Date.now()}`);
-    await page.getByPlaceholder("Question text").first().fill("Q1");
+    await page.getByPlaceholder("題目文字").first().fill("Q1");
 
     for (let i = 0; i < QUESTION_TYPES.length; i++) {
       if (i > 0) await addQuestionButton(page).click();
-      const typeSelect = page.getByLabel(`Question ${i + 1} type`);
+      const typeSelect = page.getByLabel(`第 ${i + 1} 題類型`);
       await expect(typeSelect).toBeVisible();
       await typeSelect.selectOption(QUESTION_TYPES[i]);
-      await page.getByPlaceholder("Question text").nth(i).fill(`Q${i + 1}`);
+      await page.getByPlaceholder("題目文字").nth(i).fill(`Q${i + 1}`);
       if (["single_choice", "multiple_choice", "dropdown"].includes(QUESTION_TYPES[i])) {
-        const option1 = page.getByPlaceholder("Option 1").nth(i);
-        const option2 = page.getByPlaceholder("Option 2").nth(i);
+        const option1 = page.getByPlaceholder("選項 1").nth(i);
+        const option2 = page.getByPlaceholder("選項 2").nth(i);
         if (await option1.isVisible()) await option1.fill("A");
         if (await option2.isVisible()) await option2.fill("B");
       }
     }
 
     for (let i = 0; i < QUESTION_TYPES.length; i++) {
-      await expect(page.getByLabel(`Question ${i + 1} type`)).toHaveValue(QUESTION_TYPES[i]);
+      await expect(page.getByLabel(`第 ${i + 1} 題類型`)).toHaveValue(QUESTION_TYPES[i]);
     }
 
-    await page.getByRole("button", { name: /save draft/i }).click();
+    await page.getByRole("button", { name: /儲存草稿/ }).click();
     await expect(page).toHaveURL(/\/dashboard\/surveys\/[^/]+$/, { timeout: 15000 });
   });
 
@@ -50,8 +50,8 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
     const t = `Preview ${Date.now()}`;
     const q = `Question ${Date.now()}`;
     await titleInput(page).fill(t);
-    await page.getByPlaceholder("Question text").first().fill(q);
-    const previewSection = page.locator("section", { hasText: "Live Preview" });
+    await page.getByPlaceholder("題目文字").first().fill(q);
+    const previewSection = page.locator("section", { hasText: "即時預覽" });
     await expect(previewSection).toBeVisible();
     await expect(previewSection.getByText(t)).toBeVisible({ timeout: 7000 });
     await expect(previewSection.getByText(q)).toBeVisible({ timeout: 7000 });
@@ -62,24 +62,24 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
     await page.goto("/dashboard/surveys/new");
     await page.waitForLoadState("networkidle");
     await titleInput(page).fill(`QUA-35 AC3 ${Date.now()}`);
-    await page.getByPlaceholder("Question text").first().fill("Q1");
-    await page.getByPlaceholder("Option 1").first().fill("go-next");
-    await page.getByPlaceholder("Option 2").first().fill("go-end");
+    await page.getByPlaceholder("題目文字").first().fill("Q1");
+    await page.getByPlaceholder("選項 1").first().fill("go-next");
+    await page.getByPlaceholder("選項 2").first().fill("go-end");
     await addQuestionButton(page).click();
-    await expect(page.getByLabel("Question 2 type")).toBeVisible();
-    await page.getByPlaceholder("Question text").nth(1).fill("Q2 should be skipped");
+    await expect(page.getByLabel("第 2 題類型")).toBeVisible();
+    await page.getByPlaceholder("題目文字").nth(1).fill("Q2 should be skipped");
     const q1Card = page.locator("div.rounded-lg.border.border-border.bg-card").first();
-    await q1Card.getByRole("button", { name: "Logic" }).click();
-    await q1Card.getByRole("button", { name: "+ Add jump rule" }).click();
+    await q1Card.getByRole("button", { name: "邏輯" }).click();
+    await q1Card.getByRole("button", { name: "+ 新增跳題規則" }).click();
     const ruleBlock = q1Card.locator("div.rounded.border.border-border.p-2").first();
     await expect(ruleBlock).toBeVisible();
     await ruleBlock.locator("select").first().selectOption({ index: 1 });
     await ruleBlock.locator("select").nth(1).selectOption("__end__");
-    const previewSection = page.locator("section", { hasText: "Live Preview" });
+    const previewSection = page.locator("section", { hasText: "即時預覽" });
     await expect(previewSection).toBeVisible();
     await previewSection.locator("input[type='radio']").nth(1).check();
-    await previewSection.getByRole("button", { name: /Next|Finish/i }).click();
-    await expect(previewSection.getByText("Preview Complete")).toBeVisible();
+    await previewSection.getByRole("button", { name: /下一步|完成/ }).click();
+    await expect(previewSection.getByText("預覽完成")).toBeVisible();
   });
 
   test("AC4: survey can be published and opened from public link", async ({ page, request }) => {
@@ -160,8 +160,8 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
     await page.goto(`/dashboard/surveys/${surveyId}`);
     // Wait for the editor shell to load (not stuck on "Loading survey...")
     await expect(page.getByText("Loading survey")).not.toBeVisible({ timeout: 10_000 });
-    // Verify the title textbox contains the survey title
-    await expect(titleInput(page)).toHaveValue(title, { timeout: 5_000 });
+    // Verify the title textbox contains the survey title（/[id] 編輯器 title input 用 placeholder="未命名問卷"）
+    await expect(page.locator('input[placeholder="未命名問卷"]').first()).toHaveValue(title, { timeout: 5_000 });
 
     // ?? Step 6: Open public link as anonymous user ??
     const anonContext = await page.context().browser()!.newContext();

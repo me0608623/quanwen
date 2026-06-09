@@ -59,24 +59,24 @@ test.describe("OKR #1 Happy-path", () => {
     await page.getByPlaceholder("輸入問卷標題").fill("QA 三題測試問卷");
 
     // Question 1 is already present by default (single_choice type)
-    const questionTitles = page.getByPlaceholder("Question text");
+    const questionTitles = page.getByPlaceholder("題目文字");
     await questionTitles.first().fill("您偏好哪個選項？");
-    await page.getByPlaceholder("Option 1").first().fill("選項 A");
-    await page.getByPlaceholder("Option 2").first().fill("選項 B");
+    await page.getByPlaceholder("選項 1").first().fill("選項 A");
+    await page.getByPlaceholder("選項 2").first().fill("選項 B");
 
     // Add Question 2
     await page.getByRole("button", { name: /\+ 新增題目/ }).click();
     await questionTitles.nth(1).waitFor({ state: "visible", timeout: 10000 });
-    const q2TypeSelect = page.locator('select[aria-label$=" type"]').nth(1);
+    const q2TypeSelect = page.locator('select[aria-label$="題類型"]').nth(1);
     await q2TypeSelect.selectOption("multiple_choice");
     await questionTitles.nth(1).fill("請選擇所有適用項目（可多選）");
-    await page.getByPlaceholder("Option 1").nth(1).fill("選項 X");
-    await page.getByPlaceholder("Option 2").nth(1).fill("選項 Y");
+    await page.getByPlaceholder("選項 1").nth(1).fill("選項 X");
+    await page.getByPlaceholder("選項 2").nth(1).fill("選項 Y");
 
     // Add Question 3 — text (open-ended)
     await page.getByRole("button", { name: /\+ 新增題目/ }).click();
     await questionTitles.nth(2).waitFor({ state: "visible", timeout: 10000 });
-    const q3TypeSelect = page.locator('select[aria-label$=" type"]').nth(2);
+    const q3TypeSelect = page.locator('select[aria-label$="題類型"]').nth(2);
     await q3TypeSelect.selectOption("text");
     await questionTitles.nth(2).fill("請分享您的其他意見");
 
@@ -158,7 +158,7 @@ test.describe("OKR #1 Happy-path", () => {
     // Completion screen: SurveyJS shows "Thank you for completing the survey"
     // or the parent page shows "Completed" heading depending on implementation
     await expect(
-      page.getByText(/Thank you for completing|completed|感謝|Completed|已提交/i).first(),
+      page.getByText(/填答已送出|已完成|AI 審核中|感謝|已提交|Thank you/i).first(),
     ).toBeVisible({ timeout: 10000 });
   });
 

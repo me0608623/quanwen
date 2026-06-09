@@ -1,20 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { login } from './helpers/auth';
 
 test.describe('QUA-279: Image Feature E2E Tests', () => {
   test.beforeEach(async ({ page }) => {
-    // Navigate to login page
-    await page.goto('http://localhost:3000/auth/magic-link');
-
-    // Fill email
-    await page.fill('input[type="email"]', 'test@example.com');
-    await page.click('button[type="submit"]');
-
-    // Wait for redirect or success
-    await page.waitForTimeout(1000);
-
-    // For testing, assume we're redirected or logged in
-    // In real scenario, we'd need magic link simulation
-    await page.goto('http://localhost:3000/dashboard/surveys/new');
+    await login(page, 'bb'); // surveyor
+    await page.goto('/dashboard/surveys/new');
   });
 
   test('Should upload and display survey cover image', async ({ page }) => {
@@ -106,7 +96,7 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
 
   test('Should display cover image in task cards', async ({ page }) => {
     // First create a survey with image
-    await page.goto('http://localhost:3000/dashboard/surveys/new');
+    await page.goto('/dashboard/surveys/new');
 
     // Fill basic info
     await page.fill('input[placeholder="輸入問卷標題"]', '卡片圖片測試');
@@ -130,7 +120,7 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
     await page.waitForTimeout(2000);
 
     // Navigate to tasks page
-    await page.goto('http://localhost:3000/tasks');
+    await page.goto('/tasks');
 
     // Wait for task cards to load
     await page.waitForTimeout(1000);
@@ -146,7 +136,7 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
 
   test('Should remove cover image', async ({ page }) => {
     // Navigate to new survey
-    await page.goto('http://localhost:3000/dashboard/surveys/new');
+    await page.goto('/dashboard/surveys/new');
 
     // Upload an image
     const fileInput = page.locator('input[type="file"]').first();
@@ -181,7 +171,7 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
 
   test('Should validate image file type and size', async ({ page }) => {
     // Navigate to new survey
-    await page.goto('http://localhost:3000/dashboard/surveys/new');
+    await page.goto('/dashboard/surveys/new');
 
     // Try to upload a non-image file (txt)
     const fileInput = page.locator('input[type="file"]').first();

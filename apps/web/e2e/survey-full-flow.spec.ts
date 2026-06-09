@@ -45,43 +45,43 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.locator('textarea').first().fill(testDesc);
 
       // 新增第一題：單選
-      await page.getByPlaceholder('Question text').first().fill('你的性別是？');
-      await page.getByPlaceholder('Option 1').first().fill('男性');
-      await page.getByPlaceholder('Option 2').first().fill('女性');
+      await page.getByPlaceholder('題目文字').first().fill('你的性別是？');
+      await page.getByPlaceholder('選項 1').first().fill('男性');
+      await page.getByPlaceholder('選項 2').first().fill('女性');
 
       // 新增第二題：多選
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 2 type/i).selectOption('multiple_choice');
-      await page.getByPlaceholder('Question text').nth(1).fill('你喜歡哪些程式語言？（可多選）');
-      await page.getByPlaceholder('Option 1').nth(1).fill('JavaScript');
-      await page.getByPlaceholder('Option 2').nth(1).fill('Python');
-      await page.getByPlaceholder('Option 3').nth(1).fill('Rust');
+      await page.getByLabel(/第 2 題類型/i).selectOption('multiple_choice');
+      await page.getByPlaceholder('題目文字').nth(1).fill('你喜歡哪些程式語言？（可多選）');
+      await page.getByPlaceholder('選項 1').nth(1).fill('JavaScript');
+      await page.getByPlaceholder('選項 2').nth(1).fill('Python');
+      await page.getByPlaceholder('選項 3').nth(1).fill('Rust');
 
       // 新增第三題：文字問答
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 3 type/i).selectOption('text');
-      await page.getByPlaceholder('Question text').nth(2).fill('請分享你對 AI 發展的看法');
+      await page.getByLabel(/第 3 題類型/i).selectOption('text');
+      await page.getByPlaceholder('題目文字').nth(2).fill('請分享你對 AI 發展的看法');
 
       // 新增第四題：評分
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 4 type/i).selectOption('rating');
-      await page.getByPlaceholder('Question text').nth(3).fill('你對本問卷的滿意度？');
+      await page.getByLabel(/第 4 題類型/i).selectOption('rating');
+      await page.getByPlaceholder('題目文字').nth(3).fill('你對本問卷的滿意度？');
 
       // 新增第五題：數字
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 5 type/i).selectOption('numeric');
-      await page.getByPlaceholder('Question text').nth(4).fill('你的年齡？');
+      await page.getByLabel(/第 5 題類型/i).selectOption('numeric');
+      await page.getByPlaceholder('題目文字').nth(4).fill('你的年齡？');
 
       // 新增第六題：是/否
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 6 type/i).selectOption('yes_no');
-      await page.getByPlaceholder('Question text').nth(5).fill('你是否有軟體開發經驗？');
+      await page.getByLabel(/第 6 題類型/i).selectOption('yes_no');
+      await page.getByPlaceholder('題目文字').nth(5).fill('你是否有軟體開發經驗？');
 
       // 新增第七題：日期（如果支援）
       try {
         await page.locator('button.border-dashed').last().click();
-        await page.getByLabel(/Question 7 type/i).selectOption('date');
-        await page.getByPlaceholder('Question text').nth(6).fill('預計畢業日期？');
+        await page.getByLabel(/第 7 題類型/i).selectOption('date');
+        await page.getByPlaceholder('題目文字').nth(6).fill('預計畢業日期？');
       } catch (e) {
         // date 類型可能不支援，跳過
       }
@@ -153,7 +153,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await titleInput.fill(`QUA-250 編輯後標題 ${Date.now()}`);
 
       // 修改題目
-      await page.getByPlaceholder('Question text').first().fill('修改後的題目');
+      await page.getByPlaceholder('題目文字').first().fill('修改後的題目');
 
       // 儲存
       await page.getByRole('button', { name: /儲存草稿|save draft/i }).click();

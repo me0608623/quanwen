@@ -39,7 +39,7 @@ test.describe('AC1: Respondent credit', () => {
     await page.goto('/wallet');
 
     // Respondent sees 我的收益 section, not 現金錢包 (surveyor)
-    const earningsSec = page.locator('text=我的收益, text=待領獎勵').first();
+    const earningsSec = page.getByText(/我的收益|待領獎勵/).first();
     await expect(earningsSec).toBeVisible({ timeout: 8_000 });
   });
 

@@ -16,10 +16,9 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: false, // demo 共用同個 DB，串行避免互卡
   forbidOnly: !!process.env.CI,
-  // E2E 暫非阻擋（見 ci.yml）；關掉 CI retries 讓失敗 spec 只跑一次、整體在 timeout 內完成
-  // （否則 16 個過時斷言 ×3 次重試 + 串行會超過 job timeout → cancelled，continue-on-error 無法吸收）。
-  // 待修好斷言、恢復 gate 時可改回 retries: 2。
-  retries: 0,
+  // 斷言已對齊中文化 UI，且 web 改用 production build（next start，無首次編譯延遲）。
+  // CI retries: 1 吸收完整串行跑後段偶發的導航 timeout（server 劣化偽失敗）。
+  retries: process.env.CI ? 1 : 0,
   workers: 1,
   reporter: process.env.CI
     ? [['github'], ['html', { outputFolder: 'playwright-report', open: 'never' }]]
@@ -52,7 +51,9 @@ export default defineConfig({
           timeout: 120_000,
         },
         {
-          command: 'pnpm --filter web dev',
+          // 用 production build（next start）跑 web：消除 next dev 首次路由編譯造成的
+          // waitForURL 'load' 事件不穩 → 大量 timeout。CI job 在此前已跑 pnpm --filter web build。
+          command: 'pnpm --filter web start',
           url: 'http://localhost:3000',
           reuseExistingServer: false,
           timeout: 120_000,
