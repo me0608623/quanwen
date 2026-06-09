@@ -78,8 +78,9 @@ export class AiController {
   }
 
   /**
-   * 進階統計 AI 解讀（差異性分析 / 迴歸）。
-   * 後端重算統計（同時驗證問卷擁有權），再交給 LLM 產生白話解讀，耗 analyze_responses 額度。
+   * 進階統計 AI 解讀。
+   * 後端先 deterministic 重算指定分析（同時驗證問卷擁有權），再只把結構化數值交給 LLM 白話解讀。
+   * 使用者每次呼叫此 AI 解讀都會耗用 analyze_responses 額度／點數。
    */
   @Post('interpret-statistics')
   @HttpCode(HttpStatus.OK)
@@ -88,32 +89,72 @@ export class AiController {
     @Req() req: Request & { user: AuthenticatedUser },
     @Body(new ZodValidationPipe(AiInterpretStatisticsSchema)) dto: AiInterpretStatisticsDto,
   ) {
-    let label: string;
-    let result: unknown;
-    if (dto.analysisType === 'group_comparison') {
-      label = '差異性分析（t 檢定 / 單因子變異數分析）';
-      result = await this.analyticsService.getGroupComparison(
-        dto.surveyId,
-        req.user.id,
-        dto.ratingQuestionId,
-        dto.groupQuestionId,
-      );
-    } else {
-      label = '複迴歸分析';
-      result = await this.analyticsService.getRegression(
-        dto.surveyId,
-        req.user.id,
-        dto.dependentId,
-        dto.independentIds,
-      );
-    }
+    const prepared = await this.prepareAdvancedAnalysisForAi(dto, req.user.id);
     const interpretation = await this.aiInsightsService.interpretStatistics(
-      label,
+      prepared.label,
       '問卷',
-      result,
+      prepared.result,
     );
     await this.aiUsageService.incrementUsage(req.user.id, 'analyze_responses');
-    return { result, ...interpretation };
+    return {
+      analysisType: dto.analysisType,
+      chargedFeature: 'analyze_responses' as const,
+      result: prepared.result,
+      ...interpretation,
+    };
+  }
+
+  private async prepareAdvancedAnalysisForAi(
+    dto: AiInterpretStatisticsDto,
+    userId: string,
+  ): Promise<{ label: string; result: unknown }> {
+    switch (dto.analysisType) {
+      case 'cross_tab':
+        return {
+          label: '交叉分析（交叉表與 Cramér’s V 關聯強度）',
+          result: await this.analyticsService.getCrossTab(dto.surveyId, userId, dto.questionA, dto.questionB),
+        };
+      case 'scale_reliability':
+        return {
+          label: "信度分析（Cronbach's α）",
+          result: await this.analyticsService.getScaleReliability(
+            dto.surveyId,
+            userId,
+            dto.questionIds,
+            dto.reverseQuestionIds,
+          ),
+        };
+      case 'nps':
+        return {
+          label: 'NPS 淨推薦值',
+          result: await this.analyticsService.getNps(dto.surveyId, userId, dto.questionId),
+        };
+      case 'correlation':
+        return {
+          label: '相關性分析（Pearson r）',
+          result: await this.analyticsService.getCorrelation(dto.surveyId, userId, dto.questionA, dto.questionB),
+        };
+      case 'group_comparison':
+        return {
+          label: '差異性分析（t 檢定 / 單因子變異數分析）',
+          result: await this.analyticsService.getGroupComparison(
+            dto.surveyId,
+            userId,
+            dto.ratingQuestionId,
+            dto.groupQuestionId,
+          ),
+        };
+      case 'regression':
+        return {
+          label: '複迴歸分析',
+          result: await this.analyticsService.getRegression(dto.surveyId, userId, dto.dependentId, dto.independentIds),
+        };
+      case 'segmentation':
+        return {
+          label: '回答者分群分析（k-means）',
+          result: await this.analyticsService.getSegmentation(dto.surveyId, userId, dto.k ?? 3),
+        };
+    }
   }
 
   /** 讀取已保存的 AI 分析報告(不耗 AI 額度);未生成過回 {report: null} */

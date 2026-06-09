@@ -34,10 +34,13 @@ import { ScheduleModule } from '@nestjs/schedule';
         { name: 'short', ttl: 1000, limit: 10 },
         { name: 'medium', ttl: 60_000, limit: 100 },
       ],
+      // E2E/test environments run many seeded-account logins from the same localhost IP.
+      // Production keeps rate limiting unless DISABLE_RATE_LIMIT is explicitly set.
+      skipIf: () =>
+        process.env.DISABLE_RATE_LIMIT === 'true' ||
+        process.env.USE_PG_MEM === 'true' ||
+        process.env.NODE_ENV === 'test',
       storage: new RedisThrottlerStorage(process.env.REDIS_URL),
-      // E2E 環境關閉 rate limit：大量 test 反覆 login 會撞 /auth/login 的 10/60s 上限 → 429。
-      // 生產不設 DISABLE_RATE_LIMIT，throttler 照常生效（紅線：rate limiting on all endpoints）。
-      skipIf: () => process.env.DISABLE_RATE_LIMIT === 'true',
     }),
     AuthModule,
     TagsModule,

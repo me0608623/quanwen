@@ -222,7 +222,19 @@ export interface RegressionResult {
   interpretation: string;
 }
 
+export type AdvancedAnalysisType =
+  | 'cross_tab'
+  | 'scale_reliability'
+  | 'nps'
+  | 'correlation'
+  | 'group_comparison'
+  | 'regression'
+  | 'segmentation';
+
 export interface StatisticsInterpretation {
+  analysisType: AdvancedAnalysisType;
+  chargedFeature: 'analyze_responses';
+  result: unknown;
   interpretation: string;
   caveats: string[];
   generatedAt: string;
@@ -267,8 +279,13 @@ export function useRegression(
 }
 
 type InterpretPayload =
+  | { surveyId: string; analysisType: 'cross_tab'; questionA: string; questionB: string }
+  | { surveyId: string; analysisType: 'scale_reliability'; questionIds?: string[]; reverseQuestionIds?: string[] }
+  | { surveyId: string; analysisType: 'nps'; questionId: string }
+  | { surveyId: string; analysisType: 'correlation'; questionA: string; questionB: string }
   | { surveyId: string; analysisType: 'group_comparison'; ratingQuestionId: string; groupQuestionId: string }
-  | { surveyId: string; analysisType: 'regression'; dependentId: string; independentIds: string[] };
+  | { surveyId: string; analysisType: 'regression'; dependentId: string; independentIds: string[] }
+  | { surveyId: string; analysisType: 'segmentation'; k?: number };
 
 export function useInterpretStatistics() {
   return useMutation<StatisticsInterpretation, unknown, InterpretPayload>({
