@@ -1,32 +1,151 @@
 import Link from "next/link";
-import { MarketingFooter } from "@/components/marketing/marketing-footer";
-import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { LoadingScreen } from "@/components/marketing/animation/loading-screen";
-import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
 import { HeroBackdrop } from "@/components/marketing/animation/hero-backdrop";
 import { HeroIntro } from "@/components/marketing/animation/hero-intro";
+import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
+import { MarketingFooter } from "@/components/marketing/marketing-footer";
+import { MarketingNav } from "@/components/marketing/marketing-nav";
+
+const heroModes = [
+  {
+    icon: "付",
+    title: "付費發問卷",
+    desc: "設定受眾與獎勵，系統媒合合適填答者",
+  },
+  {
+    icon: "填",
+    title: "填問卷賺回報",
+    desc: "現金、超商禮券與積分回到同一個錢包",
+  },
+  { icon: "互", title: "互惠交換", desc: "沒有預算也能用互填換取有效樣本" },
+  {
+    icon: "AI",
+    title: "AI 協助製作",
+    desc: "生成草稿、檢查題目、降低低品質回覆",
+  },
+];
+
+const trustItems = [
+  "Google / LINE 登入",
+  "綠界 ECPay 金流託管",
+  "7-11 / 全家禮券兌換",
+  "個資應用層加密",
+];
+
+const modeCards = [
+  {
+    label: "For researchers",
+    title: "付費發問卷，讓預算用在對的人身上",
+    desc: "設定年齡、地區、職業與興趣等受眾條件，平台把問卷推給更符合條件的填答者，並用 AI 三層審核擋掉灌水樣本。",
+  },
+  {
+    label: "For respondents",
+    title: "填問卷，直接累積現金與在地獎勵",
+    desc: "完成問卷後取得現金、7-11／全家／星巴克禮券或積分。收益集中在同一個面板，流程透明可追蹤。",
+  },
+  {
+    label: "For zero budget",
+    title: "互惠交換，用互填換到第一批真實回覆",
+    desc: "發一份互惠問卷進池，系統配對另一位問卷方。雙方互填且通過品質審核後，同時解鎖有效樣本。",
+    href: "#mutual-flow",
+  },
+  {
+    label: "For builders",
+    title: "AI 先打底，再由你決定問卷內容",
+    desc: "從研究目的生成問卷草稿，並建議注意力檢核題。填答者完成個人資料後，也會收到更合適的問卷推薦。",
+  },
+];
+
+const mutualSteps = [
+  {
+    step: "01",
+    title: "把問卷送進互惠池",
+    desc: "免設獎勵、免鎖預算。先交給系統尋找最合適的互填對手。",
+  },
+  {
+    step: "02",
+    title: "優先配對同類型需求",
+    desc: "同分類問卷優先媒合。若暫時不足，系統改用先進先出配對，避免等待太久。",
+  },
+  {
+    step: "03",
+    title: "互填後通過品質審核",
+    desc: "任一方品質不過會退回重配，直到拿到符合標準的回覆。",
+  },
+];
 
 const aiLayers = [
   {
     title: "Layer 1 行為訊號偵測",
     description:
-      "即時比對填答耗時、作答頻率與點擊模式，第一時間攔下機器人與亂填樣本。",
+      "比對填答耗時、作答頻率與點擊模式，先攔下機器人與明顯亂填樣本。",
   },
   {
     title: "Layer 2 邏輯與注意力檢核",
-    description:
-      "自動插入反向題與注意力檢核題，快速淘汰答非所問或注意力渙散的回覆。",
+    description: "搭配反向題與注意力檢核題，淘汰答非所問或注意力渙散的回覆。",
   },
   {
     title: "Layer 3 AI 灰區裁決",
-    description:
-      "分數落在灰區時才啟動深度語義分析，讓可疑樣本有更精準的最終判定。",
+    description: "分數落在灰區時啟動語義分析，針對可疑樣本做更精準的最終判定。",
+  },
+];
+
+const antiAbuseCards = [
+  {
+    icon: "⏱",
+    title: "填答頻率上限",
+    desc: "每人每小時與每日填答數量設有限制，正常使用足夠，短時間刷量會被擋下。",
+  },
+  {
+    icon: "⚡",
+    title: "填太快即時警告",
+    desc: "作答速度異常時會在填答中提醒，時間不足以閱讀的回覆不會發放獎勵。",
+  },
+  {
+    icon: "偵",
+    title: "自動化行為偵測",
+    desc: "偵測連續快速填答與爬蟲式操作後，系統會暫停該帳號的填答資格。",
+  },
+  {
+    icon: "信",
+    title: "信譽分與停權",
+    desc: "品質不佳會扣信譽分、降低接案優先權。連續退件則暫停接案。",
+  },
+];
+
+const workflowCards = [
+  {
+    title: "10 秒匯入既有問卷",
+    desc: "已經在 Google Forms、SurveyCake 或 Excel 做好問卷？貼上連結或檔案，系統解析題目與選項後即可上線。",
+  },
+  {
+    title: "AI 數據分析報告",
+    desc: "收完回覆後自動整理關鍵發現與交叉分析，並可匯出 PDF、Excel、CSV 原始資料或乾淨樣本。",
+  },
+  {
+    title: "平台代辦公正抽獎",
+    desc: "獎金託管、隨機抽出、自動通知中獎者並發獎。每次開獎都有公平性核對紀錄可稽核。",
+  },
+];
+
+const trustCards = [
+  {
+    title: "信譽積分系統",
+    desc: "為每位填答者建立長期信任檔案，讓高品質用戶更容易接到適合的問卷。",
+  },
+  {
+    title: "綠界金流託管",
+    desc: "預算自動鎖定與發放，平台帳上維持零持股，付款與退款流程可追蹤。",
+  },
+  {
+    title: "個資加密保護",
+    desc: "敏感資料採用 AES-256-GCM 保護，從傳輸到儲存都維持高強度安全。",
   },
 ];
 
 export default function HomePage() {
   return (
-    <main className="min-h-screen bg-[var(--q-canvas)] text-[var(--q-body)]">
+    <main className="min-h-screen overflow-hidden bg-[var(--q-canvas)] text-[var(--q-body)] antialiased">
       <LoadingScreen />
       <HeroIntro />
       <ScrollReveal />
@@ -34,71 +153,78 @@ export default function HomePage() {
 
       <section
         data-hero-root
-        className="relative isolate mx-auto max-w-6xl overflow-hidden px-4 pb-20 pt-16 sm:px-6 lg:px-8 lg:pt-24"
+        className="relative isolate mx-auto max-w-[1180px] px-4 pb-20 pt-12 sm:px-6 sm:pb-24 lg:px-8 lg:pb-28 lg:pt-20"
       >
         <HeroBackdrop />
-        <div className="relative z-10 grid items-center gap-10 lg:grid-cols-2">
-          <div>
-            <p
-              data-hero-badge
-              className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--q-muted)]"
-            >
+        <div className="relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+          <div className="max-w-3xl">
+            <p data-hero-badge className="q-home-kicker">
               AI 把關的雙邊問卷平台
             </p>
             <h1
               data-hero-title
-              className="mt-4 font-serif text-4xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl lg:text-6xl"
+              className="mt-5 max-w-[12ch] text-balance font-serif text-[clamp(3.25rem,8vw,6.7rem)] font-semibold leading-[0.9] tracking-[-0.055em] text-[var(--q-ink)]"
             >
-              發問卷找對的人，
-              <br />
-              填問卷賺回報。
+              發問卷找對的人，填問卷賺回報。
             </h1>
-            <p data-hero-copy className="mt-6 max-w-xl text-lg leading-relaxed text-[var(--q-body-strong)]">
-              付費發案、精準媒合受眾；填問卷的人賺現金、7-11／全家禮券或積分。
-              沒預算？也能用互惠交換互填拿樣本。AI 全程把關品質、還能幫你生成問卷草稿。
+            <p
+              data-hero-copy
+              className="mt-7 max-w-[38rem] text-pretty text-lg leading-8 text-[var(--q-body-strong)] sm:text-xl sm:leading-9"
+            >
+              付費取樣、互惠交換、填答獎勵與 AI
+              品質審核集中在同一個平台。研究者更快收到可信樣本，填答者也能清楚拿到回報。
             </p>
-            <p data-hero-copy className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--q-muted)]">
-              券問是台灣首個「AI 把關 + 雙邊自助」的問卷媒合平台 —— 付費取樣、互惠交換、賺積分換現金，一個帳號全包。
+            <p
+              data-hero-copy
+              className="mt-4 max-w-[34rem] text-pretty text-sm leading-7 text-[var(--q-muted)]"
+            >
+              從問卷草稿、受眾媒合、反機器人檢核到金流託管，券問把收樣本的雜事整理成一條可追蹤的流程。
             </p>
-            <div data-hero-cta className="mt-8 flex flex-wrap gap-3">
+            <div
+              data-hero-cta
+              className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center"
+            >
               <Link
                 href="/auth/register"
-                className="q-btn-anim rounded-md bg-[var(--q-primary)] px-5 py-3 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)]"
+                className="q-btn q-btn-primary q-btn-anim"
               >
                 免費開始
               </Link>
-              <a
-                href="#modes"
-                className="q-btn-anim rounded-md border border-[var(--q-hairline)] px-5 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-card)]"
-              >
+              <a href="#modes" className="q-btn q-btn-secondary q-btn-anim">
                 看四種使用方式
               </a>
             </div>
           </div>
 
-          <div
-            data-hero-panel
-            className="rounded-xl bg-[var(--q-surface-dark)] p-6 text-[var(--q-on-dark)] sm:p-8"
-          >
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-on-dark-soft)]">
-              一個帳號 · 四種使用方式
-            </p>
-            <div className="mt-6 space-y-3">
-              {[
-                { icon: "💰", title: "付費發問卷", desc: "設獎勵+受眾，AI 媒合精準填答者" },
-                { icon: "🎁", title: "填問卷賺回報", desc: "現金 / 7-11 禮券 / 積分 + 每日轉盤" },
-                { icon: "🤝", title: "互惠交換", desc: "沒預算？互填問卷拿樣本" },
-                { icon: "✨", title: "AI 協助製作", desc: "AI 生成問卷草稿 + 反機器人題" },
-              ].map((m) => (
+          <div data-hero-panel className="q-hero-panel">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold tracking-[0.18em] text-[var(--q-on-dark-soft)]">
+                  WORKSPACE
+                </p>
+                <h2 className="mt-3 font-serif text-3xl font-semibold leading-none tracking-[-0.035em] text-[var(--q-on-dark)] sm:text-4xl">
+                  一個帳號，四種任務。
+                </h2>
+              </div>
+              <span className="rounded-full border border-white/10 px-3 py-1 text-xs font-medium text-[var(--q-on-dark-soft)]">
+                live
+              </span>
+            </div>
+            <div className="mt-7 grid gap-3">
+              {heroModes.map((mode) => (
                 <div
-                  key={m.title}
+                  key={mode.title}
                   data-hero-panel-item
-                  className="flex items-center gap-3 rounded-lg border border-white/10 bg-[var(--q-surface-dark-soft)] px-4 py-3"
+                  className="q-hero-mode"
                 >
-                  <span className="text-xl">{m.icon}</span>
+                  <span className="q-hero-mode-icon">{mode.icon}</span>
                   <div>
-                    <p className="text-sm font-semibold text-[var(--q-on-dark)]">{m.title}</p>
-                    <p className="text-xs text-[var(--q-on-dark-soft)]">{m.desc}</p>
+                    <p className="text-sm font-semibold text-[var(--q-on-dark)]">
+                      {mode.title}
+                    </p>
+                    <p className="mt-1 text-xs leading-5 text-[var(--q-on-dark-soft)]">
+                      {mode.desc}
+                    </p>
                   </div>
                 </div>
               ))}
@@ -107,304 +233,270 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]">
-        <div className="mx-auto flex max-w-6xl flex-wrap gap-x-6 gap-y-3 px-4 py-5 text-xs font-medium text-[var(--q-muted)] sm:px-6 lg:px-8">
-          <span>Google · LINE 登入</span>
-          <span>綠界 ECPay 金流託管</span>
-          <span>7-11 / 全家 禮券兌換</span>
-          <span>應用層 AES-256 個資加密</span>
+      <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]/80">
+        <div className="mx-auto grid max-w-[1180px] gap-3 px-4 py-5 text-sm font-medium text-[var(--q-muted)] sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
+          {trustItems.map((item) => (
+            <span key={item} className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-[var(--q-primary)]" />
+              {item}
+            </span>
+          ))}
         </div>
       </section>
 
-      <section id="modes" className="py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
-            四種使用方式，一個帳號全包
-          </h2>
-          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
-            無論你是想取得樣本、還是想賺取回報，都能找到適合的模式。
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-2">
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">💰</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">付費發問卷 · 精準媒合</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                設定獎勵與受眾條件（年齡 / 性別 / 地區 / 職業 / 興趣），系統把問卷推給最符合的填答者，
-                並用 AI 三層審核擋掉灌水。每一分預算都花在真樣本。
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">🎁</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">填問卷 · 直接賺回報</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                完成問卷拿現金、7-11／全家／星巴克禮券或積分；積分可在商城兌換、或折抵。
-                每天還能免費轉一次轉盤加碼，最高 100 點。
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">🤝</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">互惠交換 · 零預算拿樣本</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                沒有預算也能取得回覆：發一份互惠問卷進池，系統幫你配對另一個有問卷的人，
-                雙方互填、AI 審過即同時解鎖。<a href="#mutual-flow" className="text-[var(--q-primary)] underline">看互惠運作 →</a>
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">✨</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">AI 協助製作 + 個人化推薦</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                發問卷方可讓 AI 生成問卷草稿、並建議在中段插入反機器人題；
-                填問卷方填好個人資料後，平台主動推薦最適合你的問卷來填、賺更多回報。
-              </p>
-            </article>
+      <section id="modes" className="q-home-section">
+        <div className="q-home-container">
+          <div className="max-w-3xl">
+            <p className="q-home-kicker">四種使用方式</p>
+            <h2 className="q-home-heading mt-4">
+              不是再開一個表單工具，而是把樣本流動起來。
+            </h2>
+            <p className="q-home-lead mt-5">
+              同一個帳號可以是問卷方、填答者，也可以用互惠模式先取得第一批回覆。
+            </p>
+          </div>
+          <div className="mt-12 grid gap-4 lg:grid-cols-2">
+            {modeCards.map((card, index) => (
+              <article
+                key={card.title}
+                className={`q-home-card ${index === 0 ? "lg:translate-y-8" : ""}`}
+              >
+                <p className="q-card-label">{card.label}</p>
+                <h3 className="mt-4 text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--q-ink)]">
+                  {card.title}
+                </h3>
+                <p className="mt-4 text-pretty text-sm leading-7 text-[var(--q-body)]">
+                  {card.desc}
+                </p>
+                {card.href ? (
+                  <a
+                    href={card.href}
+                    className="mt-5 inline-flex text-sm font-semibold text-[var(--q-primary-active)] underline-offset-4 hover:underline"
+                  >
+                    看互惠運作
+                  </a>
+                ) : null}
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
       <section
         id="mutual-flow"
-        className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]"
+        className="q-home-section q-home-section-tinted"
       >
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-on-dark-soft)]">
-            模式之一 · 互惠交換
-          </p>
-          <h2 className="mt-3 font-serif text-3xl leading-tight tracking-[-0.01em] sm:text-4xl">
-            沒預算？互惠也能拿到真實樣本
-          </h2>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 01</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">發一份互惠問卷</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                問卷送進配對池，免設獎勵、免鎖預算，先讓系統幫你找最合適的互填對手。
+        <div className="q-home-container">
+          <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
+            <div>
+              <p className="q-home-kicker">互惠交換</p>
+              <h2 className="q-home-heading mt-4">
+                沒有預算，也能拿到可用的真實樣本。
+              </h2>
+              <p className="q-home-lead mt-5">
+                互惠不是把品質放低，而是讓雙方都完成同等任務，再由系統審核後解鎖回覆。
               </p>
-            </article>
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 02</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">30 秒內配對對手</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                同分類優先媒合；若同分類暫時不足，系統自動改用 FIFO 配對，讓流量不空轉。
-              </p>
-            </article>
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <p className="text-xs text-[var(--q-on-dark-soft)]">步驟 03</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-on-dark)]">
-                互填後 AI 審過再解鎖
-              </h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                任一方品質不過會自動退件，並把你的問卷放回池中，直到拿到符合標準的回覆。
-              </p>
-            </article>
+            </div>
+            <div className="grid gap-3">
+              {mutualSteps.map((step) => (
+                <article key={step.step} className="q-step-card">
+                  <span className="font-mono text-sm font-semibold tabular-nums text-[var(--q-primary-active)]">
+                    {step.step}
+                  </span>
+                  <div>
+                    <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                      {step.title}
+                    </h3>
+                    <p className="mt-2 text-sm leading-7 text-[var(--q-body)]">
+                      {step.desc}
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section className="py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
-            拒絕垃圾數據，每一分預算都花在真樣本
-          </h2>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
+      <section className="q-home-section">
+        <div className="q-home-container">
+          <div className="max-w-3xl">
+            <p className="q-home-kicker">品質審核</p>
+            <h2 className="q-home-heading mt-4">
+              拒絕垃圾數據，每一分預算都花在真樣本。
+            </h2>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
             {aiLayers.map((layer) => (
-              <article key={layer.title} className="rounded-xl bg-[var(--q-surface-card)] p-6">
-                <h3 className="text-lg font-semibold text-[var(--q-ink)]">{layer.title}</h3>
-                <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">{layer.description}</p>
+              <article
+                key={layer.title}
+                className="q-home-card q-home-card-flat"
+              >
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                  {layer.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-[var(--q-body)]">
+                  {layer.description}
+                </p>
               </article>
             ))}
           </div>
-          <div className="mt-10 rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-6">
-            <div className="flex items-center justify-between text-xs font-semibold text-[var(--q-muted)]">
+          <div className="mt-8 rounded-[1.75rem] border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-6 shadow-[0_18px_60px_rgba(55,47,35,0.08)]">
+            <div className="flex items-center justify-between text-xs font-semibold tracking-[0.08em] text-[var(--q-muted)]">
               <span>品質分數軸</span>
               <span>灰區 AI 介入</span>
             </div>
-            <div className="mt-4 h-3 rounded-full bg-[var(--q-surface-cream-strong)]">
+            <div className="mt-5 h-3 rounded-full bg-[var(--q-surface-cream-strong)]">
               <div className="relative h-full w-[74%] rounded-full bg-[var(--q-primary)]">
-                <span className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[var(--q-canvas)] bg-[var(--q-accent-teal)]" />
+                <span className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[var(--q-canvas)] bg-[var(--q-accent-teal)] shadow-[0_0_0_6px_rgba(93,184,166,0.18)]" />
               </div>
             </div>
-            <p className="mt-4 text-sm text-[var(--q-muted)]">
-              分數落在約 40–75 的灰區樣本，才會交由 AI 灰區裁決做深度語義分析。
+            <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--q-muted)]">
+              分數落在約 40 到 75 的灰區樣本，才會交由 AI
+              灰區裁決做深度語義分析。
             </p>
           </div>
         </div>
       </section>
 
-      <section className="py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
-            防刷機制，杜絕灌水賺點數
-          </h2>
-          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
-            獎勵只發給認真填答的人。多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本、填答方公平競爭。
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">⏱️</p>
-              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">填答頻率上限</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
-                每人每小時、每日填答數量設有上限，真人正常使用綽綽有餘，但擋下短時間瘋狂刷量。
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">⚡</p>
-              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">填太快即時警告</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
-                填答過快會在作答中跳出提醒；時間明顯不足以認真閱讀的填答會被判定無效、不發獎勵。
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">🤖</p>
-              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">機器人偵測封禁</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
-                偵測到自動化／爬蟲式的連續快速填答，系統會自動暫停該帳號填答一段時間。
-              </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">📉</p>
-              <h3 className="mt-3 text-base font-semibold text-[var(--q-ink)]">信譽分與停權</h3>
-              <p className="mt-2 text-sm leading-relaxed text-[var(--q-body)]">
-                品質不佳會扣信譽分、降低接案優先權；連續退件則暫停接案，逼退灌水帳號。
-              </p>
-            </article>
+      <section className="q-home-section q-home-section-tinted">
+        <div className="q-home-container">
+          <div className="max-w-3xl">
+            <p className="q-home-kicker">防刷機制</p>
+            <h2 className="q-home-heading mt-4">獎勵只發給認真填答的人。</h2>
+            <p className="q-home-lead mt-5">
+              多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本，填答方公平競爭。
+            </p>
           </div>
-          <p className="mt-6 text-xs text-[var(--q-muted)]">
-            搭配 AI 三層品質審核（行為訊號 → 邏輯檢核 → AI 灰區裁決），從「填答行為」到「答案內容」雙重把關。
+          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {antiAbuseCards.map((card) => (
+              <article key={card.title} className="q-mini-card">
+                <span className="q-mini-icon">{card.icon}</span>
+                <h3 className="mt-5 text-base font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                  {card.title}
+                </h3>
+                <p className="mt-3 text-sm leading-7 text-[var(--q-body)]">
+                  {card.desc}
+                </p>
+              </article>
+            ))}
+          </div>
+          <p className="mt-7 max-w-3xl text-xs leading-6 text-[var(--q-muted)]">
+            搭配 AI 三層品質審核，從填答行為到答案內容雙重把關。
           </p>
         </div>
       </section>
 
-      <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)] py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--q-muted)]">
-            從建立到分析，平台都幫你做完
-          </p>
-          <h2 className="mt-3 font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
-            10 秒匯入、AI 分析、平台代辦抽獎
-          </h2>
-          <p className="mt-3 max-w-2xl text-base text-[var(--q-muted)]">
-            不用從零開始，也不用自己跑統計、自己辦抽獎 —— 這些麻煩事交給券問。
-          </p>
-          <div className="mt-10 grid gap-4 md:grid-cols-3">
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">⚡</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">10 秒匯入既有問卷</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                已經在 Google Forms、SurveyCake 或 Excel 做好問卷？貼上連結或檔案，
-                系統自動解析題目與選項，10 秒搬進券問，馬上開始收真實樣本。
+      <section className="q-home-section">
+        <div className="q-home-container">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
+            <div>
+              <p className="q-home-kicker">從建立到分析</p>
+              <h2 className="q-home-heading mt-4">
+                匯入、分析、抽獎，平台都幫你收好。
+              </h2>
+              <p className="q-home-lead mt-5">
+                不用從零開始，也不用自己跑統計、自己辦抽獎。券問把收樣本後的收尾工作一起整理好。
               </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">📊</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">AI 數據分析報告</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                收完回覆不用自己跑統計：AI 自動生成洞察簡報，整理關鍵發現與交叉分析，
-                並可一鍵匯出 PDF / Excel / CSV 原始資料或乾淨樣本。
+            </div>
+            <div className="rounded-[2rem] bg-[var(--q-surface-dark)] p-5 text-[var(--q-on-dark)] shadow-[0_30px_90px_rgba(24,23,21,0.18)] sm:p-7">
+              <p className="text-xs font-semibold tracking-[0.18em] text-[var(--q-on-dark-soft)]">
+                SAMPLE STATUS
               </p>
-            </article>
-            <article className="rounded-xl border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6">
-              <p className="text-2xl">🎲</p>
-              <h3 className="mt-3 text-lg font-semibold text-[var(--q-ink)]">平台代辦公正抽獎</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-body)]">
-                想用抽獎回饋吸引填答？平台代你開獎：獎金託管、隨機抽出、
-                自動通知中獎者並發獎，每次開獎都有公平性核對紀錄可稽核。
+              <p className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-[var(--q-on-dark)]">
+                286
               </p>
-            </article>
+              <p className="mt-2 text-sm text-[var(--q-on-dark-soft)]">
+                乾淨樣本已通過品質審核
+              </p>
+            </div>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {workflowCards.map((card) => (
+              <article key={card.title} className="q-home-card">
+                <h3 className="text-xl font-semibold tracking-[-0.025em] text-[var(--q-ink)]">
+                  {card.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-[var(--q-body)]">
+                  {card.desc}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]">
-        <div className="mx-auto grid max-w-6xl gap-6 px-4 sm:px-6 lg:grid-cols-2 lg:px-8">
-          <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-7">
-            <h2 className="font-serif text-3xl tracking-[-0.01em]">雙邊媒合，讓問卷方找到對的人</h2>
-            <ul className="mt-6 space-y-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
+      <section className="q-home-section q-home-section-tinted">
+        <div className="q-home-container grid gap-5 lg:grid-cols-2">
+          <article className="q-proof-card">
+            <h2 className="font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--q-ink)]">
+              雙邊媒合，讓問卷方找到對的人。
+            </h2>
+            <ul className="mt-7 space-y-4 text-sm leading-7 text-[var(--q-body)]">
               <li>受眾篩選媒合，優先導入符合條件的填答者。</li>
               <li>AI 品質過濾，自動擋下低品質與可疑樣本。</li>
               <li>綠界自動分潤與退款，平台零持股金流託管。</li>
             </ul>
           </article>
-          <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-7">
-            <h2 className="font-serif text-3xl tracking-[-0.01em]">填答者拿到想要的在地獎勵</h2>
-            <ul className="mt-6 space-y-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-              <li>填答賺現金、7-11 / 全家禮券與積分回饋。</li>
-              <li>通過驗證即入帳「我的收益」，流程透明可追蹤。</li>
+          <article className="q-proof-card q-proof-card-dark">
+            <h2 className="font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--q-on-dark)]">
+              填答者拿到想要的在地獎勵。
+            </h2>
+            <ul className="mt-7 space-y-4 text-sm leading-7 text-[var(--q-on-dark-soft)]">
+              <li>填答賺現金、超商禮券與積分回饋。</li>
+              <li>通過驗證即入帳我的收益，流程透明可追蹤。</li>
               <li>收益面板可同時查看 NT$、禮券與託管狀態。</li>
             </ul>
-            <div className="mt-6 rounded-lg border border-white/10 bg-[var(--q-surface-dark-soft)] p-4">
+            <div className="mt-8 rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-5">
               <p className="text-xs text-[var(--q-on-dark-soft)]">我的收益</p>
-              <p className="mt-2 text-2xl font-semibold text-[var(--q-on-dark)]">NT$ 2,860</p>
-              <p className="mt-2 text-xs text-[var(--q-accent-teal)]">綠界託管中 · 入帳成功</p>
+              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--q-on-dark)]">
+                NT$ 2,860
+              </p>
+              <p className="mt-2 text-xs text-[var(--q-accent-teal)]">
+                綠界託管中 · 入帳成功
+              </p>
             </div>
           </article>
         </div>
       </section>
 
-      <section className="py-20">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] text-[var(--q-ink)] sm:text-4xl">
-            一個帳號，發問卷、填問卷、跑互惠
-          </h2>
-          <div className="mt-8 grid gap-4 rounded-xl bg-[var(--q-surface-card)] p-6 md:grid-cols-3">
-            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
-              <p className="text-xs font-semibold text-[var(--q-muted)]">發問卷</p>
-              <p className="mt-3 text-sm text-[var(--q-body)]">
-                建立受眾條件、設定預算與獎勵，發布後由系統自動媒合與審核。
-              </p>
-            </article>
-            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
-              <p className="text-xs font-semibold text-[var(--q-muted)]">填問卷</p>
-              <p className="mt-3 text-sm text-[var(--q-body)]">
-                依偏好接案填答，驗證通過後收益立即進入待領獎勵與我的收益面板。
-              </p>
-            </article>
-            <article className="rounded-lg bg-[var(--q-canvas)] p-5">
-              <p className="text-xs font-semibold text-[var(--q-muted)]">互惠</p>
-              <p className="mt-3 text-sm text-[var(--q-body)]">
-                沒有預算也能上線，透過互填交換快速累積有效樣本數。
-              </p>
-            </article>
+      <section className="q-home-section">
+        <div className="q-home-container">
+          <div className="max-w-3xl">
+            <p className="q-home-kicker">信任基礎</p>
+            <h2 className="q-home-heading mt-4">
+              每一筆回覆，都要能被追蹤與信任。
+            </h2>
+          </div>
+          <div className="mt-12 grid gap-4 md:grid-cols-3">
+            {trustCards.map((card) => (
+              <article
+                key={card.title}
+                className="q-home-card q-home-card-flat"
+              >
+                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                  {card.title}
+                </h3>
+                <p className="mt-4 text-sm leading-7 text-[var(--q-body)]">
+                  {card.desc}
+                </p>
+              </article>
+            ))}
           </div>
         </div>
       </section>
 
-      <section className="bg-[var(--q-surface-dark)] py-20 text-[var(--q-on-dark)]">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl tracking-[-0.01em] sm:text-4xl">信任三件套</h2>
-          <div className="mt-8 grid gap-4 md:grid-cols-3">
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <h3 className="text-lg font-semibold">信譽積分系統</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                為每位填答者建立永久信任檔案，提升高品質用戶的接案優先權。
-              </p>
-            </article>
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <h3 className="text-lg font-semibold">綠界金流託管</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                預算自動鎖定與發放，平台帳上維持零持股，流程合規可稽核。
-              </p>
-            </article>
-            <article className="rounded-xl bg-[var(--q-surface-dark-elevated)] p-6">
-              <h3 className="text-lg font-semibold">端到端個資加密</h3>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--q-on-dark-soft)]">
-                敏感資料採用 AES-256-GCM 保護，從傳輸到儲存都維持高強度安全。
-              </p>
-            </article>
-          </div>
-        </div>
-      </section>
-
-      <section className="bg-[var(--q-primary)] py-20 text-[var(--q-on-primary)]">
-        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
-          <h2 className="font-serif text-3xl leading-tight tracking-[-0.01em] sm:text-4xl">
+      <section className="px-4 pb-20 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-[1180px] rounded-[2.25rem] bg-[var(--q-primary)] px-6 py-14 text-center text-[var(--q-on-primary)] shadow-[0_30px_90px_rgba(169,88,62,0.22)] sm:px-10 lg:py-16">
+          <h2 className="mx-auto max-w-2xl text-balance font-serif text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
             準備好收到真實的回覆了嗎？
           </h2>
-          <p className="mt-4 text-base text-[var(--q-on-primary)]/90">
+          <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-8 text-[var(--q-on-primary)]/90">
             免費註冊，幾分鐘就能發出第一份問卷，或立刻開始互惠交換。
           </p>
           <Link
             href="/auth/register"
-            className="q-btn-anim mt-8 inline-block rounded-md bg-[var(--q-canvas)] px-6 py-3 text-sm font-semibold text-[var(--q-ink)] transition hover:bg-[var(--q-surface-soft)]"
+            className="q-btn q-btn-invert q-btn-anim mt-8"
           >
             免費開始
           </Link>
