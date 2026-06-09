@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useCorrelation } from '@/hooks/use-analytics';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 
 interface QuestionStat {
   questionId: string;
@@ -80,12 +81,7 @@ export function CorrelationSection({
         <p className="text-xs text-amber-600">請選擇兩個不同的題目</p>
       )}
 
-      {analyze && qA !== qB && isLoading && (
-        <div className="space-y-2">
-          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: '60%' }} />
-          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: '40%' }} />
-        </div>
-      )}
+      {analyze && qA !== qB && isLoading && <PanelSkeletonContent rows={3} />}
 
       {error && (
         <p className="text-xs text-red-600">分析失敗，請稍後再試</p>

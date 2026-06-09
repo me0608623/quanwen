@@ -3,6 +3,7 @@
 import { useState, useMemo } from 'react';
 import { useCrossTab } from '@/hooks/use-analytics';
 import type { CrossTabResult } from '@/hooks/use-analytics';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 import {
   BarChart,
   Bar,
@@ -177,7 +178,7 @@ export function CrossTabSection({ questionStats, surveyId }: { questionStats: Qu
         <p className="text-xs text-muted-foreground italic">請選擇兩個題目</p>
       )}
 
-      {isLoading && <div className="h-32 animate-pulse rounded bg-muted" />}
+      {isLoading && <PanelSkeletonContent rows={3} />}
       {error && <p className="text-xs text-red-600">交叉分析失敗，請稍後再試</p>}
       {data && !isLoading && <CrossTabPanel data={data} />}
     </section>

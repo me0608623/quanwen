@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import { useNps, type NpsResult } from '@/hooks/use-analytics';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 import {
   PieChart,
   Pie,
@@ -196,7 +197,7 @@ export function NpsSection({ questionStats, surveyId }: { questionStats: Questio
       </select>
 
       {!selectedRating && <p className="text-xs font-semibold text-amber-700">選定推薦意願題後才會計算 NPS，避免將一般滿意度誤當成推薦值。</p>}
-      {isLoading && <div className="h-24 animate-pulse rounded bg-muted" />}
+      {isLoading && <PanelSkeletonContent rows={3} />}
       {error && <p className="text-xs text-red-600">NPS 計算失敗</p>}
       {data && !isLoading && <NpsGauge data={data} />}
     </section>
