@@ -201,10 +201,8 @@ jobs:
   e2e:
     name: Playwright E2E
     runs-on: ubuntu-latest
-    # 非阻擋（2026-06-08）：E2E 基礎設施已修好、specs 跑得起來，但尚有過時斷言
-    # （admin/mutual UI 改版後選擇器未更新；ai-insights 需 ZAI_API_KEY）。暫不 gate CI，
-    # 仍會執行並出報告。待 UI WIP 落定後另開一輪修 E2E 斷言再恢復阻擋。
-    continue-on-error: true
+    # 阻擋（2026-06-09 恢復）：斷言已對齊中文化 UI、production build webServer + 3-way 分片 +
+    # rate-limit skip 後，CI 0 failed。E2E 重新作為 blocking gate；若日後 flaky 再評估。
     timeout-minutes: 20
     # 分片：每個 shard 獨立 runner（獨立 next start + in-memory PGlite），各跑 ~1/3 spec，
     # 避免單機串行 77 測試在後段累積劣化（PGlite/記憶體）造成 login 導航 timeout。
