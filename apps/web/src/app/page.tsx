@@ -6,6 +6,7 @@ import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 import { ScrollStorySection } from "@/components/marketing/scroll-story-section";
+import { AnalyticsFeaturesSection } from "@/components/marketing/analytics-features-section";
 
 const heroModes = [
   {
@@ -451,6 +452,9 @@ export default function HomePage() {
           </div>
         </div>
       </section>
+
+      {/* ── Analytics & output features ───────────────────────────────────────── */}
+      <AnalyticsFeaturesSection />
 
       {/* ── Social proof: dual panel ───────────────────────────────────────── */}
       <section className="q-home-section">
