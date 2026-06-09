@@ -92,10 +92,26 @@ test.describe("OKR #1 Happy-path", () => {
 
   test("respondent can open invite link and submit without login", async ({
     page,
+    request,
   }) => {
-    // Use a seeded published survey for anonymous respondent flow
-    const surveyUrl = `${BASE_URL}/s/33333333-3333-3333-3333-333333333301`;
-    await page.goto(surveyUrl);
+    // 自建可匿名填答問卷並發布（seed demo 問卷的題目 UUID 非 RFC4122 → submit 400）
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1";
+    const lr = await request.post(`${API}/auth/login`, { data: { email: "user1@quanwen.com", password: "000" } });
+    const { token } = await lr.json();
+    const cr = await request.post(`${API}/surveys`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: `Happy invite ${Date.now()}`, description: "x", rewardPoints: 0, targetCount: 100, isAnonymous: true,
+        questions: [
+          { type: "single_choice", title: "Q1", isRequired: true, sortOrder: 1, options: [{ label: "A", sortOrder: 1 }, { label: "B", sortOrder: 2 }] },
+          { type: "multiple_choice", title: "Q2", isRequired: true, sortOrder: 2, options: [{ label: "X", sortOrder: 1 }, { label: "Y", sortOrder: 2 }] },
+          { type: "text", title: "Q3", isRequired: true, sortOrder: 3 },
+        ],
+      },
+    });
+    const sid = (await cr.json()).id;
+    await request.post(`${API}/surveys/${sid}/publish`, { headers: { Authorization: `Bearer ${token}` } });
+    await page.goto(`${BASE_URL}/s/${sid}`);
 
     await page.screenshot({
       path: "test-results/03-respondent-view.png",
@@ -111,10 +127,12 @@ test.describe("OKR #1 Happy-path", () => {
     await page.locator("input[type='checkbox']").first().click({ force: true }).catch(() => null);
     await page.waitForTimeout(300);
 
-    // Answer Q3 (rating)
-    await page.locator("input[type='radio'][value='3']").first().click({ force: true }).catch(() =>
-      page.locator("input[type='radio']").nth(5).click({ force: true }).catch(() => null)
-    );
+    // Answer Q3 (rating)：SurveyJS rating 渲染為 radio（接在 Q1 選項之後），點最後一個評分值
+    const allRadios = page.locator("input[type='radio']");
+    const radioCount = await allRadios.count();
+    if (radioCount > 4) {
+      await allRadios.nth(radioCount - 1).check({ force: true }).catch(() => null);
+    }
     await page.waitForTimeout(300);
 
     // Answer Q4 (open text)
