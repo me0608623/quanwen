@@ -14,10 +14,29 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { drizzle } from 'drizzle-orm/pglite';
 import { PGlite } from '@electric-sql/pglite';
-import { PassThrough } from 'node:stream';
+import { PassThrough, Writable } from 'node:stream';
 import * as schema from '../db/schema';
 import { FULL_SCHEMA_DDL } from '../test-helpers/pglite-ddl';
 import { ExportService } from './export.service';
+
+/**
+ * A Writable that simulates a slow client: each chunk write completes
+ * asynchronously via setImmediate, so the writable buffer fills up and
+ * write() returns false, triggering real drain events.
+ */
+class SlowWritable extends Writable {
+  readonly chunks: Buffer[] = [];
+  drainCount = 0;
+  constructor(highWaterMark = 1) {
+    super({ highWaterMark });
+    this.on('drain', () => { this.drainCount++; });
+  }
+  override _write(chunk: Buffer, _enc: BufferEncoding, cb: () => void): void {
+    this.chunks.push(chunk);
+    setImmediate(cb);
+  }
+  get result(): Buffer { return Buffer.concat(this.chunks); }
+}
 
 const SURVEYOR_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const RESPONDENT_1 = 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbb01';
@@ -289,6 +308,62 @@ describe('ExportService accuracy (QUA-45 AC3)', () => {
         ],
       }),
     ]));
+  });
+
+  // ── AC: Backpressure tests ────────────────────────────────────────────────
+
+  it('streamResponsesCsv awaits drain and produces correct output under backpressure', async () => {
+    // SlowWritable completes each _write asynchronously, causing write() to
+    // return false and triggering drain events — real backpressure simulation.
+    const out = new SlowWritable(1);
+
+    await service.streamResponsesCsv(SURVEY_ID, SURVEYOR_ID, out);
+
+    const csv = out.result.toString('utf-8').replace(/^﻿/, '');
+    const lines = csv.trim().split('\n');
+    expect(lines).toHaveLength(3); // header + 2 data rows
+    expect(lines[0]).toContain('response_id');
+    // drain must have fired at least once with a 1-byte highWaterMark + slow writes
+    expect(out.drainCount).toBeGreaterThan(0);
+  });
+
+  it('streamResponsesXlsx produces valid XLSX output under backpressure', async () => {
+    const out = new SlowWritable(1);
+
+    await service.streamResponsesXlsx(SURVEY_ID, SURVEYOR_ID, out);
+
+    const buf = out.result;
+    expect(buf.byteLength).toBeGreaterThan(0);
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(buf);
+    const sheet = workbook.getWorksheet('Responses');
+    expect(sheet).toBeTruthy();
+    const rows: unknown[] = [];
+    sheet.eachRow((_row: unknown, idx: number) => { if (idx > 1) rows.push(idx); });
+    expect(rows).toHaveLength(2);
+
+    // drain must have fired at least once given the 1-byte highWaterMark
+    expect(out.drainCount).toBeGreaterThan(0);
+  });
+
+  it('streamResponsesXlsx cleanOnly filter still works under backpressure', async () => {
+    const out = new SlowWritable(1);
+
+    await service.streamResponsesXlsx(SURVEY_ID, SURVEYOR_ID, out, {
+      cleanOnly: true,
+      minQualityScore: 70,
+    });
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    await workbook.xlsx.load(out.result);
+    const sheet = workbook.getWorksheet('Responses');
+    const rows: unknown[] = [];
+    sheet.eachRow((_row: unknown, idx: number) => { if (idx > 1) rows.push(idx); });
+    // Only score=85 survives the >=70 filter
+    expect(rows).toHaveLength(1);
   });
 
   it('JASP/SPSS Excel uses numeric codes, value labels, and dummy columns for multiple choice', async () => {
