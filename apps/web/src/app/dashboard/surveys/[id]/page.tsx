@@ -28,6 +28,7 @@ import { SurveyPreviewModal } from '@/components/survey-editor/survey-preview-mo
 import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-player';
 import { SurveyStylePanel } from '@/components/survey-editor/survey-style-panel';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 import { usePricingAdvice } from '@/hooks/use-pricing';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { lotteryDrawRule } from '@/lib/lottery-display';
@@ -172,16 +173,7 @@ export default function SurveyDetailPage() {
     markDirty();
   };
 
-  // 有未儲存變更時，關閉/重整分頁前提示（避免誤丟編輯）
-  useEffect(() => {
-    if (!dirty) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [dirty]);
+  useUnsavedChangesGuard(dirty);
 
   const showAxiosError = (err: unknown, fallback: string) => {
     const e = err as { response?: { data?: { message?: string } } };
