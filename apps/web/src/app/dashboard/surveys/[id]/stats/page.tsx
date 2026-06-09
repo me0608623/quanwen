@@ -21,6 +21,9 @@ import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
 import { useSurvey, useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
+import type { BatchAnalysisResult } from '@/hooks/use-analytics';
+import { usePointsSummary } from '@/hooks/use-wallet';
+import { BatchAnalysisModal } from '@/components/stats/batch-analysis-modal';
 import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
 import { CrossTabSection } from '@/components/stats/cross-tab-panel';
@@ -257,6 +260,10 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
 
 export default function SurveyStatsPage() {
   const { id } = useParams<{ id: string }>();
+  const [batchOpen, setBatchOpen] = useState(false);
+  const [batchResults, setBatchResults] = useState<BatchAnalysisResult | undefined>();
+  const { data: aiUsage } = useAiUsage();
+  const { data: pointsSummary } = usePointsSummary();
   const [linkCopied, setLinkCopied] = useState(false);
   const copyPublicLink = () => {
     navigator.clipboard?.writeText(`${window.location.origin}/s/${id}`).then(() => {
@@ -445,8 +452,31 @@ export default function SurveyStatsPage() {
       )}
 
       {/* AI 洞察 */}
-      <div id="ai-insights">
+      <div id="ai-insights" className="space-y-3">
         <AiInsightsPanel surveyId={id} surveyTitle={stats.title} totalResponses={stats.totalResponses} />
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={() => setBatchOpen(true)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-[#126b8a]/40 bg-[#126b8a]/5 px-4 py-2 text-xs font-semibold text-[#126b8a] hover:bg-[#126b8a]/10"
+          >
+            ⚡ 批次統計分析
+          </button>
+        </div>
+        {batchResults && (
+          <BatchResultsSummary results={batchResults} />
+        )}
+        <BatchAnalysisModal
+          surveyId={id}
+          questionStats={stats.questionStats}
+          aiRemaining={aiUsage?.remaining.analyzeResponses ?? 0}
+          pointsBalance={pointsSummary?.balance ?? 0}
+          open={batchOpen}
+          onClose={(results) => {
+            setBatchOpen(false);
+            if (results) setBatchResults(results);
+          }}
+        />
       </div>
 
       {/* 趨勢圖 */}
@@ -1396,6 +1426,52 @@ function SparkleIcon() {
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
       <path d="m12 3-1.9 5.7a2 2 0 0 1-1.4 1.4L3 12l5.7 1.9a2 2 0 0 1 1.4 1.4L12 21l1.9-5.7a2 2 0 0 1 1.4-1.4L21 12l-5.7-1.9a2 2 0 0 1-1.4-1.4z" />
     </svg>
+  );
+}
+
+// ─── Batch Results Summary ───────────────────────────────────────────────────
+
+function BatchResultsSummary({ results }: { results: BatchAnalysisResult }) {
+  const ANALYSIS_LABELS: Record<string, string> = {
+    cross_tab: '交叉分析',
+    scale_reliability: '量表信度',
+    nps: 'NPS',
+    correlation: '相關性',
+    group_comparison: '差異性',
+    regression: '迴歸分析',
+    segmentation: '分群分析',
+  };
+
+  return (
+    <section className="rounded-xl border border-[#126b8a]/30 bg-[#126b8a]/[0.03] p-5 space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="text-sm font-bold text-slate-900">⚡ 批次 AI 統計分析結果</h2>
+        <div className="flex gap-3 text-xs text-slate-500">
+          <span>AI 額度：{results.aiUsed} 次</span>
+          {results.pointsUsed > 0 && <span>積分：{results.pointsUsed}</span>}
+        </div>
+      </div>
+      <div className="space-y-3">
+        {results.results.map((item, i) => (
+          <div key={i} className="rounded-lg border border-border bg-white p-4">
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              <span className="text-xs font-bold text-[#126b8a]">
+                {ANALYSIS_LABELS[item.analysisType] ?? item.analysisType}
+              </span>
+              <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${
+                item.costType === 'ai' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'
+              }`}>
+                {item.costType === 'ai' ? 'AI 額度' : '積分'}
+              </span>
+            </div>
+            {item.summary && (
+              <p className="text-xs font-semibold text-slate-700 mb-1">{item.summary}</p>
+            )}
+            <p className="text-sm leading-relaxed text-slate-600">{item.interpretation}</p>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
