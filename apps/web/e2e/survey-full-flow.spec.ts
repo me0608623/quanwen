@@ -5,6 +5,9 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
   let surveyId: string;
+  // 匿名 submit 需真 questionId(UUID) + x-anon-token；存 beforeEach 建立的題目供 submit 用
+  let surveyQuestions: { id: string; type: string; options?: { id: string }[] }[] = [];
+  const anonHeaders = () => ({ 'x-anon-token': `e2e-anon-${Date.now()}-${Math.round(performance.now())}` });
 
   test.beforeEach(async ({ page }) => {
     // 清理舊測試問卷（以 API 刪除標記為測試的問卷）
@@ -45,43 +48,43 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.locator('textarea').first().fill(testDesc);
 
       // 新增第一題：單選
-      await page.getByPlaceholder('Question text').first().fill('你的性別是？');
-      await page.getByPlaceholder('Option 1').first().fill('男性');
-      await page.getByPlaceholder('Option 2').first().fill('女性');
+      await page.getByPlaceholder('題目文字').first().fill('你的性別是？');
+      await page.getByPlaceholder('選項 1').first().fill('男性');
+      await page.getByPlaceholder('選項 2').first().fill('女性');
 
       // 新增第二題：多選
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 2 type/i).selectOption('multiple_choice');
-      await page.getByPlaceholder('Question text').nth(1).fill('你喜歡哪些程式語言？（可多選）');
-      await page.getByPlaceholder('Option 1').nth(1).fill('JavaScript');
-      await page.getByPlaceholder('Option 2').nth(1).fill('Python');
-      await page.getByPlaceholder('Option 3').nth(1).fill('Rust');
+      await page.getByLabel(/第 2 題類型/i).selectOption('multiple_choice');
+      await page.getByPlaceholder('題目文字').nth(1).fill('你喜歡哪些程式語言？（可多選）');
+      await page.getByPlaceholder('選項 1').nth(1).fill('JavaScript');
+      await page.getByPlaceholder('選項 2').nth(1).fill('Python');
+      // 多選題預設 2 選項；填答僅用前兩個，不需第 3 個
 
       // 新增第三題：文字問答
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 3 type/i).selectOption('text');
-      await page.getByPlaceholder('Question text').nth(2).fill('請分享你對 AI 發展的看法');
+      await page.getByLabel(/第 3 題類型/i).selectOption('text');
+      await page.getByPlaceholder('題目文字').nth(2).fill('請分享你對 AI 發展的看法');
 
       // 新增第四題：評分
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 4 type/i).selectOption('rating');
-      await page.getByPlaceholder('Question text').nth(3).fill('你對本問卷的滿意度？');
+      await page.getByLabel(/第 4 題類型/i).selectOption('rating');
+      await page.getByPlaceholder('題目文字').nth(3).fill('你對本問卷的滿意度？');
 
       // 新增第五題：數字
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 5 type/i).selectOption('numeric');
-      await page.getByPlaceholder('Question text').nth(4).fill('你的年齡？');
+      await page.getByLabel(/第 5 題類型/i).selectOption('numeric');
+      await page.getByPlaceholder('題目文字').nth(4).fill('你的年齡？');
 
       // 新增第六題：是/否
       await page.locator('button.border-dashed').last().click();
-      await page.getByLabel(/Question 6 type/i).selectOption('yes_no');
-      await page.getByPlaceholder('Question text').nth(5).fill('你是否有軟體開發經驗？');
+      await page.getByLabel(/第 6 題類型/i).selectOption('yes_no');
+      await page.getByPlaceholder('題目文字').nth(5).fill('你是否有軟體開發經驗？');
 
       // 新增第七題：日期（如果支援）
       try {
         await page.locator('button.border-dashed').last().click();
-        await page.getByLabel(/Question 7 type/i).selectOption('date');
-        await page.getByPlaceholder('Question text').nth(6).fill('預計畢業日期？');
+        await page.getByLabel(/第 7 題類型/i).selectOption('date');
+        await page.getByPlaceholder('題目文字').nth(6).fill('預計畢業日期？');
       } catch (e) {
         // date 類型可能不支援，跳過
       }
@@ -142,25 +145,32 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 前往編輯頁
       await page.goto(`/dashboard/surveys/${surveyId}`);
       await page.waitForLoadState('networkidle');
 
-      // 修改標題
-      const titleInput = page.locator('input[type="text"]').first();
+      // 修改標題（draft 編輯器 title input 用 placeholder="未命名問卷"，canEdit=true）
+      const titleInput = page.locator('input[placeholder="未命名問卷"]').first();
       await titleInput.clear();
       await titleInput.fill(`QUA-250 編輯後標題 ${Date.now()}`);
 
       // 修改題目
-      await page.getByPlaceholder('Question text').first().fill('修改後的題目');
+      await page.getByPlaceholder('題目文字').first().fill('修改後的題目');
 
-      // 儲存
-      await page.getByRole('button', { name: /儲存草稿|save draft/i }).click();
+      // 儲存：等 PATCH /surveys/:id 成功回應再 reload（否則 reload 搶在 async 存檔前）
+      const savePromise = page.waitForResponse(
+        (r) => r.url().includes('/surveys/') && r.request().method() === 'PATCH' && r.status() < 400,
+        { timeout: 10_000 },
+      );
+      await page.getByRole('button', { name: /儲存草稿|儲存變更|save draft/i }).click();
+      await savePromise;
 
       // 重新載入頁面驗證修改
       await page.reload();
-      await expect(titleInput).toHaveValue(/編輯後標題/);
+      await page.waitForLoadState('networkidle');
+      await expect(titleInput).toHaveValue(/編輯後標題/, { timeout: 8000 });
     });
   });
 
@@ -218,6 +228,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 發布問卷
       const publishResp = await page.request.post(`${API}/surveys/${surveyId}/publish`, {
@@ -249,70 +260,61 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       const title = await page.locator('h1, h2').first().textContent();
       expect(title).toContain('QUA-250 填答測試');
 
-      // 填答第一題（單選）
-      await page.locator('input[type="radio"]').first().check();
+      // 填答第一題（單選）— SurveyJS 原生 input 為 sd-visuallyhidden，需 force
+      await page.locator('input[type="radio"]').first().check({ force: true });
 
       // 填答第二題（多選）
-      await page.locator('input[type="checkbox"]').nth(0).check();
-      await page.locator('input[type="checkbox"]').nth(1).check();
+      await page.locator('input[type="checkbox"]').nth(0).check({ force: true });
+      await page.locator('input[type="checkbox"]').nth(1).check({ force: true });
 
       // 填答第三題（文字）
       await page.locator('textarea').first().fill('這是我的測試回答');
 
-      // 填答第四題（評分，選填）
-      const ratingInput = page.locator('input[type="range"]').first();
-      if (await ratingInput.isVisible()) {
-        await ratingInput.fill('4');
-      }
+      // 提交（SurveyJS zh-tw 完成按鈕文字為「完成」）
+      await page.getByRole('button', { name: /完成|提交|送出/ }).click();
 
-      // 提交
-      await page.getByRole('button', { name: /提交|送出|finish/i }).click();
-
-      // 應該看到感謝頁
-      await expect(page.locator('text=/感謝|thank you|完成|submitted/i')).toBeVisible({ timeout: 5000 });
+      // 應該看到完成頁（/s/ 頁 done 狀態顯示「填答已送出」）
+      await expect(page.locator('text=/填答已送出|已完成|AI 審核中|感謝|submitted/i').first()).toBeVisible({ timeout: 8000 });
     });
 
     test('AC4: 必填題驗證', async ({ page }) => {
       await page.goto(`/s/${surveyId}`);
       await page.waitForLoadState('networkidle');
 
-      // 不填任何題目直接提交
-      const submitBtn = page.getByRole('button', { name: /提交|送出|finish/i });
+      // 不填任何題目直接提交（SurveyJS zh-tw 完成按鈕「完成」）
+      const submitBtn = page.getByRole('button', { name: /完成|提交|送出/ });
       await submitBtn.click();
 
-      // 應該看到錯誤提示
-      await expect(page.locator('text=/請填寫必填項目|required/i')).toBeVisible({ timeout: 3000 });
+      // 應該看到錯誤提示（SurveyJS zh-tw requiredError =「請填寫此問題」）
+      await expect(page.locator('text=/請填寫此問題|請填寫|必填|required/i').first()).toBeVisible({ timeout: 5000 });
     });
 
     test('AC5: 已填答用戶無法重複填答', async ({ page, request }) => {
-      // 先用 API 登入並填答
-      const loginResp = await request.post(`${API}/auth/login`, {
-        data: { email: 'user2@quanwen.com', password: '000' },
+      // 用固定 anon-token 匿名提交一次（dedup 以 anon-token 為準）
+      const anon = `e2e-dup-${Date.now()}`;
+      const submitResp = await request.post(`${API}/public/tasks/${surveyId}/submit`, {
+        headers: { 'x-anon-token': anon },
+        data: {
+          answers: [
+            { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![0].id] },
+            { questionId: surveyQuestions[1].id, selectedOptionIds: [surveyQuestions[1].options![0].id, surveyQuestions[1].options![1].id] },
+            { questionId: surveyQuestions[2].id, textAnswer: '第一次填答' },
+          ],
+        },
       });
-      if (loginResp.ok()) {
-        const { token } = await loginResp.json();
+      expect(submitResp.ok()).toBeTruthy();
 
-        // 第一次提交
-        const submitResp = await request.post(`${API}/public/surveys/${surveyId}/submit`, {
-          headers: { Authorization: `Bearer ${token}` },
-          data: {
-            answers: [
-              { questionId: '1', value: '男性' },
-              { questionId: '2', value: ['JavaScript', 'Python'] },
-              { questionId: '3', value: '第一次填答' },
-            ],
-          },
-        });
-        expect(submitResp.ok()).toBeTruthy();
-      }
-
-      // 用同一帳號再次訪問
-      await login(page, 'aa');
+      // 注入相同 anon-token 後再訪問填答頁，重複提交 → 後端 409
+      await page.addInitScript((t) => localStorage.setItem('quanwen_anon_token_v1', t as string), anon);
       await page.goto(`/s/${surveyId}`);
       await page.waitForLoadState('networkidle');
+      await page.locator('input[type="radio"]').first().check({ force: true });
+      await page.locator('input[type="checkbox"]').first().check({ force: true });
+      await page.locator('textarea').first().fill('第二次填答');
+      await page.getByRole('button', { name: /完成|提交|送出/ }).click();
 
-      // 應該顯示已填答訊息
-      await expect(page.locator('text=/已填答|already submitted|已完成/i')).toBeVisible({ timeout: 5000 });
+      // 應顯示「這份問卷你已經填過了」(s/[id] status 409)
+      await expect(page.locator('text=/已經填過|已填過|填過|已填答|already submitted/i').first()).toBeVisible({ timeout: 8000 });
     });
   });
 
@@ -353,6 +355,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 發布
       const publishResp = await request.post(`${API}/surveys/${surveyId}/publish`, {
@@ -371,20 +374,22 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       }
 
       // 提交測試資料（使用匿名 API）
-      await request.post(`${API}/public/surveys/${surveyId}/submit`, {
+      await request.post(`${API}/public/tasks/${surveyId}/submit`, {
+        headers: anonHeaders(),
         data: {
           answers: [
-            { questionId: '1', value: '男性' },
-            { questionId: '2', value: '測試建議 1' },
+            { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![0].id] },
+            { questionId: surveyQuestions[1].id, textAnswer: '測試建議 1' },
           ],
         },
       });
 
-      await request.post(`${API}/public/surveys/${surveyId}/submit`, {
+      await request.post(`${API}/public/tasks/${surveyId}/submit`, {
+        headers: anonHeaders(),
         data: {
           answers: [
-            { questionId: '1', value: '女性' },
-            { questionId: '2', value: '測試建議 2' },
+            { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![1].id] },
+            { questionId: surveyQuestions[1].id, textAnswer: '測試建議 2' },
           ],
         },
       });
@@ -395,8 +400,8 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.goto(`/dashboard/surveys/${surveyId}/stats`);
       await page.waitForLoadState('networkidle');
 
-      // 應該看到統計標題
-      await expect(page.locator('h1, h2').filter({ hasText: /統計|stats|分析/i })).toBeVisible();
+      // 統計頁 h1 是問卷標題；改驗證統計頁特徵元素（分析工具列 / 進階量化分析）
+      await expect(page.getByText(/分析工具列|進階量化分析/).first()).toBeVisible({ timeout: 7000 });
 
       // 應該看到回應數量
       await expect(page.locator('text=/2.*份|2.*responses/i')).toBeVisible({ timeout: 5000 });
@@ -431,13 +436,13 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.waitForLoadState('networkidle');
 
       // 尋找品質分布區塊
-      const qualitySection = page.locator('text=/品質|quality/i');
+      const qualitySection = page.locator('text=/品質|quality/i').first();
       if (await qualitySection.isVisible({ timeout: 3000 })) {
         await expect(qualitySection).toBeVisible();
 
         // 應該看到分類標籤（乾淨/可疑/退件等）
         await expect(
-          page.locator('text=/乾淨|clean|通過|passed|suspicious|可疑|退件|rejected/i')
+          page.locator('text=/乾淨|clean|通過|passed|suspicious|可疑|退件|rejected/i').first()
         ).toBeVisible();
       }
     });
@@ -469,7 +474,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
           title: `QUA-250 關閉測試 ${Date.now()}`,
           description: '測試關閉功能',
           rewardPoints: 10,
-          targetCount: 100,
+          targetCount: 1, // 收滿 1 份即自動關閉（無手動 close API）
           isAnonymous: true,
           questions: [
             {
@@ -502,17 +507,21 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
         }
       }
 
-      // 關閉問卷
-      await request.post(`${API}/surveys/${testSurveyId}/close`, {
-        headers: { Authorization: `Bearer ${token}` },
+      // 收滿 targetCount(=1) 即自動關閉（responses.service：completedCount>=targetCount → status=closed）
+      const qid = survey.questions[0].id;
+      const oid = survey.questions[0].options[0].id;
+      const submitResp = await request.post(`${API}/public/tasks/${testSurveyId}/submit`, {
+        headers: { 'x-anon-token': `e2e-close-${Date.now()}` },
+        data: { answers: [{ questionId: qid, selectedOptionIds: [oid] }] },
       });
+      expect(submitResp.ok()).toBeTruthy();
 
-      // 嘗試訪問
+      // 嘗試訪問已關閉問卷
       await page.goto(`/s/${testSurveyId}`);
       await page.waitForLoadState('networkidle');
 
-      // 應該顯示關閉訊息
-      await expect(page.locator('text=/已關閉|closed|無法填答|not available/i')).toBeVisible({ timeout: 5000 });
+      // 關閉/截止的問卷在 /s/ 顯示「找不到這份問卷…已下架、截止」
+      await expect(page.locator('text=/找不到這份問卷|已下架|截止|已關閉|closed|無法填答/i').first()).toBeVisible({ timeout: 8000 });
     });
   });
 });

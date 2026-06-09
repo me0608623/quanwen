@@ -12,8 +12,7 @@
     "db:push": "pnpm --filter api db:push",
     "db:seed": "pnpm --filter api db:seed",
     "db:studio": "pnpm --filter api db:studio",
-    "verify": "pnpm type-check && pnpm test",
-    "typecheck": "pnpm --parallel --filter './apps/*' type-check"
+    "verify": "pnpm type-check && pnpm test"
   },
   "devDependencies": {
     "prettier": "^3.8.3",

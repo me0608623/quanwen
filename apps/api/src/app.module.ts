@@ -34,10 +34,12 @@ import { ScheduleModule } from '@nestjs/schedule';
         { name: 'short', ttl: 1000, limit: 10 },
         { name: 'medium', ttl: 60_000, limit: 100 },
       ],
-      // Playwright E2E runs many seeded-account logins from the same localhost IP
-      // in a short window. Do not let brute-force throttles make test login
-      // nondeterministic; production and normal development keep throttling.
-      skipIf: () => process.env.USE_PG_MEM === 'true' || process.env.NODE_ENV === 'test',
+      // E2E/test environments run many seeded-account logins from the same localhost IP.
+      // Production keeps rate limiting unless DISABLE_RATE_LIMIT is explicitly set.
+      skipIf: () =>
+        process.env.DISABLE_RATE_LIMIT === 'true' ||
+        process.env.USE_PG_MEM === 'true' ||
+        process.env.NODE_ENV === 'test',
       storage: new RedisThrottlerStorage(process.env.REDIS_URL),
     }),
     AuthModule,
