@@ -312,6 +312,27 @@ export { DB_TOKEN as DB };
             );
           `);
 
+          // Issue #38: pending_notifications queue
+          await client.exec(`
+            CREATE TYPE pending_notification_status AS ENUM ('pending','done','failed');
+            CREATE TABLE pending_notifications (
+              id             UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+              user_id        UUID                        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+              type           notification_type           NOT NULL,
+              title          VARCHAR(200)                NOT NULL,
+              body           TEXT,
+              metadata       JSONB,
+              status         pending_notification_status NOT NULL DEFAULT 'pending',
+              attempts       INTEGER                     NOT NULL DEFAULT 0,
+              next_retry_at  TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+              last_error     TEXT,
+              created_at     TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+              updated_at     TIMESTAMPTZ                 NOT NULL DEFAULT NOW()
+            );
+            CREATE INDEX pending_notifications_status_retry_idx ON pending_notifications(status, next_retry_at);
+            CREATE INDEX pending_notifications_user_idx          ON pending_notifications(user_id);
+          `);
+
           // Sprint 7: wallets + transactions + journal_entries
           await client.exec(`
             CREATE TYPE transaction_type AS ENUM (
