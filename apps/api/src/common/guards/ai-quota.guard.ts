@@ -2,6 +2,8 @@ import {
   CanActivate,
   ExecutionContext,
   ForbiddenException,
+  HttpException,
+  HttpStatus,
   Injectable,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
@@ -34,8 +36,8 @@ export class AiQuotaGuard implements CanActivate {
       throw new ForbiddenException('User not authenticated');
     }
 
+    // 1. Check call-count quota (existing)
     const quota = await this.aiUsageService.checkQuota(userId, feature);
-
     if (!quota.allowed) {
       throw new ForbiddenException({
         message: 'AI feature limit reached',
@@ -45,6 +47,22 @@ export class AiQuotaGuard implements CanActivate {
         limit: quota.limit,
         remaining: quota.remaining,
       });
+    }
+
+    // 2. Check daily token budget (secondary cost guard)
+    const bodyJson = JSON.stringify(req.body ?? {});
+    const estimatedTokens = AiUsageService.estimateTokens(bodyJson);
+    const tokenCheck = await this.aiUsageService.checkTokenBudget(userId, estimatedTokens);
+    if (!tokenCheck.allowed) {
+      throw new HttpException(
+        {
+          message: 'Daily AI token budget exceeded',
+          tokensUsed: tokenCheck.tokensUsed,
+          limit: tokenCheck.limit,
+          resetAt: tokenCheck.resetAt.toISOString(),
+        },
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     }
 
     return true;

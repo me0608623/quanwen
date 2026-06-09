@@ -8,6 +8,7 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import type { AiInsightsService } from '../surveys/ai-insights.service';
 import type { AiReportStoreService } from '../surveys/ai-report-store.service';
 import type { SurveysService } from '../surveys/surveys.service';
+import { AiPromptDedupeService } from '../common/ai-prompt-dedupe.service';
 
 const SURVEY = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const USER = '11111111-1111-1111-1111-111111111111';
@@ -31,7 +32,11 @@ function makeController() {
       generatedAt: '2026-06-09T00:00:00.000Z',
     }),
   };
-  const usage = { incrementUsage: vi.fn().mockResolvedValue(undefined) };
+  const usage = {
+    incrementUsage: vi.fn().mockResolvedValue(undefined),
+    incrementTokenUsage: vi.fn().mockResolvedValue(undefined),
+  };
+  const dedupe = new AiPromptDedupeService();
   const controller = new AiController(
     {} as SurveysService,
     {} as ResponsesService,
@@ -39,6 +44,7 @@ function makeController() {
     usage as unknown as AiUsageService,
     {} as AiReportStoreService,
     analytics as unknown as AnalyticsService,
+    dedupe,
   );
   return { controller, analytics, aiInsights, usage };
 }

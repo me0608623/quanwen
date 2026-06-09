@@ -8,6 +8,9 @@ import { POINTS_PER_AI_ANALYSIS } from '../ai/dto/interpret-statistics-batch.dto
 
 export type AI_FEATURE_TYPE = 'optimize_survey' | 'generate_questions' | 'analyze_responses';
 
+/** Estimated tokens overhead per LLM call (system prompt + response buffer). */
+const FIXED_TOKEN_OVERHEAD = 2000;
+
 @Injectable()
 export class AiUsageService {
   constructor(@Inject(DB) private readonly db: AppDb) {}
@@ -17,6 +20,28 @@ export class AiUsageService {
     vip: 50,
     vvip: Infinity,
   };
+
+  /** Daily token budgets per tier. Secondary guard for unusually expensive prompts. */
+  private readonly TIER_TOKEN_LIMITS = {
+    free: 50_000,
+    vip: 500_000,
+    vvip: Infinity,
+  };
+
+  /**
+   * Estimate token cost from raw request body JSON string.
+   * Uses 3 chars-per-token heuristic plus a fixed overhead for system prompt / response.
+   */
+  static estimateTokens(bodyJson: string): number {
+    return Math.ceil(bodyJson.length / 3) + FIXED_TOKEN_OVERHEAD;
+  }
+
+  /** Midnight of the next day (UTC) — used as token-budget reset time in 429 responses. */
+  static nextResetAt(): Date {
+    const d = new Date();
+    d.setUTCHours(24, 0, 0, 0);
+    return d;
+  }
 
   private getTotalUsed(usage: {
     optimizeSurveyCount: number;
@@ -81,6 +106,69 @@ export class AiUsageService {
       totalUsed,
       totalLimit: limit,
     };
+  }
+
+  async getTodayTokensUsed(userId: string): Promise<number> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const rows = await this.db
+      .select({ dailyTokensUsed: dailyUsage.dailyTokensUsed })
+      .from(dailyUsage)
+      .where(and(eq(dailyUsage.userId, userId), gte(dailyUsage.usageDate, todayStart)))
+      .limit(1);
+
+    return rows[0]?.dailyTokensUsed ?? 0;
+  }
+
+  async checkTokenBudget(
+    userId: string,
+    estimatedTokens: number,
+  ): Promise<{ allowed: boolean; tokensUsed: number; limit: number; resetAt: Date }> {
+    const [userResult, tokensUsed] = await Promise.all([
+      this.db.select({ tier: users.tier }).from(users).where(eq(users.id, userId)).limit(1),
+      this.getTodayTokensUsed(userId),
+    ]);
+
+    if (!userResult.length) {
+      throw new Error('User not found');
+    }
+
+    const tier = userResult[0].tier as 'free' | 'vip' | 'vvip';
+    const limit = this.TIER_TOKEN_LIMITS[tier];
+    const allowed = limit === Infinity || tokensUsed + estimatedTokens <= limit;
+
+    return { allowed, tokensUsed, limit: limit === Infinity ? -1 : limit, resetAt: AiUsageService.nextResetAt() };
+  }
+
+  async incrementTokenUsage(userId: string, tokens: number): Promise<void> {
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+
+    const existing = await this.db
+      .select({ id: dailyUsage.id })
+      .from(dailyUsage)
+      .where(and(eq(dailyUsage.userId, userId), gte(dailyUsage.usageDate, todayStart)))
+      .limit(1);
+
+    if (existing.length > 0) {
+      await this.db
+        .update(dailyUsage)
+        .set({
+          dailyTokensUsed: sql`${dailyUsage.dailyTokensUsed} + ${tokens}`,
+          updatedAt: new Date(),
+        })
+        .where(eq(dailyUsage.id, existing[0].id));
+    } else {
+      await this.db.insert(dailyUsage).values({
+        userId,
+        usageDate: todayStart,
+        dailyTokensUsed: tokens,
+        optimizeSurveyCount: 0,
+        generateQuestionsCount: 0,
+        analyzeResponsesCount: 0,
+      });
+    }
   }
 
   async checkQuota(userId: string, featureType: AI_FEATURE_TYPE) {

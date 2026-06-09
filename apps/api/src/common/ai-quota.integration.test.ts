@@ -151,4 +151,66 @@ describe('AiUsageService (integration)', () => {
       }),
     ).rejects.toBeDefined();
   });
+
+  describe('token budget', () => {
+    it('getTodayTokensUsed returns 0 for a new user', async () => {
+      const user = await createUser('free');
+      expect(await service.getTodayTokensUsed(user.id)).toBe(0);
+    });
+
+    it('incrementTokenUsage creates a row on first call and increments on subsequent calls', async () => {
+      const user = await createUser('free');
+      await service.incrementTokenUsage(user.id, 1000);
+      expect(await service.getTodayTokensUsed(user.id)).toBe(1000);
+
+      await service.incrementTokenUsage(user.id, 500);
+      expect(await service.getTodayTokensUsed(user.id)).toBe(1500);
+    });
+
+    it('checkTokenBudget allows a free user under the 50k limit', async () => {
+      const user = await createUser('free');
+      const result = await service.checkTokenBudget(user.id, 3000);
+      expect(result.allowed).toBe(true);
+      expect(result.tokensUsed).toBe(0);
+      expect(result.limit).toBe(50_000);
+    });
+
+    it('checkTokenBudget blocks a free user when estimated tokens would exceed the limit', async () => {
+      const user = await createUser('free');
+      await service.incrementTokenUsage(user.id, 48_000);
+
+      const result = await service.checkTokenBudget(user.id, 3000); // 48k + 3k = 51k > 50k
+      expect(result.allowed).toBe(false);
+      expect(result.tokensUsed).toBe(48_000);
+    });
+
+    it('checkTokenBudget allows a vvip user regardless of token count', async () => {
+      const user = await createUser('vvip');
+      await service.incrementTokenUsage(user.id, 1_000_000);
+
+      const result = await service.checkTokenBudget(user.id, 999_999);
+      expect(result.allowed).toBe(true);
+      expect(result.limit).toBe(-1); // -1 means unlimited
+    });
+
+    it('checkTokenBudget returns a resetAt date in the future', async () => {
+      const user = await createUser('free');
+      const result = await service.checkTokenBudget(user.id, 100);
+      expect(result.resetAt.getTime()).toBeGreaterThan(Date.now());
+    });
+  });
+
+  describe('AiUsageService.estimateTokens', () => {
+    it('estimates tokens from a JSON string with overhead', () => {
+      const body = JSON.stringify({ topic: 'test', count: 5 });
+      const tokens = AiUsageService.estimateTokens(body);
+      // overhead is 2000; body is ~24 chars → ~8 tokens → total ~2008
+      expect(tokens).toBeGreaterThan(2000);
+    });
+
+    it('returns at least FIXED_TOKEN_OVERHEAD for empty body', () => {
+      const tokens = AiUsageService.estimateTokens('{}');
+      expect(tokens).toBeGreaterThanOrEqual(2000);
+    });
+  });
 });
