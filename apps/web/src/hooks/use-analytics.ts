@@ -278,7 +278,7 @@ export function useRegression(
   });
 }
 
-type InterpretPayload =
+export type InterpretPayload =
   | { surveyId: string; analysisType: 'cross_tab'; questionA: string; questionB: string }
   | { surveyId: string; analysisType: 'scale_reliability'; questionIds?: string[]; reverseQuestionIds?: string[] }
   | { surveyId: string; analysisType: 'nps'; questionId: string }
@@ -307,5 +307,72 @@ export function useSegmentation(surveyId: string, k = 3, enabled = true) {
     },
     enabled: enabled && !!surveyId,
     staleTime: 60_000,
+  });
+}
+
+// ─── Batch Analysis Types & Hooks ────────────────────────────────────────────
+
+export type BatchAnalysisPayload = { analyses: InterpretPayload[] };
+
+export type BatchAnalysisResult = {
+  results: Array<{
+    analysisType: AdvancedAnalysisType;
+    costType: 'ai' | 'points';
+    result: unknown;
+    interpretation: string;
+    summary: string;
+  }>;
+  aiUsed: number;
+  pointsUsed: number;
+};
+
+export type BatchCostPreview = {
+  total: number;
+  aiCovered: number;
+  pointsCovered: number;
+  pointsRequired: number;
+  pointsAvailable: number;
+  canProceed: boolean;
+};
+
+export type BatchAnalysisError =
+  | { code: '422_points_insufficient'; message: string; needed: number; available: number }
+  | { code: '429_ai_quota'; message: string }
+  | { code: 'unknown'; message: string };
+
+export function useBatchInterpretStatistics() {
+  return useMutation<BatchAnalysisResult, BatchAnalysisError, BatchAnalysisPayload>({
+    mutationFn: async (payload) => {
+      try {
+        const { data } = await api.post<BatchAnalysisResult>('/ai/interpret-statistics/batch', payload);
+        return data;
+      } catch (err) {
+        const axiosErr = err as { response?: { status?: number; data?: { message?: string; needed?: number; available?: number } } };
+        const status = axiosErr.response?.status;
+        const body = axiosErr.response?.data;
+        if (status === 422) {
+          throw { code: '422_points_insufficient' as const, message: body?.message ?? '積分不足', needed: body?.needed ?? 0, available: body?.available ?? 0 };
+        }
+        if (status === 429) {
+          throw { code: '429_ai_quota' as const, message: body?.message ?? 'AI 分析額度已用完' };
+        }
+        throw { code: 'unknown' as const, message: body?.message ?? '分析失敗，請稍後再試' };
+      }
+    },
+  });
+}
+
+// TODO: switch to real endpoint when backend GET /ai/interpret-statistics/batch/cost-preview is ready
+export function useBatchCostPreview(count: number, enabled = true) {
+  return useQuery<BatchCostPreview>({
+    queryKey: ['ai', 'batch-cost-preview', count],
+    queryFn: async () => {
+      const { data } = await api.get<BatchCostPreview>('/ai/interpret-statistics/batch/cost-preview', {
+        params: { count },
+      });
+      return data;
+    },
+    enabled: enabled && count > 0,
+    staleTime: 10_000,
   });
 }
