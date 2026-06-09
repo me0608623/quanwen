@@ -11,6 +11,9 @@ export const ACCOUNTS = {
 
 export async function login(page: Page, who: keyof typeof ACCOUNTS) {
   const acc = ACCOUNTS[who];
+  // 先清既有 session：否則已登入時 /auth/login 會被 middleware 重導走（拿不到表單），
+  // 跨帳號切換（如先登 aa 再登 bb）就會卡住。
+  await page.context().clearCookies();
   await page.goto('/auth/login');
   await page.locator('input[type="email"], input[name="email"]').first().fill(acc.email);
   await page.locator('input[type="password"], input[name="password"]').first().fill(acc.password);

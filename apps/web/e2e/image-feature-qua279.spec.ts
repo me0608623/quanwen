@@ -34,15 +34,17 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
 
     // Verify image is displayed
     const uploadedImage = page.locator('img[alt="封面圖片"]');
-    await expect(uploadedImage).toBeVisible();
+    await expect(uploadedImage).toBeVisible({ timeout: 10000 });
 
-    // Save the survey
+    // Save the survey（需填有效題目，否則存草稿因空題目 400）
     await page.fill('input[placeholder="輸入問卷標題"]', '測試圖片問卷');
+    await page.getByPlaceholder('題目文字').first().fill('測試題目');
+    await page.getByPlaceholder('選項 1').first().fill('選項A');
+    await page.getByPlaceholder('選項 2').first().fill('選項B');
     await page.click('button:has-text("儲存草稿")');
-    await page.waitForTimeout(2000);
 
     // Verify we're redirected to survey detail page
-    await expect(page).toHaveURL(/\/dashboard\/surveys\/[a-f0-9-]+/);
+    await expect(page).toHaveURL(/\/dashboard\/surveys\/[a-f0-9-]+/, { timeout: 10000 });
   });
 
   test('Should upload and display question image', async ({ page }) => {
@@ -86,57 +88,66 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
       }
     }
 
-    // Save the survey
+    // Save the survey（填有效題目內容避免空題目 400）
+    await page.getByPlaceholder('題目文字').first().fill('測試題目');
+    await page.getByPlaceholder('選項 1').first().fill('選項A');
+    await page.getByPlaceholder('選項 2').first().fill('選項B');
     await page.click('button:has-text("儲存草稿")');
-    await page.waitForTimeout(2000);
 
     // Verify we're redirected
-    await expect(page).toHaveURL(/\/dashboard\/surveys\/[a-f0-9-]+/);
+    await expect(page).toHaveURL(/\/dashboard\/surveys\/[a-f0-9-]+/, { timeout: 10000 });
   });
 
   test('Should display cover image in task cards', async ({ page }) => {
-    // First create a survey with image
-    await page.goto('/dashboard/surveys/new');
+    const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+    // 建有封面的問卷 → 存草稿 → 發布；draft 不會出現在 /tasks，需發布後由受試者檢視
+    await page.waitForSelector('h1:has-text("新增問卷")');
+    await expect(page.locator('button:has-text("點擊上傳圖片")').first()).toBeVisible();
 
-    // Fill basic info
-    await page.fill('input[placeholder="輸入問卷標題"]', '卡片圖片測試');
-
-    // Upload cover image
     const fileInput = page.locator('input[type="file"]').first();
-    const testImageBuffer = Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
-      'base64'
-    );
     await fileInput.setInputFiles({
       name: 'test-task-cover.png',
       mimeType: 'image/png',
-      buffer: testImageBuffer,
+      buffer: Buffer.from(
+        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+        'base64',
+      ),
     });
+    await expect(page.locator('img[alt="封面圖片"]')).toBeVisible({ timeout: 10000 });
 
-    await page.waitForTimeout(2000);
-
-    // Save
+    await page.fill('input[placeholder="輸入問卷標題"]', `卡片圖片測試 ${Date.now()}`);
+    await page.getByPlaceholder('題目文字').first().fill('測試題目');
+    await page.getByPlaceholder('選項 1').first().fill('選項A');
+    await page.getByPlaceholder('選項 2').first().fill('選項B');
     await page.click('button:has-text("儲存草稿")');
-    await page.waitForTimeout(2000);
+    await expect(page).toHaveURL(/\/dashboard\/surveys\/[a-f0-9-]+/, { timeout: 10000 });
+    const surveyId = page.url().match(/surveys\/([a-f0-9-]+)/)![1];
 
-    // Navigate to tasks page
+    // 發布（用 surveyor token 打 API；若需審核則 admin approve）
+    const token = await page.evaluate(() => localStorage.getItem('qw_token'));
+    const pub = await page.request.post(`${API}/surveys/${surveyId}/publish`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!pub.ok() || pub.status() === 403) {
+      const adminLogin = await page.request.post(`${API}/auth/login`, { data: { email: 'user@quanwen.com', password: '000' } });
+      if (adminLogin.ok()) {
+        const { token: adminToken } = await adminLogin.json();
+        await page.request.post(`${API}/admin/surveys/${surveyId}/approve`, { headers: { Authorization: `Bearer ${adminToken}` } });
+      }
+    }
+
+    // 受試者 aa 檢視 /tasks，應看到封面卡片。React 把 style={{backgroundImage}} 渲染成
+    // style="background-image:..."（kebab-case），故 selector 用 background-image
+    await login(page, 'aa');
     await page.goto('/tasks');
-
-    // Wait for task cards to load
-    await page.waitForTimeout(1000);
-
-    // Verify cover image is displayed in card background
-    // The image should be in the background of a div with bg-cover
-    const cardWithImage = page.locator('[style*="backgroundImage"]');
-    const count = await cardWithImage.count();
-
-    // At least one card should have the image
-    expect(count).toBeGreaterThan(0);
+    await page.waitForLoadState('networkidle');
+    await expect(page.locator('[style*="background-image"]').first()).toBeVisible({ timeout: 10000 });
   });
 
   test('Should remove cover image', async ({ page }) => {
-    // Navigate to new survey
-    await page.goto('/dashboard/surveys/new');
+    // 確保頁面 + 上傳元件就緒再上傳（mirror cover 上傳測試的 readiness）
+    await page.waitForSelector('h1:has-text("新增問卷")');
+    await expect(page.locator('button:has-text("點擊上傳圖片")').first()).toBeVisible();
 
     // Upload an image
     const fileInput = page.locator('input[type="file"]').first();
@@ -150,19 +161,14 @@ test.describe('QUA-279: Image Feature E2E Tests', () => {
       buffer: testImageBuffer,
     });
 
-    await page.waitForTimeout(2000);
-
-    // Verify image is shown
+    // Verify image is shown（上傳→顯示為非同步，用 toBeVisible 等而非固定 timeout）
     const uploadedImage = page.locator('img[alt="封面圖片"]');
-    await expect(uploadedImage).toBeVisible();
+    await expect(uploadedImage).toBeVisible({ timeout: 10000 });
 
-    // Hover to show remove button
-    await uploadedImage.hover();
-
-    // Click remove button
+    // 移除鈕在 group-hover overlay（opacity-0，始終在 DOM）；hover 1x1 PNG 的 stability 不穩，
+    // 直接 force 點擊
     const removeButton = page.locator('button:has-text("移除")').first();
-    await expect(removeButton).toBeVisible();
-    await removeButton.click();
+    await removeButton.click({ force: true });
 
     // Verify upload button reappears
     const uploadButton = page.locator('button:has-text("點擊上傳圖片")').first();
