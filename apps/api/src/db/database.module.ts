@@ -348,6 +348,9 @@ export { DB_TOKEN as DB };
               metadata            JSONB,
               created_at          TIMESTAMPTZ        NOT NULL DEFAULT NOW(),
               completed_at        TIMESTAMPTZ,
+              approved_by         UUID               REFERENCES users(id) ON DELETE SET NULL,
+              action_at           TIMESTAMPTZ,
+              action_ip           TEXT,
               UNIQUE (external_provider, external_ref)
             );
             CREATE UNIQUE INDEX transactions_related_response_type_unique

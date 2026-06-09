@@ -195,8 +195,10 @@ export class AdminController {
   /** POST /admin/withdrawals/:id/approve */
   @Post('withdrawals/:id/approve')
   @HttpCode(HttpStatus.OK)
-  approveWithdrawal(@Param('id') id: string) {
-    return this.adminService.approveWithdrawal(id);
+  approveWithdrawal(@Param('id') id: string, @Req() req: Request) {
+    const user = (req as unknown as { user: AuthenticatedUser }).user;
+    const ip = extractIp(req);
+    return this.adminService.approveWithdrawal(id, user.id, ip);
   }
 
   /** GET /admin/withdrawals/:id/ai-risk — AI 詐欺風險評估 */
@@ -210,9 +212,12 @@ export class AdminController {
   @HttpCode(HttpStatus.OK)
   rejectWithdrawal(
     @Param('id') id: string,
+    @Req() req: Request,
     @Body(new ZodValidationPipe(RejectWithdrawalSchema)) dto: RejectWithdrawalDto,
   ) {
-    return this.adminService.rejectWithdrawal(id, dto.reason);
+    const user = (req as unknown as { user: AuthenticatedUser }).user;
+    const ip = extractIp(req);
+    return this.adminService.rejectWithdrawal(id, dto.reason, user.id, ip);
   }
 
   // ─── 對帳（Phase 8）────────────────────────────────────────────────────────
@@ -310,4 +315,13 @@ export class AdminController {
     await this.systemConfig.set(key, dto.value, user.id);
     return { key, value: dto.value };
   }
+}
+
+function extractIp(req: Request): string {
+  const forwarded = (req.headers as Record<string, string | string[] | undefined>)['x-forwarded-for'];
+  if (forwarded) {
+    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0];
+    return first?.trim() ?? 'unknown';
+  }
+  return (req as unknown as { ip?: string }).ip ?? 'unknown';
 }

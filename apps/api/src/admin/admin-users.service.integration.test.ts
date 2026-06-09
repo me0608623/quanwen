@@ -37,7 +37,10 @@ const EXTRA_DDL = `
     note                TEXT,
     metadata            JSONB,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at        TIMESTAMPTZ
+    completed_at        TIMESTAMPTZ,
+    approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
+    action_at           TIMESTAMPTZ,
+    action_ip           TEXT
   );
   CREATE TYPE auth_provider AS ENUM ('email','google','line','apple');
   CREATE TABLE oauth_accounts (

@@ -1008,7 +1008,7 @@ export class WalletService {
       .limit(100);
   }
 
-  async approveWithdrawal(transactionId: string): Promise<void> {
+  async approveWithdrawal(transactionId: string, adminId: string, ip: string): Promise<void> {
     const rows = await this.db
       .select()
       .from(transactions)
@@ -1056,17 +1056,17 @@ export class WalletService {
         { transactionId: completeTxn.id, accountName: 'escrow_esun', debitAmount: 0, creditAmount: txn.amount },
       ]);
 
-      // 更新原申請單 → success
+      // 更新原申請單 → success，並寫入稽核欄位
       await tx
         .update(transactions)
-        .set({ status: 'success', completedAt: now })
+        .set({ status: 'success', completedAt: now, approvedBy: adminId, actionAt: now, actionIp: ip })
         .where(eq(transactions.id, transactionId));
     });
 
-    this.logger.log(`Withdrawal approved: txn=${transactionId} user=${txn.userId} amount=${txn.amount}`);
+    this.logger.log(`Withdrawal approved: txn=${transactionId} user=${txn.userId} amount=${txn.amount} admin=${adminId} ip=${ip}`);
   }
 
-  async rejectWithdrawal(transactionId: string, reason: string): Promise<void> {
+  async rejectWithdrawal(transactionId: string, reason: string, adminId: string, ip: string): Promise<void> {
     const rows = await this.db
       .select()
       .from(transactions)
@@ -1077,6 +1077,8 @@ export class WalletService {
     if (!txn) throw new NotFoundException('找不到提領申請');
     if (txn.status !== 'pending') throw new BadRequestException('此提領申請狀態不可拒絕');
 
+    const now = new Date();
+
     // 退回 lockedCash → cashBalance (atomic: wallet update first, status update inside tx)
     await this.db.transaction(async (tx) => {
       await tx
@@ -1085,17 +1087,17 @@ export class WalletService {
           cashBalance: sql`cash_balance + ${txn.amount}`,
           lockedCash: sql`locked_cash - ${txn.amount}`,
           version: sql`version + 1`,
-          updatedAt: new Date(),
+          updatedAt: now,
         })
         .where(and(eq(wallets.userId, txn.userId), sql`locked_cash >= ${txn.amount}`));
 
       await tx
         .update(transactions)
-        .set({ status: 'cancelled', note: `拒絕原因：${reason}` })
+        .set({ status: 'cancelled', note: `拒絕原因：${reason}`, approvedBy: adminId, actionAt: now, actionIp: ip })
         .where(eq(transactions.id, transactionId));
     });
 
-    this.logger.log(`Withdrawal rejected: txn=${transactionId} reason=${reason}`);
+    this.logger.log(`Withdrawal rejected: txn=${transactionId} reason=${reason} admin=${adminId} ip=${ip}`);
   }
 }
 

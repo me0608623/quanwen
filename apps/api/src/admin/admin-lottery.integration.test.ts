@@ -47,7 +47,14 @@ describe('AdminService lottery guarantee (integration)', () => {
         amount              INTEGER NOT NULL,
         status              transaction_status NOT NULL DEFAULT 'pending',
         related_survey_id   UUID REFERENCES surveys(id),
-        related_response_id UUID REFERENCES survey_responses(id)
+        related_response_id UUID REFERENCES survey_responses(id),
+        note                TEXT,
+        metadata            JSONB,
+        created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        completed_at        TIMESTAMPTZ,
+        approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
+        action_at           TIMESTAMPTZ,
+        action_ip           TEXT
       );
     `);
     db = drizzle(client, { schema }) as unknown as AppDb;

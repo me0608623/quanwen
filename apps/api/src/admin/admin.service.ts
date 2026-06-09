@@ -482,13 +482,13 @@ export class AdminService {
     return this.wallet.getPendingWithdrawals();
   }
 
-  async approveWithdrawal(transactionId: string) {
-    await this.wallet.approveWithdrawal(transactionId);
+  async approveWithdrawal(transactionId: string, adminId: string, ip: string) {
+    await this.wallet.approveWithdrawal(transactionId, adminId, ip);
     return { message: '提領已核准', transactionId };
   }
 
-  async rejectWithdrawal(transactionId: string, reason: string) {
-    await this.wallet.rejectWithdrawal(transactionId, reason);
+  async rejectWithdrawal(transactionId: string, reason: string, adminId: string, ip: string) {
+    await this.wallet.rejectWithdrawal(transactionId, reason, adminId, ip);
     return { message: '提領已拒絕，款項已退回', transactionId };
   }
 

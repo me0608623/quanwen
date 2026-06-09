@@ -1,5 +1,6 @@
 import { Injectable, Inject } from '@nestjs/common';
 import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { alias } from 'drizzle-orm/pg-core';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import { users, transactions, zaiCallLog } from '../db/schema';
@@ -44,6 +45,8 @@ export class AdminAuditService {
     if (userId) conditions.push(eq(transactions.userId, userId));
     const where = conditions.length > 0 ? and(...conditions) : undefined;
 
+    const reviewer = alias(users, 'reviewer');
+
     const [countRows, items, summaryByType] = await Promise.all([
       this.db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(where),
       this.db
@@ -61,9 +64,15 @@ export class AdminAuditService {
           relatedSurveyId: transactions.relatedSurveyId,
           createdAt: transactions.createdAt,
           completedAt: transactions.completedAt,
+          approvedBy: transactions.approvedBy,
+          actionAt: transactions.actionAt,
+          actionIp: transactions.actionIp,
+          approvedByEmail: reviewer.email,
+          approvedByDisplayName: reviewer.displayName,
         })
         .from(transactions)
         .innerJoin(users, eq(users.id, transactions.userId))
+        .leftJoin(reviewer, eq(reviewer.id, transactions.approvedBy))
         .where(where)
         .orderBy(desc(transactions.createdAt))
         .limit(limit)

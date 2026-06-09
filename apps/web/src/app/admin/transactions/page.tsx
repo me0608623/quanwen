@@ -140,7 +140,7 @@ export default function AdminTransactionsPage() {
 
       {data && data.items.length > 0 && (
         <div className="overflow-x-auto rounded-lg border border-border bg-card">
-          <table className="w-full min-w-[1120px] text-left text-sm">
+          <table className="w-full min-w-[1300px] text-left text-sm">
             <thead className="border-b border-border bg-muted/40 text-xs text-muted-foreground">
               <tr>
                 <th className="px-4 py-3 font-medium">使用者</th>
@@ -149,6 +149,7 @@ export default function AdminTransactionsPage() {
                 <th className="px-4 py-3 font-medium">狀態</th>
                 <th className="px-4 py-3 font-medium">External Ref</th>
                 <th className="px-4 py-3 font-medium">備註</th>
+                <th className="px-4 py-3 font-medium">審核人員</th>
                 <th className="px-4 py-3 font-medium">建立時間</th>
                 <th className="px-4 py-3 font-medium">完成時間</th>
               </tr>
@@ -165,6 +166,20 @@ export default function AdminTransactionsPage() {
                   <td className="px-4 py-3"><StatusBadge status={tx.status} /></td>
                   <td className="max-w-[180px] truncate px-4 py-3 text-xs text-muted-foreground">{tx.externalRef ?? '—'}</td>
                   <td className="max-w-[260px] truncate px-4 py-3 text-muted-foreground">{tx.note ?? '—'}</td>
+                  <td className="px-4 py-3 text-xs text-muted-foreground">
+                    {tx.approvedByDisplayName
+                      ? (
+                        <span title={`IP: ${tx.actionIp ?? '—'}`}>
+                          {tx.approvedByDisplayName}
+                          {tx.actionAt && (
+                            <span className="block text-muted-foreground/70">
+                              {new Date(tx.actionAt).toLocaleString('zh-TW')}
+                            </span>
+                          )}
+                        </span>
+                      )
+                      : '—'}
+                  </td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{new Date(tx.createdAt).toLocaleString('zh-TW')}</td>
                   <td className="px-4 py-3 text-xs text-muted-foreground">{tx.completedAt ? new Date(tx.completedAt).toLocaleString('zh-TW') : '—'}</td>
                 </tr>

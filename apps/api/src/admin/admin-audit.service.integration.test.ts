@@ -25,7 +25,10 @@ const EXTRA_DDL = `
     note                TEXT,
     metadata            JSONB,
     created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-    completed_at        TIMESTAMPTZ
+    completed_at        TIMESTAMPTZ,
+    approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
+    action_at           TIMESTAMPTZ,
+    action_ip           TEXT
   );
   CREATE TABLE zai_call_log (
     id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
