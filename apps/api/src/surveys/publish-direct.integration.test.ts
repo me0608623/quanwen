@@ -52,8 +52,8 @@ describe('SurveysService.publish 直接上架（integration）', () => {
     expect(row.status).toBe('published');
     expect(row.publishedAt).not.toBeNull();
 
-    // AI 品質掃描仍要 fire（advisory），預算仍要鎖
+    // AI 品質掃描仍要 fire（advisory），預算仍要鎖（第三引數為 tx 物件）
     expect(auditSurveyAsync).toHaveBeenCalledWith(SURVEY);
-    expect(lockSurveyBudget).toHaveBeenCalledWith(SURVEYOR, SURVEY);
+    expect(lockSurveyBudget).toHaveBeenCalledWith(SURVEYOR, SURVEY, expect.anything());
   });
 });
