@@ -107,6 +107,7 @@ export interface MutualPairDetail {
     bRating: number | null;
     matchedAt: string | null;
     expiresAt: string | null;
+    createdAt: string;
   };
   survey: {
     id: string;
@@ -137,8 +138,8 @@ export function useMutualPoolStats() {
       const { data } = await api.get<{ waiting: number; myWaiting: number }>('/mutual/pool-stats');
       return data;
     },
-    staleTime: 30_000,
-    refetchInterval: 60_000,
+    staleTime: 15_000,
+    refetchInterval: 15_000,
   });
 }
 
@@ -180,6 +181,8 @@ export function useMutualPair(id: string | undefined) {
     },
     enabled: !!id,
     staleTime: 5_000,
+    refetchInterval: (query) =>
+      query.state.data?.pair.status === 'waiting' ? 15_000 : false,
   });
 }
 
