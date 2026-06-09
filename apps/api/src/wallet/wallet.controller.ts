@@ -20,6 +20,7 @@ import { CouponsService } from './coupons.service';
 import { DepositDto, DepositSchema } from './dto/deposit.dto';
 import { WithdrawDto, WithdrawSchema } from './dto/withdraw.dto';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
+import { Throttle } from '@nestjs/throttler';
 
 /**
  * Phase S: ECPay webhook 接收端 — 必須無 JWT（ECPay server 直接 POST）。
@@ -90,6 +91,7 @@ export class WalletController {
   }
 
   // POST /wallet/deposit — Mock 儲值（開發專用；prod 必擋）
+  @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @Post('deposit')
   async mockDeposit(
     @Req() req: Request,
@@ -107,6 +109,7 @@ export class WalletController {
   // ─── ECPay 儲值 ───────────────────────────────────────────────────────────
 
   // POST /wallet/ecpay/order — 建立 ECPay 訂單，回傳自動提交 HTML 表單
+  @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @Post('ecpay/order')
   @HttpCode(HttpStatus.OK)
   async createEcpayOrder(
@@ -139,6 +142,7 @@ export class WalletController {
   }
 
   // POST /wallet/withdraw — 申請提領
+  @Throttle({ medium: { limit: 5, ttl: 60_000 } })
   @Post('withdraw')
   async requestWithdrawal(
     @Req() req: Request,
