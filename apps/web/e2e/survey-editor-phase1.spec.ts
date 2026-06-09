@@ -160,8 +160,8 @@ test.describe("QUA-35 Survey Editor Phase 1", () => {
     await page.goto(`/dashboard/surveys/${surveyId}`);
     // Wait for the editor shell to load (not stuck on "Loading survey...")
     await expect(page.getByText("Loading survey")).not.toBeVisible({ timeout: 10_000 });
-    // Verify the title textbox contains the survey title（/[id] 編輯器 title input 用 placeholder="未命名問卷"）
-    await expect(page.locator('input[placeholder="未命名問卷"]').first()).toHaveValue(title, { timeout: 5_000 });
+    // 已發布 survey 在編輯器標題為 readonly（canEdit=false → span），驗證標題文字出現即可
+    await expect(page.getByText(title).first()).toBeVisible({ timeout: 5_000 });
 
     // ?? Step 6: Open public link as anonymous user ??
     const anonContext = await page.context().browser()!.newContext();
