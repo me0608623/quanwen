@@ -51,7 +51,7 @@ export default function MutualPage() {
   const router = useRouter();
   const [showRules, setShowRules] = useState(false);
   const [matchCode, setMatchCode] = useState('');
-  const { data: pairs, isLoading, error } = useMyMutualPairs();
+  const { data: pairs, isLoading, error, failureCount } = useMyMutualPairs();
   const { data: poolItems } = useMutualPool();
   const { data: pool } = useMutualPoolStats();
   const { data: myStats } = useMyMutualStats();
@@ -60,6 +60,15 @@ export default function MutualPage() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
+        {failureCount > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            連線中斷，正在重試... ({failureCount}/3)
+          </div>
+        )}
         <div className="space-y-3" aria-hidden>
           {[0, 1, 2].map((i) => (
             <div key={i} className="animate-pulse rounded-xl border border-border bg-background p-4">
@@ -72,11 +81,18 @@ export default function MutualPage() {
     );
   }
 
-  if (error) {
+  if (error && !pairs) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          載入失敗。請稍後重試或回 dashboard。
+          <p>連線失敗，3 次重試後仍無法載入。</p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-3 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/5"
+          >
+            重新整理
+          </button>
         </div>
       </main>
     );
@@ -103,6 +119,22 @@ export default function MutualPage() {
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-8">
+      {error && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+        >
+          <span>連線中斷，顯示上次資料。</span>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="shrink-0 rounded-md border border-amber-300 bg-white px-3 py-1 text-xs font-semibold hover:bg-amber-100"
+          >
+            重新整理
+          </button>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">🤝 互惠問卷</h1>
