@@ -1,8 +1,8 @@
 import { Injectable, Inject, Logger, NotFoundException, ForbiddenException } from '@nestjs/common';
 import { eq, and, inArray, desc, gt } from 'drizzle-orm';
-import { Writable } from 'stream';
-import { once } from 'events';
-import * as path from 'path';
+import type { Writable } from 'node:stream';
+import { once } from 'node:events';
+import * as path from 'node:path';
 import { DB } from '../db';
 import type { AppDb } from '../db';
 import {
@@ -53,6 +53,73 @@ type TabularExportData = {
   summaryRows: Array<[string, string | number]>;
 };
 
+type StatExportOption = {
+  id: string;
+  label: string;
+  sortOrder: number;
+};
+
+type StatExportQuestion = typeof surveyQuestions.$inferSelect & {
+  statOptions: StatExportOption[];
+};
+
+type StatExportVariable = {
+  name: string;
+  label: string;
+  questionId: string | null;
+  questionType: string;
+  measure: 'nominal' | 'ordinal' | 'scale' | 'text';
+  valueLabels: Array<{ value: number; label: string }>;
+};
+
+type StatExportCell = string | number;
+
+const BASE_STAT_VARIABLES: StatExportVariable[] = [
+  {
+    name: 'response_id',
+    label: 'Response ID',
+    questionId: null,
+    questionType: 'metadata',
+    measure: 'text',
+    valueLabels: [],
+  },
+  {
+    name: 'submitted_at',
+    label: 'Submitted At',
+    questionId: null,
+    questionType: 'metadata',
+    measure: 'text',
+    valueLabels: [],
+  },
+  {
+    name: 'fill_duration_sec',
+    label: 'Fill Duration (seconds)',
+    questionId: null,
+    questionType: 'metadata',
+    measure: 'scale',
+    valueLabels: [],
+  },
+  {
+    name: 'quality_score',
+    label: 'Quality Score',
+    questionId: null,
+    questionType: 'metadata',
+    measure: 'scale',
+    valueLabels: [],
+  },
+  {
+    name: 'response_status',
+    label: 'Response Status',
+    questionId: null,
+    questionType: 'metadata',
+    measure: 'nominal',
+    valueLabels: [
+      { value: 1, label: 'submitted' },
+      { value: 2, label: 'rewarded' },
+    ],
+  },
+];
+
 /**
  * Phase R：問卷資料匯出（PDF stats 報表 + Excel raw responses）
  *
@@ -70,7 +137,6 @@ export class ExportService {
     const stats = await this.computeStats(surveyId);
 
     // pdfmake 0.3.x: module exports an already-instantiated singleton with .createPdf()
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const pdfMake = require('pdfmake');
     // 嵌入 Noto Sans TC（繁體中文）字型，解決中文亂碼。
     // 字型放 apps/api/assets/fonts；__dirname 在 dist 與 src 下都解析到 apps/api/..
@@ -193,7 +259,6 @@ export class ExportService {
   ): Promise<Buffer> {
     await this.assertOwnedSurvey(surveyId, surveyorId);
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.Workbook();
     workbook.creator = 'QuanWen';
@@ -394,12 +459,122 @@ export class ExportService {
     await this.assertOwnedSurvey(surveyId, surveyorId);
     const { headers, body, summary } = await this.buildResponsesMatrix(surveyId, options);
 
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const XLSX = require('xlsx');
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([headers, ...body]), 'Responses');
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['Metric', 'Value'], ...summary]), 'Summary');
     return Buffer.from(XLSX.write(wb, { bookType: 'ods', type: 'buffer' }));
+  }
+
+  /**
+   * JASP / SPSS 友善 Excel 匯出。
+   *
+   * 設計重點：
+   * - Data 第一列使用穩定、短、ASCII 變數名稱（SPSS 匯入更穩定）。
+   * - 單選 / 是非題輸出為 1..N 數值代碼，Value Labels sheet 記錄代碼意義。
+   * - 多選題拆成每個選項一欄 0/1 dummy variable，方便 JASP/SPSS 直接做交叉表與迴歸。
+   * - 評分題保留數值；文字 / 矩陣題保留字串並在 Variables sheet 標記 measure=text。
+   */
+  async generateStatSoftwareExcel(
+    surveyId: string,
+    surveyorId: string,
+    options: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<Buffer> {
+    const survey = await this.assertOwnedSurvey(surveyId, surveyorId);
+    const { questions, responses, answerByResponseQuestion } = await this.getStatExportRows(surveyId, options);
+    const variables = this.buildStatVariables(questions);
+
+    const ExcelJS = require('exceljs');
+    const workbook = new ExcelJS.Workbook();
+    workbook.creator = 'QuanWen';
+    workbook.created = new Date();
+    workbook.subject = 'JASP/SPSS compatible survey data';
+
+    const dataSheet = workbook.addWorksheet('Data');
+    dataSheet.addRow(variables.map((variable) => variable.name));
+    dataSheet.getRow(1).font = { bold: true };
+    dataSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    for (const response of responses) {
+      const row: StatExportCell[] = [
+        response.id,
+        response.submittedAt ? new Date(response.submittedAt).toISOString() : '',
+        response.fillDurationSeconds ?? '',
+        response.qualityScore ?? '',
+        response.status === 'rewarded' ? 2 : 1,
+      ];
+
+      for (const question of questions) {
+        const answer = answerByResponseQuestion.get(this.answerKey(response.id, question.id));
+        row.push(...this.statCellsForQuestion(question, answer));
+      }
+
+      dataSheet.addRow(row);
+    }
+
+    for (const [index, variable] of variables.entries()) {
+      const column = dataSheet.getColumn(index + 1);
+      column.width = variable.measure === 'text' ? 28 : Math.max(12, variable.name.length + 2);
+    }
+
+    const variablesSheet = workbook.addWorksheet('Variables');
+    variablesSheet.addRow([
+      'variable_name',
+      'variable_label',
+      'question_id',
+      'question_type',
+      'measure',
+      'missing_values',
+      'notes',
+    ]);
+    variablesSheet.getRow(1).font = { bold: true };
+    for (const variable of variables) {
+      variablesSheet.addRow([
+        variable.name,
+        variable.label,
+        variable.questionId ?? '',
+        variable.questionType,
+        variable.measure,
+        'blank',
+        variable.valueLabels.length > 0 ? 'See Value Labels sheet' : '',
+      ]);
+    }
+    variablesSheet.columns = [
+      { width: 24 },
+      { width: 44 },
+      { width: 38 },
+      { width: 18 },
+      { width: 12 },
+      { width: 16 },
+      { width: 28 },
+    ];
+
+    const valueLabelsSheet = workbook.addWorksheet('Value Labels');
+    valueLabelsSheet.addRow(['variable_name', 'value', 'label']);
+    valueLabelsSheet.getRow(1).font = { bold: true };
+    for (const variable of variables) {
+      for (const valueLabel of variable.valueLabels) {
+        valueLabelsSheet.addRow([variable.name, valueLabel.value, valueLabel.label]);
+      }
+    }
+    valueLabelsSheet.columns = [{ width: 24 }, { width: 10 }, { width: 40 }];
+
+    const guideSheet = workbook.addWorksheet('Import Guide');
+    guideSheet.addRows([
+      ['QuanWen JASP/SPSS 匯入格式'],
+      ['問卷', survey.title],
+      ['匯出時間', new Date().toISOString()],
+      [],
+      ['JASP', 'Open → Computer → Browse → 選擇此 .xlsx，使用 Data 工作表。'],
+      ['SPSS', 'File → Import Data → Excel，勾選 Read variable names from the first row，使用 Data 工作表。'],
+      ['變數說明', 'Variables 工作表記錄題目、題型與量尺；Value Labels 工作表記錄數值代碼。'],
+      ['多選題', '每個選項拆成 0/1 欄位，1=有勾選，0=未勾選。'],
+      ['缺漏值', '空白代表沒有作答或未審核。'],
+    ]);
+    guideSheet.getRow(1).font = { bold: true };
+    guideSheet.columns = [{ width: 18 }, { width: 90 }];
+
+    return Buffer.from(await workbook.xlsx.writeBuffer());
   }
 
   // ─── Helpers ────────────────────────────────────────────────────
@@ -492,6 +667,191 @@ export class ExportService {
     options: Array<typeof questionOptions.$inferSelect>,
   ): Map<string, string> {
     return new Map(options.map((option) => [option.id, option.label]));
+  }
+
+  private async getStatExportRows(
+    surveyId: string,
+    options: { cleanOnly?: boolean; minQualityScore?: number } = {},
+  ): Promise<{
+    questions: StatExportQuestion[];
+    responses: TabularExportResponse[];
+    answerByResponseQuestion: Map<string, typeof responseAnswers.$inferSelect>;
+  }> {
+    const questions = await this.db
+      .select()
+      .from(surveyQuestions)
+      .where(eq(surveyQuestions.surveyId, surveyId))
+      .orderBy(surveyQuestions.sortOrder);
+
+    const qIds = questions.map((q) => q.id);
+    const optionRows = qIds.length > 0
+      ? await this.db.select().from(questionOptions).where(inArray(questionOptions.questionId, qIds)).orderBy(questionOptions.sortOrder)
+      : [];
+    const optionsByQuestion = this.groupOptionsByQuestion(optionRows);
+    const statQuestions = questions.map((question): StatExportQuestion => ({
+      ...question,
+      statOptions: this.statOptionsForQuestion(question, optionsByQuestion.get(question.id) ?? []),
+    }));
+
+    let responses = await this.db
+      .select({
+        id: surveyResponses.id,
+        submittedAt: surveyResponses.submittedAt,
+        qualityScore: surveyResponses.qualityScore,
+        status: surveyResponses.status,
+        fillDurationSeconds: surveyResponses.fillDurationSeconds,
+      })
+      .from(surveyResponses)
+      .where(and(
+        eq(surveyResponses.surveyId, surveyId),
+        inArray(surveyResponses.status, ['submitted', 'rewarded']),
+      ))
+      .orderBy(desc(surveyResponses.submittedAt));
+
+    if (options.cleanOnly) {
+      const minScore = options.minQualityScore ?? 70;
+      responses = responses.filter((response) => (response.qualityScore ?? 0) >= minScore);
+    }
+
+    const responseIds = responses.map((response) => response.id);
+    const answers = responseIds.length > 0
+      ? await this.db.select().from(responseAnswers).where(inArray(responseAnswers.responseId, responseIds))
+      : [];
+
+    return {
+      questions: statQuestions,
+      responses,
+      answerByResponseQuestion: this.buildAnswerByResponseQuestion(answers),
+    };
+  }
+
+  private statOptionsForQuestion(
+    question: typeof surveyQuestions.$inferSelect,
+    options: Array<typeof questionOptions.$inferSelect>,
+  ): StatExportOption[] {
+    const config = this.recordFromUnknown(question.config);
+    if (question.type === 'single_choice' && config.variant === 'yes_no') {
+      return SYNTHETIC_YES_NO_OPTIONS.map((option, index) => ({ ...option, sortOrder: index }));
+    }
+    return options.map((option) => ({
+      id: option.id,
+      label: option.label,
+      sortOrder: option.sortOrder,
+    }));
+  }
+
+  private buildStatVariables(questions: StatExportQuestion[]): StatExportVariable[] {
+    const variables = [...BASE_STAT_VARIABLES];
+
+    questions.forEach((question, questionIndex) => {
+      const qNumber = questionIndex + 1;
+      if (question.type === 'multiple_choice') {
+        question.statOptions.forEach((option, optionIndex) => {
+          variables.push({
+            name: this.statVariableName(qNumber, optionIndex + 1),
+            label: `Q${qNumber}: ${question.title} — ${option.label}`,
+            questionId: question.id,
+            questionType: question.type,
+            measure: 'nominal',
+            valueLabels: [
+              { value: 0, label: 'Not selected' },
+              { value: 1, label: 'Selected' },
+            ],
+          });
+        });
+        return;
+      }
+
+      variables.push({
+        name: this.statVariableName(qNumber),
+        label: `Q${qNumber}: ${question.title}`,
+        questionId: question.id,
+        questionType: question.type,
+        measure: this.measureForQuestion(question.type),
+        valueLabels: this.valueLabelsForQuestion(question),
+      });
+    });
+
+    return variables;
+  }
+
+  private statCellsForQuestion(
+    question: StatExportQuestion,
+    answer: typeof responseAnswers.$inferSelect | undefined,
+  ): StatExportCell[] {
+    if (!answer) {
+      return question.type === 'multiple_choice'
+        ? question.statOptions.map(() => 0)
+        : [''];
+    }
+
+    if (question.type === 'single_choice') {
+      const selectedId = this.stringArrayFromUnknown(answer.selectedOptionIds)[0];
+      return [this.optionCode(question, selectedId) ?? ''];
+    }
+
+    if (question.type === 'multiple_choice') {
+      const selectedIds = new Set(this.stringArrayFromUnknown(answer.selectedOptionIds));
+      return question.statOptions.map((option) => selectedIds.has(option.id) ? 1 : 0);
+    }
+
+    if (question.type === 'rating') {
+      return [answer.ratingValue ?? ''];
+    }
+
+    const text = answer.textAnswer ?? '';
+    return [looksEncryptedCipher(text) ? ENCRYPTED_ANSWER_PLACEHOLDER : text];
+  }
+
+  private statVariableName(questionNumber: number, optionNumber?: number): string {
+    const q = String(questionNumber).padStart(3, '0');
+    if (optionNumber == null) return `q${q}`;
+    return `q${q}_opt${String(optionNumber).padStart(3, '0')}`;
+  }
+
+  private measureForQuestion(questionType: string): StatExportVariable['measure'] {
+    if (questionType === 'single_choice') return 'nominal';
+    if (questionType === 'rating') return 'scale';
+    if (questionType === 'text' || questionType === 'matrix') return 'text';
+    return 'nominal';
+  }
+
+  private valueLabelsForQuestion(question: StatExportQuestion): Array<{ value: number; label: string }> {
+    if (question.type === 'single_choice') {
+      return question.statOptions.map((option, index) => ({
+        value: index + 1,
+        label: option.label,
+      }));
+    }
+
+    if (question.type === 'rating') {
+      const config = this.recordFromUnknown(question.config);
+      const maxRating = typeof config.max_rating === 'number' && Number.isFinite(config.max_rating)
+        ? Math.max(1, Math.floor(config.max_rating))
+        : 5;
+      return Array.from({ length: maxRating }, (_value, index) => ({
+        value: index + 1,
+        label: String(index + 1),
+      }));
+    }
+
+    return [];
+  }
+
+  private optionCode(question: StatExportQuestion, optionId: string | undefined): number | null {
+    if (!optionId) return null;
+    const index = question.statOptions.findIndex((option) => option.id === optionId);
+    return index >= 0 ? index + 1 : null;
+  }
+
+  private stringArrayFromUnknown(value: unknown): string[] {
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : [];
+  }
+
+  private recordFromUnknown(value: unknown): Record<string, unknown> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value)
+      ? value as Record<string, unknown>
+      : {};
   }
 
   private groupAnswersByQuestion(
@@ -709,7 +1069,6 @@ export class ExportService {
     const TEXT_TYPES = new Set<string>(['text', 'matrix']);
 
     // 動態 require 避免 boot 時若未安裝立刻爆
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
     const ExcelJS = require('exceljs');
     const workbook = new ExcelJS.stream.xlsx.WorkbookWriter({
       stream: out,
