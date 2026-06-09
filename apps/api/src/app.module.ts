@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
+import { AppThrottlerGuard } from './common/throttler/app-throttler.guard';
 import { DatabaseModule } from './db';
 import { CommonModule } from './common/common.module';
 import { RedisModule } from './common/redis/redis.module';
@@ -59,6 +60,6 @@ import { ScheduleModule } from '@nestjs/schedule';
     AiModule,
     UploadModule,
   ],
-  providers: [{ provide: APP_GUARD, useClass: ThrottlerGuard }],
+  providers: [{ provide: APP_GUARD, useClass: AppThrottlerGuard }],
 })
 export class AppModule {}
