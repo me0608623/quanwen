@@ -251,7 +251,7 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001/api/v1
 
       - name: Run E2E (shard ${{ matrix.shard }}/3)
-        run: pnpm --filter web test:e2e -- --shard=${{ matrix.shard }}/3
+        run: pnpm --filter web exec playwright test --shard=${{ matrix.shard }}/3
         env:
           CI: 'true'
           # e2e webServer 跑 `pnpm --filter api dev`，用 in-memory PGlite（自動建 schema +
@@ -269,6 +269,8 @@ jobs:
           # clientID option）；給非空 placeholder 讓 API 能啟動（e2e 不測 OAuth 流程）。
           GOOGLE_CLIENT_ID: placeholder_disabled
           GOOGLE_CLIENT_SECRET: placeholder_disabled
+          # 關 rate limit：大量 test 反覆 login 會撞 /auth/login 的 10/60s 上限 → 429
+          DISABLE_RATE_LIMIT: 'true'
 
       - name: Upload Playwright report on failure
         if: failure()
