@@ -5,7 +5,7 @@ test.describe('互惠問卷', () => {
   test('user1 登入後可進入 /mutual 並看到列表', async ({ page }) => {
     await login(page, 'surveyor'); // = user1@quanwen.com
     await page.goto('/mutual');
-    await expect(page.getByRole('heading', { name: /互惠問卷/ })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /互惠問卷/, level: 1 })).toBeVisible();
   });
 
   test('user2 登入後 navbar 互惠 tab 可點', async ({ page }) => {
@@ -48,7 +48,7 @@ test.describe('互惠問卷', () => {
     await page.goto('/mutual');
     // seed.ts 灌了 user1 + user2 的 mutual 問卷, cron 跑過後是 matched
     // 容忍空池(若 cron 還沒跑或被使用過), 至少 page 載入無 error
-    const heading = page.getByRole('heading', { name: /互惠問卷/ });
+    const heading = page.getByRole('heading', { name: /互惠問卷/, level: 1 });
     await expect(heading).toBeVisible();
   });
 });

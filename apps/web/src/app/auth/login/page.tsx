@@ -60,8 +60,13 @@ function LoginForm() {
       { email: data.email.trim(), password: data.password },
       {
         onSuccess: ({ user }) => {
-          const fallback = user.role === "admin" ? "/admin" : "/dashboard";
-          router.push(redirectTo?.startsWith("/") ? redirectTo : fallback);
+          router.push(
+            redirectTo?.startsWith("/")
+              ? redirectTo
+              : user.role === "admin"
+                ? "/admin"
+                : "/dashboard",
+          );
         },
       }
     );

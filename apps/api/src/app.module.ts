@@ -35,6 +35,9 @@ import { ScheduleModule } from '@nestjs/schedule';
         { name: 'medium', ttl: 60_000, limit: 100 },
       ],
       storage: new RedisThrottlerStorage(process.env.REDIS_URL),
+      // E2E 環境關閉 rate limit：大量 test 反覆 login 會撞 /auth/login 的 10/60s 上限 → 429。
+      // 生產不設 DISABLE_RATE_LIMIT，throttler 照常生效（紅線：rate limiting on all endpoints）。
+      skipIf: () => process.env.DISABLE_RATE_LIMIT === 'true',
     }),
     AuthModule,
     TagsModule,
