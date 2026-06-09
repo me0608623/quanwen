@@ -1,5 +1,17 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Post,
+  Query,
+  Req,
+  UnprocessableEntityException,
+  UseGuards,
+} from '@nestjs/common';
 import type { Request } from 'express';
+import { z } from 'zod';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AiQuota } from '../common/ai-quota.decorator';
@@ -14,7 +26,7 @@ import { AnalyticsService } from '../analytics/analytics.service';
 import {
   AiInterpretStatisticsSchema,
   type AiInterpretStatisticsDto,
-} from './dto/interpret-statistics.dto';
+} from './dto/interpret-statistics.dto.js';
 import {
   AiOptimizeSurveySchema,
   type AiOptimizeSurveyDto,
@@ -24,6 +36,10 @@ import {
   type AiAnalyzeResponsesDto,
 } from './dto/analyze-responses.dto';
 import { AiDraftSchema, type AiDraftDto } from '../surveys/dto/ai-draft.dto';
+import {
+  InterpretStatisticsBatchSchema,
+  type InterpretStatisticsBatchDto,
+} from './dto/interpret-statistics-batch.dto.js';
 
 @Controller('ai')
 @UseGuards(JwtAuthGuard, AiQuotaGuard)
@@ -168,6 +184,75 @@ export class AiController {
     return {
       report: saved.payload,
       generatedAt: saved.generatedAt.toISOString(),
+    };
+  }
+
+  /** 批次 AI 統計解讀成本預覽（不耗額度）。前端在送出批次前用此確認費用。 */
+  @Get('interpret-statistics/batch/cost-preview')
+  @UseGuards(JwtAuthGuard)
+  async batchCostPreview(
+    @Req() req: Request & { user: AuthenticatedUser },
+    @Query(new ZodValidationPipe(z.object({ count: z.coerce.number().int().min(1).max(7) })))
+    query: { count: number },
+  ) {
+    return this.aiUsageService.checkBatchCost(req.user.id, query.count);
+  }
+
+  /**
+   * 批次 AI 統計解讀。最多 7 項，額度不足自動以積分補差（每項 10 點）。
+   * 不掛 @AiQuota；自行做成本檢查與扣費。
+   */
+  @Post('interpret-statistics/batch')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  async interpretStatisticsBatch(
+    @Req() req: Request & { user: AuthenticatedUser },
+    @Body(new ZodValidationPipe(InterpretStatisticsBatchSchema)) dto: InterpretStatisticsBatchDto,
+  ) {
+    const userId = req.user.id;
+    const count = dto.analyses.length;
+
+    const preview = await this.aiUsageService.checkBatchCost(userId, count);
+    if (!preview.canProceed) {
+      throw new UnprocessableEntityException({
+        message: '積分不足',
+        needed: preview.pointsRequired,
+        available: preview.pointsAvailable,
+      });
+    }
+
+    const prepared = await Promise.all(
+      dto.analyses.map((analysis) => this.prepareAdvancedAnalysisForAi(analysis, userId)),
+    );
+
+    const interpretations = await Promise.all(
+      prepared.map((p) =>
+        this.aiInsightsService.interpretStatistics(p.label, '問卷', p.result),
+      ),
+    );
+
+    await this.aiUsageService.deductBatchCost(userId, preview.aiCovered, preview.pointsCovered);
+
+    const results = dto.analyses.map((analysis, i) => {
+      const { interpretation, caveats, generatedAt } = interpretations[i];
+      const summaryMatch = interpretation.match(/^[^。.！!？?]+[。.！!？?]?/);
+      const summary = summaryMatch ? summaryMatch[0].trim() : interpretation.slice(0, 80);
+      return {
+        analysisType: analysis.analysisType,
+        params: analysis,
+        result: prepared[i].result,
+        interpretation,
+        summary,
+        caveats,
+        generatedAt,
+        costType: (i < preview.aiCovered ? 'ai' : 'points') as 'ai' | 'points',
+      };
+    });
+
+    return {
+      results,
+      aiUsed: preview.aiCovered,
+      pointsUsed: preview.pointsRequired,
     };
   }
 }
