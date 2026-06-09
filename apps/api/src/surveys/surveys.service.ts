@@ -453,34 +453,35 @@ export class SurveysService {
 
     // Phase C-2: 發問卷方關掉 AI 審核 → 直接上架, 不送 AI 評分
     if (survey.aiReviewEnabled === false) {
-      await this.db
-        .update(surveys)
-        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
-        .where(eq(surveys.id, surveyId));
-
-      // 預算仍要鎖（付費取樣）
-      this.wallet.lockSurveyBudget(survey.surveyorId, surveyId).catch((err) =>
-        this.logger.error(`預算鎖定失敗 surveyId=${surveyId}`, err),
-      );
+      // 原子操作：status 更新與預算鎖定包在同一 transaction，任一失敗即全部 rollback，
+      // 避免 survey 卡在 published 狀態但 lockedCash 未同步（issue #39）。
+      await this.db.transaction(async (tx) => {
+        await tx
+          .update(surveys)
+          .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+          .where(eq(surveys.id, surveyId));
+        await this.wallet.lockSurveyBudget(survey.surveyorId, surveyId, tx);
+      });
 
       return { message: '問卷已直接上架（未開啟 AI 審核）', surveyId };
     }
 
     // 2026-06-06 改版：發布即上架，不再卡 pending_review 等 AI 過審。
     // AI 審核降級為「發布後品質掃描」（advisory）：低分只通知建立者改善，不擋發布、不自動下架。
-    await this.db
-      .update(surveys)
-      .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
-      .where(eq(surveys.id, surveyId));
+    //
+    // 原子操作：status 更新與預算鎖定包在同一 transaction（issue #39）。
+    // AI 品質掃描是 advisory，與金流無關，仍 fire-and-forget 於 transaction 之外。
+    await this.db.transaction(async (tx) => {
+      await tx
+        .update(surveys)
+        .set({ status: 'published', publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(surveys.id, surveyId));
+      await this.wallet.lockSurveyBudget(survey.surveyorId, surveyId, tx);
+    });
 
     // Fire-and-forget 發布後 AI 品質掃描（不阻塞回應、不影響上架狀態）
     this.aiAudit.auditSurveyAsync(surveyId).catch((err) =>
       this.logger.error(`AI 品質掃描 fire-and-forget 錯誤 surveyId=${surveyId}`, err),
-    );
-
-    // Fire-and-forget 預算鎖定
-    this.wallet.lockSurveyBudget(survey.surveyorId, surveyId).catch((err) =>
-      this.logger.error(`預算鎖定失敗 surveyId=${surveyId}`, err),
     );
 
     return { message: '問卷已上架，AI 品質掃描將於稍後完成', surveyId };

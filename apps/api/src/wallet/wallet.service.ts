@@ -842,9 +842,14 @@ export class WalletService {
   // ─── 鎖定問卷預算（送審時呼叫）────────────────────────────────────────────
   // 將 totalBudget 從 cashBalance 移至 lockedCash
   // 若餘額不足則警告，但不阻擋（允許問券方後補儲值）
+  //
+  // exec?: 傳入外部 transaction 時，鎖定操作掛在呼叫方的交易上，與 surveys.status
+  // 更新形成原子操作。不傳則自己開 transaction（獨立調用情境）。
 
-  async lockSurveyBudget(surveyorId: string, surveyId: string): Promise<void> {
-    const surveyRows = await this.db
+  async lockSurveyBudget(surveyorId: string, surveyId: string, exec?: DbExecutor): Promise<void> {
+    const reader: DbExecutor = exec ?? this.db;
+
+    const surveyRows = await reader
       .select({
         id: surveys.id,
         rewardPoints: surveys.rewardPoints,
@@ -859,9 +864,9 @@ export class WalletService {
 
     // 鎖定 (獎金 + 10% 手續費) × 目標數，確保發獎時托管款足以支付本金與手續費。
     const totalBudget = this.unitCostFor(survey.rewardPoints) * survey.targetCount;
-    await this.ensureWallet(surveyorId);
+    await this.ensureWallet(surveyorId, reader);
 
-    const walletRows = await this.db
+    const walletRows = await reader
       .select({ cashBalance: wallets.cashBalance })
       .from(wallets)
       .where(eq(wallets.userId, surveyorId))
@@ -872,12 +877,7 @@ export class WalletService {
 
     if (lockAmount <= 0) return;
 
-    // Wrap in a DB transaction: do the atomic wallet update FIRST inside the
-    // transaction boundary, then insert the journal entries only if it succeeds.
-    // Previously the journal entries were inserted before the wallet update, meaning
-    // a concurrent depletion could cause the wallet update to silently no-op while
-    // leaving orphaned transaction + journal records in the DB.
-    await this.db.transaction(async (tx) => {
+    const performLock = async (tx: DbExecutor) => {
       const updateResult = await tx
         .update(wallets)
         .set({
@@ -912,7 +912,15 @@ export class WalletService {
         { transactionId: txn.id, accountName: `wallet_${surveyorId}`, debitAmount: lockAmount, creditAmount: 0 },
         { transactionId: txn.id, accountName: 'survey_escrow', debitAmount: 0, creditAmount: lockAmount },
       ]);
-    });
+    };
+
+    if (exec) {
+      // Already in a caller-provided transaction — run directly (no nested tx)
+      await performLock(exec);
+    } else {
+      // Stand-alone call — open our own transaction
+      await this.db.transaction((tx) => performLock(tx));
+    }
 
     this.logger.log(`Budget locked: survey=${surveyId} amount=${lockAmount}`);
   }
