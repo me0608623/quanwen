@@ -17,6 +17,7 @@ import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
 import { AiQuota } from '../common/ai-quota.decorator';
 import { AiQuotaGuard } from '../common/guards/ai-quota.guard';
 import { AiUsageService } from '../common/ai-usage.service';
+import { AiPromptDedupeService } from '../common/ai-prompt-dedupe.service';
 import { ZodValidationPipe } from '../common/pipes/zod-validation.pipe';
 import { SurveysService } from '../surveys/surveys.service';
 import { ResponsesService } from '../responses/responses.service';
@@ -51,6 +52,7 @@ export class AiController {
     private readonly aiUsageService: AiUsageService,
     private readonly aiReportStore: AiReportStoreService,
     private readonly analyticsService: AnalyticsService,
+    private readonly dedupe: AiPromptDedupeService,
   ) {}
 
   @Post('optimize-survey')
@@ -60,8 +62,17 @@ export class AiController {
     @Req() req: Request & { user: AuthenticatedUser },
     @Body(new ZodValidationPipe(AiOptimizeSurveySchema)) dto: AiOptimizeSurveyDto,
   ) {
-    const result = await this.surveysService.aiImprove(dto.surveyId, req.user.id);
-    await this.aiUsageService.incrementUsage(req.user.id, 'optimize_survey');
+    const userId = req.user.id;
+    const dedupeKey = this.dedupe.makeKey(userId, dto);
+    const cached = this.dedupe.get<unknown>(dedupeKey);
+    if (cached !== undefined) return cached;
+
+    const result = await this.surveysService.aiImprove(dto.surveyId, userId);
+    await Promise.all([
+      this.aiUsageService.incrementUsage(userId, 'optimize_survey'),
+      this.aiUsageService.incrementTokenUsage(userId, AiUsageService.estimateTokens(JSON.stringify(dto))),
+    ]);
+    this.dedupe.set(dedupeKey, result);
     return result;
   }
 
@@ -72,8 +83,17 @@ export class AiController {
     @Req() req: Request & { user: AuthenticatedUser },
     @Body(new ZodValidationPipe(AiDraftSchema)) dto: AiDraftDto,
   ) {
+    const userId = req.user.id;
+    const dedupeKey = this.dedupe.makeKey(userId, dto);
+    const cached = this.dedupe.get<unknown>(dedupeKey);
+    if (cached !== undefined) return cached;
+
     const result = await this.surveysService.generateAiDraft(dto);
-    await this.aiUsageService.incrementUsage(req.user.id, 'generate_questions');
+    await Promise.all([
+      this.aiUsageService.incrementUsage(userId, 'generate_questions'),
+      this.aiUsageService.incrementTokenUsage(userId, AiUsageService.estimateTokens(JSON.stringify(dto))),
+    ]);
+    this.dedupe.set(dedupeKey, result);
     return result;
   }
 
@@ -84,13 +104,23 @@ export class AiController {
     @Req() req: Request & { user: AuthenticatedUser },
     @Body(new ZodValidationPipe(AiAnalyzeResponsesSchema)) dto: AiAnalyzeResponsesDto,
   ) {
-    const stats = await this.responsesService.getSurveyStats(dto.surveyId, req.user.id);
+    const userId = req.user.id;
+    const dedupeKey = this.dedupe.makeKey(userId, dto);
+    const cached = this.dedupe.get<unknown>(dedupeKey);
+    if (cached !== undefined) return cached;
+
+    const stats = await this.responsesService.getSurveyStats(dto.surveyId, userId);
     const result = await this.aiInsightsService.analyze(stats, dto.reportType);
-    await this.aiUsageService.incrementUsage(req.user.id, 'analyze_responses');
     // 持久化:切換報告類型 / 重新整理 / 服務重啟後仍可讀,不再耗額度
     const generatedAt = new Date();
-    await this.aiReportStore.save(dto.surveyId, dto.reportType, result);
-    return { ...result, generatedAt: generatedAt.toISOString() };
+    await Promise.all([
+      this.aiUsageService.incrementUsage(userId, 'analyze_responses'),
+      this.aiUsageService.incrementTokenUsage(userId, AiUsageService.estimateTokens(JSON.stringify(dto))),
+      this.aiReportStore.save(dto.surveyId, dto.reportType, result),
+    ]);
+    const response = { ...result, generatedAt: generatedAt.toISOString() };
+    this.dedupe.set(dedupeKey, response);
+    return response;
   }
 
   /**

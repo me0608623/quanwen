@@ -23,6 +23,7 @@ export const dailyUsage = pgTable(
     optimizeSurveyCount: integer('optimize_survey_count').notNull().default(0),
     generateQuestionsCount: integer('generate_questions_count').notNull().default(0),
     analyzeResponsesCount: integer('analyze_responses_count').notNull().default(0),
+    dailyTokensUsed: integer('daily_tokens_used').notNull().default(0),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
