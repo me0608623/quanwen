@@ -1,22 +1,31 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
-import { eq, and, desc, sql, gte, lt } from 'drizzle-orm';
+import { eq, and, desc, sql, gte, lt, lte } from 'drizzle-orm';
 import { Cron } from '@nestjs/schedule';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { notifications, users, surveyorProfiles, surveys } from '../db/schema';
-import type { NewNotification } from '../db/schema';
+import {
+  notifications,
+  users,
+  surveyorProfiles,
+  surveys,
+  pendingNotifications,
+} from '../db/schema';
+import type { NewNotification, PendingNotification } from '../db/schema';
 import { MailService } from '../mail/mail.service';
 
-// 哪些 type 要 email 推播（routine 動作如 reward_issued 不寄、避免疲勞）
+// 哪些 type 要 email 推播
 const EMAIL_TYPES = new Set<NewNotification['type']>([
   'survey_approved',
   'survey_rejected',
-  'new_response',   // QUA-203: 問券方收到新填答時寄 email 通知
-  'system', // 申訴結果、KYC 結果、停權等都是 system
+  'new_response',
+  'system',
 ]);
 
-// QUA-203: new_response email 節流 — 同一用戶每 N 分鐘最多寄一封，避免高流量問券方被淹沒
 const NEW_RESPONSE_EMAIL_COOLDOWN_MINUTES = 15;
+
+/** Retry delays in seconds for attempt 1, 2, 3 */
+const RETRY_DELAYS_SEC = [5, 30, 300] as const;
+const MAX_ATTEMPTS = RETRY_DELAYS_SEC.length;
 
 @Injectable()
 export class NotificationsService {
@@ -29,29 +38,104 @@ export class NotificationsService {
 
   // ─── 建立通知（供其他 service 呼叫）──────────────────────────────────────────
 
-  async create(dto: Omit<NewNotification, 'id' | 'isRead' | 'createdAt'>) {
-    await this.db.insert(notifications).values({
-      userId: dto.userId,
-      type: dto.type,
-      title: dto.title,
-      body: dto.body,
-      metadata: dto.metadata,
-    });
+  async create(dto: Omit<NewNotification, 'id' | 'isRead' | 'createdAt'>): Promise<void> {
+    // 先寫入 pending_notifications（durable job record），確保失敗可重試
+    const [pending] = await this.db
+      .insert(pendingNotifications)
+      .values({
+        userId: dto.userId,
+        type: dto.type,
+        title: dto.title,
+        body: dto.body,
+        metadata: dto.metadata,
+        nextRetryAt: new Date(),
+      })
+      .returning();
 
-    // Phase F.1: fire-and-forget 寄 email（僅特定 type + 用戶 email_verified）
-    if (EMAIL_TYPES.has(dto.type)) {
-      const metadata = dto.metadata as Record<string, unknown> | undefined;
-      void this.sendEmailNotification(dto.userId, dto.title, dto.body ?? '', dto.type, metadata).catch((err) =>
-        this.logger.error(`通知 email 寄送失敗 userId=${dto.userId}`, err),
+    await this._processOne(pending);
+  }
+
+  /** 執行一筆 pending notification：insert notifications + 寄 email；失敗時記錄重試排程 */
+  async _processOne(pending: PendingNotification): Promise<void> {
+    try {
+      await this.db.insert(notifications).values({
+        userId: pending.userId,
+        type: pending.type,
+        title: pending.title,
+        body: pending.body,
+        metadata: pending.metadata,
+      });
+
+      await this.db
+        .update(pendingNotifications)
+        .set({ status: 'done', updatedAt: new Date() })
+        .where(eq(pendingNotifications.id, pending.id));
+
+      if (EMAIL_TYPES.has(pending.type)) {
+        const metadata = pending.metadata as Record<string, unknown> | undefined;
+        void this._sendEmail(
+          pending.userId,
+          pending.title,
+          pending.body ?? '',
+          pending.type,
+          metadata,
+        ).catch((err: unknown) =>
+          this.logger.error(`通知 email 寄送失敗 userId=${pending.userId}`, err),
+        );
+      }
+    } catch (err: unknown) {
+      const newAttempts = pending.attempts + 1;
+      const errorMsg = err instanceof Error ? err.message : String(err);
+
+      if (newAttempts >= MAX_ATTEMPTS) {
+        await this.db
+          .update(pendingNotifications)
+          .set({ status: 'failed', attempts: newAttempts, lastError: errorMsg, updatedAt: new Date() })
+          .where(eq(pendingNotifications.id, pending.id));
+        this.logger.error(`通知永久失敗 pendingId=${pending.id} attempts=${newAttempts}`, err);
+      } else {
+        const delaySec = RETRY_DELAYS_SEC[newAttempts - 1] ?? 300;
+        await this.db
+          .update(pendingNotifications)
+          .set({
+            attempts: newAttempts,
+            lastError: errorMsg,
+            nextRetryAt: new Date(Date.now() + delaySec * 1000),
+            updatedAt: new Date(),
+          })
+          .where(eq(pendingNotifications.id, pending.id));
+        this.logger.warn(
+          `通知失敗，${delaySec}s 後重試 pendingId=${pending.id} attempt=${newAttempts}`,
+        );
+      }
+    }
+  }
+
+  // ─── 重試 cron（每 30 秒，只處理 attempts>=1 的重試項目）───────────────────
+
+  @Cron('*/30 * * * * *')
+  async retryPendingNotifications(): Promise<void> {
+    const rows = await this.db
+      .select()
+      .from(pendingNotifications)
+      .where(
+        and(
+          eq(pendingNotifications.status, 'pending'),
+          lte(pendingNotifications.nextRetryAt, new Date()),
+          gte(pendingNotifications.attempts, 1),
+        ),
+      )
+      .limit(20);
+
+    for (const row of rows) {
+      await this._processOne(row).catch((err: unknown) =>
+        this.logger.error(`重試通知失敗 pendingId=${row.id}`, err),
       );
     }
   }
 
-  /**
-   * QUA-203: 檢查 new_response 是否在冷卻期內（避免 email 疲勞轟炸）。
-   * 同一用戶在 cooldown window 內只收到一封 new_response email，
-   * 後續填答仍建立 in-app 通知但不寄信。
-   */
+  // ─── internal email helpers ───────────────────────────────────────────────
+
   private async isNewResponseEmailThrottled(userId: string): Promise<boolean> {
     const cutoff = new Date(Date.now() - NEW_RESPONSE_EMAIL_COOLDOWN_MINUTES * 60_000);
     const rows = await this.db
@@ -64,18 +148,16 @@ export class NotificationsService {
           gte(notifications.createdAt, cutoff),
         ),
       );
-    // count > 1 代表冷卻期內已有至少一條 new_response 通知（含剛 insert 的這條）
     return (rows[0]?.count ?? 0) > 1;
   }
 
-  private async sendEmailNotification(
+  private async _sendEmail(
     userId: string,
     title: string,
     body: string,
     type: NewNotification['type'],
     metadata?: Record<string, unknown>,
   ) {
-    // QUA-200: new_response email — skip if creator prefers daily digest
     if (type === 'new_response') {
       const digestRows = await this.db
         .select({ responseNotifMode: surveyorProfiles.responseNotifMode })
@@ -86,11 +168,11 @@ export class NotificationsService {
         this.logger.debug(`new_response email skipped for userId=${userId} (daily_digest mode)`);
         return;
       }
-
-      // QUA-203: 節流 new_response email（冷卻期內跳過寄信）
       const throttled = await this.isNewResponseEmailThrottled(userId);
       if (throttled) {
-        this.logger.debug(`new_response email throttled for userId=${userId} (cooldown=${NEW_RESPONSE_EMAIL_COOLDOWN_MINUTES}min)`);
+        this.logger.debug(
+          `new_response email throttled for userId=${userId} (cooldown=${NEW_RESPONSE_EMAIL_COOLDOWN_MINUTES}min)`,
+        );
         return;
       }
     }
@@ -108,21 +190,19 @@ export class NotificationsService {
 
     const user = rows[0];
     if (!user || !user.emailVerified) return;
-    // QUA-200: respect opt-out preference
     if (user.emailOptOut) return;
-    // 跳過 placeholder email（OAuth 未填 email 時 fallback 用的格式）
     if (user.email.endsWith('.placeholder')) return;
 
+    void metadata; // reserved for future use
     await this.mail.sendNotificationEmail(user.email, user.displayName, title, body);
   }
 
-  // ─── QUA-200: 每日填答摘要（每天 08:00 台北時間 = 00:00 UTC）────────────────
+  // ─── QUA-200: 每日填答摘要（每天 08:00 台北時間）────────────────────────────
 
   @Cron('0 0 * * *', { timeZone: 'Asia/Taipei' })
   async sendDailyDigests(): Promise<void> {
     this.logger.log('daily digest cron started');
 
-    // 找出所有偏好 daily_digest 且 email 有效的問券方
     const digestUsers = await this.db
       .select({
         userId: surveyorProfiles.userId,
@@ -141,7 +221,6 @@ export class NotificationsService {
     for (const u of digestUsers) {
       if (!u.emailVerified || u.emailOptOut || u.email.endsWith('.placeholder')) continue;
 
-      // 找出該用戶在 24h 內的 new_response 通知，依問卷聚合
       const notifRows = await this.db
         .select({
           surveyId: sql<string>`(metadata->>'surveyId')::text`,
@@ -160,7 +239,6 @@ export class NotificationsService {
 
       if (notifRows.length === 0) continue;
 
-      // 取得問卷標題與累計數
       const digestItems: Array<{ surveyTitle: string; newCount: number; totalCount: number; targetCount: number }> = [];
       for (const row of notifRows) {
         if (!row.surveyId) continue;
@@ -244,9 +322,7 @@ export class NotificationsService {
     await this.db
       .update(notifications)
       .set({ isRead: true })
-      .where(
-        and(eq(notifications.id, notificationId), eq(notifications.userId, userId)),
-      );
+      .where(and(eq(notifications.id, notificationId), eq(notifications.userId, userId)));
   }
 
   async markAllRead(userId: string) {
@@ -272,9 +348,13 @@ export class NotificationsService {
       metadata: { surveyId, reason },
     });
 
-    // Also attempt email
     const [user] = await this.db
-      .select({ email: users.email, displayName: users.displayName, emailVerified: users.emailVerified, emailOptOut: users.emailOptOut })
+      .select({
+        email: users.email,
+        displayName: users.displayName,
+        emailVerified: users.emailVerified,
+        emailOptOut: users.emailOptOut,
+      })
       .from(users)
       .where(eq(users.id, surveyorId))
       .limit(1);
