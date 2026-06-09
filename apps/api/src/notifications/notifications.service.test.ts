@@ -8,19 +8,28 @@ describe('NotificationsService', () => {
   let mockDb: Record<string, ReturnType<typeof vi.fn>>;
   let mockMail: Record<string, ReturnType<typeof vi.fn>>;
 
-  /** Returns a Drizzle-like query chain whose final `.returning()` resolves to `result` */
+  /**
+   * Returns a Drizzle-like query builder chain that is also a thenable.
+   * - `await chain` (or `await chain.values()`) resolves to `result`
+   * - `await chain.values().returning()` resolves to `result`
+   * - `await chain.limit(n)` resolves to `result`
+   */
   const makeChain = (result: unknown[] = []) => {
     const chain: Record<string, unknown> = {};
     const self = () => chain;
+    // Make chain thenable so `await chain` works without calling returning()
+    chain.then = vi.fn((resolve: (v: unknown) => void, _reject?: unknown) => resolve(result));
+    chain.catch = vi.fn((_reject: unknown) => chain);
+    chain.finally = vi.fn((fn: () => void) => { fn(); return chain; });
     chain.from = vi.fn(self);
     chain.where = vi.fn(self);
-    chain.limit = vi.fn(self);
+    chain.limit = vi.fn(() => Promise.resolve(result));
     chain.orderBy = vi.fn(self);
     chain.innerJoin = vi.fn(self);
-    chain.groupBy = vi.fn(self);
+    chain.groupBy = vi.fn(() => Promise.resolve(result));
     chain.set = vi.fn(self);
-    chain.values = vi.fn().mockResolvedValue(result); // awaitable
-    chain.returning = vi.fn().mockResolvedValue(result);
+    chain.values = vi.fn(self);       // returns this so .values().returning() works
+    chain.returning = vi.fn(() => Promise.resolve(result));
     return chain;
   };
 
@@ -98,8 +107,12 @@ describe('NotificationsService', () => {
       mockDb.insert.mockImplementation(() => {
         insertCount++;
         if (insertCount === 1) return makeChain([pendingRow]);
-        // notifications insert fails
-        return { values: vi.fn().mockRejectedValue(new Error('DB down')) };
+        // notifications insert fails: make the chain reject when awaited
+        const failChain = makeChain();
+        failChain.then = vi.fn((_resolve: unknown, reject: (e: unknown) => void) =>
+          reject(new Error('DB down')),
+        );
+        return failChain;
       });
 
       const updateChain = makeChain();
@@ -122,8 +135,12 @@ describe('NotificationsService', () => {
     it('marks status=failed after MAX_ATTEMPTS (3) exhausted', async () => {
       const exhaustedRow = makePendingRow({ attempts: 2 }); // 3rd attempt
 
-      // notifications insert always fails
-      mockDb.insert.mockReturnValue({ values: vi.fn().mockRejectedValue(new Error('DB error')) });
+      // notifications insert always fails: thenable that rejects
+      const failChain = makeChain();
+      failChain.then = vi.fn((_resolve: unknown, reject: (e: unknown) => void) =>
+        reject(new Error('DB error')),
+      );
+      mockDb.insert.mockReturnValue(failChain);
 
       const updateChain = makeChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -138,7 +155,9 @@ describe('NotificationsService', () => {
     it('sets nextRetryAt ~5s ahead on 1st retry attempt', async () => {
       const row = makePendingRow({ attempts: 0 });
 
-      mockDb.insert.mockReturnValue({ values: vi.fn().mockRejectedValue(new Error('err')) });
+      const fail5 = makeChain();
+      fail5.then = vi.fn((_r: unknown, rej: (e: unknown) => void) => rej(new Error('err')));
+      mockDb.insert.mockReturnValue(fail5);
 
       const updateChain = makeChain();
       mockDb.update.mockReturnValue(updateChain);
@@ -156,7 +175,9 @@ describe('NotificationsService', () => {
     it('sets nextRetryAt ~30s ahead on 2nd retry attempt', async () => {
       const row = makePendingRow({ attempts: 1 });
 
-      mockDb.insert.mockReturnValue({ values: vi.fn().mockRejectedValue(new Error('err')) });
+      const fail30 = makeChain();
+      fail30.then = vi.fn((_r: unknown, rej: (e: unknown) => void) => rej(new Error('err')));
+      mockDb.insert.mockReturnValue(fail30);
 
       const updateChain = makeChain();
       mockDb.update.mockReturnValue(updateChain);
