@@ -746,7 +746,7 @@
   }
 
   .q-home-card {
-    @apply rounded-[1.75rem] border border-[var(--q-hairline)] bg-[var(--q-surface-card)]/82 p-6 shadow-[0_18px_60px_rgba(55,47,35,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_80px_rgba(55,47,35,0.11)] sm:p-7;
+    @apply rounded-[1.75rem] border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6 shadow-[0_18px_60px_rgba(55,47,35,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_80px_rgba(55,47,35,0.11)] sm:p-7;
   }
 
   .q-home-card-flat {
@@ -759,11 +759,11 @@
   }
 
   .q-step-card {
-    @apply grid grid-cols-[3rem_1fr] gap-5 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)]/86 p-5 shadow-[0_16px_48px_rgba(55,47,35,0.06)] sm:p-6;
+    @apply grid grid-cols-[3rem_1fr] gap-5 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-5 shadow-[0_16px_48px_rgba(55,47,35,0.06)] sm:p-6;
   }
 
   .q-mini-card {
-    @apply rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)]/88 p-5 transition duration-300 hover:-translate-y-1 hover:bg-[var(--q-canvas)] sm:p-6;
+    @apply rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-5 transition duration-300 hover:-translate-y-1 hover:bg-[var(--q-canvas)] sm:p-6;
   }
 
   .q-mini-icon {
@@ -822,7 +822,7 @@
   }
 
   .q-btn-secondary {
-    @apply border border-[var(--q-hairline)] bg-[var(--q-canvas)]/72 text-[var(--q-ink)] hover:bg-[var(--q-surface-card)] focus-visible:outline-[var(--q-primary-active)];
+    @apply border border-[var(--q-hairline)] bg-[var(--q-canvas)] text-[var(--q-ink)] hover:bg-[var(--q-surface-card)] focus-visible:outline-[var(--q-primary-active)];
   }
 
   .q-btn-invert {
