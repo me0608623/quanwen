@@ -59,8 +59,9 @@ function LoginForm() {
     loginMutation.mutate(
       { email: data.email.trim(), password: data.password },
       {
-        onSuccess: () => {
-          router.push(redirectTo?.startsWith("/") ? redirectTo : "/dashboard");
+        onSuccess: ({ user }) => {
+          const fallback = user.role === "admin" ? "/admin" : "/dashboard";
+          router.push(redirectTo?.startsWith("/") ? redirectTo : fallback);
         },
       }
     );
