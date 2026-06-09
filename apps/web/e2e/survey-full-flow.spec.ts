@@ -293,7 +293,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
         const { token } = await loginResp.json();
 
         // 第一次提交
-        const submitResp = await request.post(`${API}/public/surveys/${surveyId}/submit`, {
+        const submitResp = await request.post(`${API}/public/tasks/${surveyId}/submit`, {
           headers: { Authorization: `Bearer ${token}` },
           data: {
             answers: [
@@ -371,7 +371,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       }
 
       // 提交測試資料（使用匿名 API）
-      await request.post(`${API}/public/surveys/${surveyId}/submit`, {
+      await request.post(`${API}/public/tasks/${surveyId}/submit`, {
         data: {
           answers: [
             { questionId: '1', value: '男性' },
@@ -380,7 +380,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
         },
       });
 
-      await request.post(`${API}/public/surveys/${surveyId}/submit`, {
+      await request.post(`${API}/public/tasks/${surveyId}/submit`, {
         data: {
           answers: [
             { questionId: '1', value: '女性' },
