@@ -5,6 +5,9 @@ const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
 
 test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
   let surveyId: string;
+  // 匿名 submit 需真 questionId(UUID) + x-anon-token；存 beforeEach 建立的題目供 submit 用
+  let surveyQuestions: { id: string; type: string; options?: { id: string }[] }[] = [];
+  const anonHeaders = () => ({ 'x-anon-token': `e2e-anon-${Date.now()}-${Math.round(performance.now())}` });
 
   test.beforeEach(async ({ page }) => {
     // 清理舊測試問卷（以 API 刪除標記為測試的問卷）
@@ -142,6 +145,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 前往編輯頁
       await page.goto(`/dashboard/surveys/${surveyId}`);
@@ -218,6 +222,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 發布問卷
       const publishResp = await page.request.post(`${API}/surveys/${surveyId}/publish`, {
@@ -294,12 +299,12 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
 
         // 第一次提交
         const submitResp = await request.post(`${API}/public/tasks/${surveyId}/submit`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers: { Authorization: `Bearer ${token}`, ...anonHeaders() },
           data: {
             answers: [
-              { questionId: '1', value: '男性' },
-              { questionId: '2', value: ['JavaScript', 'Python'] },
-              { questionId: '3', value: '第一次填答' },
+              { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![0].id] },
+              { questionId: surveyQuestions[1].id, selectedOptionIds: [surveyQuestions[1].options![0].id, surveyQuestions[1].options![1].id] },
+              { questionId: surveyQuestions[2].id, textAnswer: '第一次填答' },
             ],
           },
         });
@@ -312,7 +317,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.waitForLoadState('networkidle');
 
       // 應該顯示已填答訊息
-      await expect(page.locator('text=/已填答|already submitted|已完成/i')).toBeVisible({ timeout: 5000 });
+      await expect(page.locator('text=/已填答|已經填過|填過|already submitted|已完成/i').first()).toBeVisible({ timeout: 5000 });
     });
   });
 
@@ -353,6 +358,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       expect(surveyResp.ok()).toBeTruthy();
       const survey = await surveyResp.json();
       surveyId = survey.id;
+      surveyQuestions = survey.questions ?? [];
 
       // 發布
       const publishResp = await request.post(`${API}/surveys/${surveyId}/publish`, {
@@ -372,19 +378,21 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
 
       // 提交測試資料（使用匿名 API）
       await request.post(`${API}/public/tasks/${surveyId}/submit`, {
+        headers: anonHeaders(),
         data: {
           answers: [
-            { questionId: '1', value: '男性' },
-            { questionId: '2', value: '測試建議 1' },
+            { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![0].id] },
+            { questionId: surveyQuestions[1].id, textAnswer: '測試建議 1' },
           ],
         },
       });
 
       await request.post(`${API}/public/tasks/${surveyId}/submit`, {
+        headers: anonHeaders(),
         data: {
           answers: [
-            { questionId: '1', value: '女性' },
-            { questionId: '2', value: '測試建議 2' },
+            { questionId: surveyQuestions[0].id, selectedOptionIds: [surveyQuestions[0].options![1].id] },
+            { questionId: surveyQuestions[1].id, textAnswer: '測試建議 2' },
           ],
         },
       });

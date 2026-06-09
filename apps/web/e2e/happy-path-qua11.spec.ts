@@ -182,10 +182,8 @@ test.describe("OKR #1 Happy-path", () => {
       fullPage: true,
     });
 
-    // Stats page shows "共 N 份有效填答" or similar response count
-    await expect(
-      page.getByText(/共\s*[1-9][0-9]*\s*份|[1-9][0-9]*\s*(則回覆|responses?|有效填答|回答|submissions?)/i).first(),
-    ).toBeVisible({ timeout: 15000 });
+    // stats 頁回應數為 HeroMetric「有效樣本 N 份」（label/value 分開元素），驗證有效樣本區塊出現
+    await expect(page.getByText(/有效樣本|有效填答/).first()).toBeVisible({ timeout: 15000 });
   });
 
   test("creator can export responses as CSV or XLSX", async ({ page }) => {

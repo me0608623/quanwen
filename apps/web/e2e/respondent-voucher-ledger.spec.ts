@@ -141,34 +141,26 @@ test.describe('AC3: Creator export', () => {
     }
   });
 
-  test('CSV export download resolves without error', async ({ page }) => {
-    await login(page, 'bb'); // surveyor
-    await page.goto('/dashboard');
+  test('CSV export download resolves without error', async ({ request }) => {
+    // export 端點在 API server（@Controller('surveys') + :id/export.stream.csv，需 JWT），不是 web
+    // 路由（原 page.goto('/api/surveys/:id/export') → 404）。用純 API 驗證 streaming CSV 回 200。
+    const API = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1';
+    const loginResp = await request.post(`${API}/auth/login`, {
+      data: { email: 'user1@quanwen.com', password: '000' },
+    });
+    expect(loginResp.ok()).toBeTruthy();
+    const { token } = await loginResp.json();
 
-    const surveyLinks = page.locator('a[href*="/dashboard/surveys/"]').filter({ hasNotText: '/new' });
-    const count = await surveyLinks.count();
-    test.skip(count === 0, '無 demo 問卷，跳過 CSV 下載測試');
+    const listResp = await request.get(`${API}/surveys`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const surveys = await listResp.json();
+    test.skip(!Array.isArray(surveys) || surveys.length === 0, '無 demo 問卷，跳過 CSV 下載測試');
 
-    // Extract survey ID from the first link's href
-    const href = await surveyLinks.first().getAttribute('href') ?? '';
-    const match = href.match(/\/dashboard\/surveys\/([^/]+)/);
-    test.skip(!match, 'Cannot parse survey ID');
-    const surveyId = match![1];
-
-    // Attempt the export endpoint directly via page.goto (triggers download or shows content)
-    const [download] = await Promise.all([
-      page.waitForEvent('download', { timeout: 15_000 }).catch(() => null),
-      page.goto(`/api/surveys/${surveyId}/export`),
-    ]);
-
-    // Either a file download or a redirect (302) — either indicates the endpoint works
-    if (download) {
-      expect(download.suggestedFilename()).toMatch(/\.csv$/);
-    } else {
-      // The page navigated to the API — verify no 4xx/5xx error page
-      const bodyText = await page.locator('body').textContent().catch(() => '');
-      expect(bodyText).not.toMatch(/500|Internal Server Error|Cannot GET/);
-    }
+    const resp = await request.get(`${API}/surveys/${surveys[0].id}/export.stream.csv`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    expect(resp.ok()).toBeTruthy();
   });
 
   test('Wallet page surveyor sees 現金錢包 (not respondent earnings view)', async ({ page }) => {
