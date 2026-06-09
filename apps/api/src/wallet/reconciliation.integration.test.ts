@@ -25,6 +25,16 @@ import { CryptoService } from '../common/crypto.service';
 import { EcpayService } from './ecpay.service';
 import { WalletService } from './wallet.service';
 import { ReconciliationService } from './reconciliation.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+const mockSystemConfig: Partial<SystemConfigService> = {
+  getPlatformFeeRate: () => 0.10,
+  getPointsValueNtd: () => 0.5,
+  getMinWithdrawal: () => 300,
+  getMaxDailyWithdrawal: () => 30_000,
+  getMinDeposit: () => 100,
+  getMaxDeposit: () => 100_000,
+};
 
 const SURVEYOR_ID = '22222222-2222-2222-2222-222222222222';
 const RESPONDENT_ID = '11111111-1111-1111-1111-111111111111';
@@ -138,7 +148,7 @@ describe('ReconciliationService.runDaily (integration)', () => {
     const crypto = new CryptoService();
     const kyc = { assertKycForWithdrawal: async () => undefined } as never;
 
-    wallet = new WalletService(db as never, notifications, ecpay, crypto, kyc);
+    wallet = new WalletService(db as never, notifications, ecpay, crypto, kyc, mockSystemConfig as SystemConfigService);
     recon = new ReconciliationService(db as never, notifications);
   });
 

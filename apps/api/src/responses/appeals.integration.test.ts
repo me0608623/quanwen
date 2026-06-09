@@ -32,6 +32,16 @@ import { EcpayService } from '../wallet/ecpay.service';
 import { WalletService } from '../wallet/wallet.service';
 import { ReputationService } from './reputation.service';
 import { AppealsService } from './appeals.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+const mockSystemConfig: Partial<SystemConfigService> = {
+  getPlatformFeeRate: () => 0.10,
+  getPointsValueNtd: () => 0.5,
+  getMinWithdrawal: () => 300,
+  getMaxDailyWithdrawal: () => 30_000,
+  getMinDeposit: () => 100,
+  getMaxDeposit: () => 100_000,
+};
 
 const RESPONDENT_ID = '11111111-1111-1111-1111-111111111111';
 const SURVEYOR_ID = '22222222-2222-2222-2222-222222222222';
@@ -221,7 +231,7 @@ describe('AppealsService + ReputationService (integration)', () => {
     const crypto = new CryptoService();
     const kyc = { assertKycForWithdrawal: async () => undefined } as never;
 
-    const wallet = new WalletService(db as never, notifications, ecpay, crypto, kyc);
+    const wallet = new WalletService(db as never, notifications, ecpay, crypto, kyc, mockSystemConfig as SystemConfigService);
     reputation = new ReputationService(db as never);
     appeals = new AppealsService(
       db as never,

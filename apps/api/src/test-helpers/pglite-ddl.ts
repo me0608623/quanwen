@@ -333,6 +333,25 @@ export const LOGIC_RULES_DDL = `
   CREATE INDEX survey_logic_rules_target_idx  ON survey_logic_rules(target_question_id);
 `;
 
+export const SYSTEM_CONFIG_DDL = `
+  CREATE TABLE system_config (
+    key         VARCHAR(100) PRIMARY KEY,
+    value       TEXT         NOT NULL,
+    description VARCHAR(500),
+    updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+    updated_by  UUID         REFERENCES users(id) ON DELETE SET NULL
+  );
+
+  INSERT INTO system_config (key, value, description) VALUES
+    ('platform_fee_rate',       '0.10',    '平台手續費率（如 0.10 = 10%）'),
+    ('points_value_ntd',        '0.5',     '1 積分兌換 NT$ 值'),
+    ('min_withdrawal_ntd',      '300',     '最低提領金額（NT$）'),
+    ('max_daily_withdrawal_ntd','30000',   '每日最高提領金額（NT$）'),
+    ('min_deposit_ntd',         '100',     '最低存款金額（NT$）'),
+    ('max_deposit_ntd',         '100000',  '最高存款金額（NT$）')
+  ON CONFLICT DO NOTHING;
+`;
+
 /** All tables in dependency order — use this in integration tests instead of inlining DDL. */
 export const FULL_SCHEMA_DDL =
-  USERS_DDL + DAILY_USAGE_DDL + SURVEYS_DDL + RESPONSES_DDL + LOTTERY_DDL + PROFILES_DDL + MUTUAL_DDL + LOGIC_RULES_DDL;
+  USERS_DDL + DAILY_USAGE_DDL + SURVEYS_DDL + RESPONSES_DDL + LOTTERY_DDL + PROFILES_DDL + MUTUAL_DDL + LOGIC_RULES_DDL + SYSTEM_CONFIG_DDL;

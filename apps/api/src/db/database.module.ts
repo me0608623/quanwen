@@ -612,6 +612,26 @@ export { DB_TOKEN as DB };
             CREATE INDEX daily_usage_user_date_idx ON daily_usage(user_id, usage_date);
           `);
 
+          // issue-40: system_config table for dynamic business constants
+          await client.exec(`
+            CREATE TABLE system_config (
+              key         VARCHAR(100) PRIMARY KEY,
+              value       TEXT         NOT NULL,
+              description VARCHAR(500),
+              updated_at  TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+              updated_by  UUID         REFERENCES users(id) ON DELETE SET NULL
+            );
+
+            INSERT INTO system_config (key, value, description) VALUES
+              ('platform_fee_rate',        '0.10',   '平台手續費率（如 0.10 = 10%）'),
+              ('points_value_ntd',         '0.5',    '1 積分兌換 NT$ 值'),
+              ('min_withdrawal_ntd',       '300',    '最低提領金額（NT$）'),
+              ('max_daily_withdrawal_ntd', '30000',  '每日最高提領金額（NT$）'),
+              ('min_deposit_ntd',          '100',    '最低存款金額（NT$）'),
+              ('max_deposit_ntd',          '100000', '最高存款金額（NT$）')
+            ON CONFLICT DO NOTHING;
+          `);
+
           // QUA-196: Skip Logic / Conditional Branching
           await client.exec(`
             CREATE TYPE logic_condition AS ENUM (

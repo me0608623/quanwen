@@ -15,3 +15,4 @@ export * from './zai-call-log';
 export * from './survey-logic-rules';
 export * from './daily-usage';
 export * from './lottery';
+export * from './system-config';
