@@ -1142,6 +1142,14 @@ export class ExportService {
           .commit();
       }
 
+      // Backpressure: after each batch, yield to the event loop so the exceljs
+      // internal transform can flush its queued writes to `out`. If `out` still
+      // signals it needs to drain (buffer full / slow client), wait until it does
+      // before querying and writing the next batch.
+      if (out.writableNeedDrain) {
+        await once(out, 'drain');
+      }
+
       cursor = batch[batch.length - 1].id;
       if (batch.length < BATCH) break;
     }
