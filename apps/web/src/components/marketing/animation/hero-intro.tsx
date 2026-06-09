@@ -3,7 +3,8 @@
 import { useEffect, useLayoutEffect } from "react";
 import gsap from "gsap";
 
-const useIsomorphicLayoutEffect = typeof window !== "undefined" ? useLayoutEffect : useEffect;
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
 
 export function HeroIntro() {
   useIsomorphicLayoutEffect(() => {
@@ -57,11 +58,15 @@ export function HeroIntro() {
           },
           "-=0.55",
         )
-        .from(
+        .fromTo(
           "[data-hero-panel-item]",
           {
             opacity: 0,
             y: 14,
+          },
+          {
+            opacity: 1,
+            y: 0,
             duration: 0.38,
             stagger: 0.08,
           },
