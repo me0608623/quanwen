@@ -338,4 +338,75 @@ describe('WalletService withdrawal flow (integration)', () => {
       BadRequestException,
     );
   });
+
+  // ── Issue #35 regression tests ─────────────────────────────────────────────
+
+  it('7. 並發防護：餘額僅夠一筆時兩筆同時提現只建立一筆 withdrawal', async () => {
+    // Reset wallet to exactly NT$300 so only one of two concurrent requests
+    // can succeed.  Before the fix both requests could pass the outside-tx
+    // balance pre-check simultaneously.
+    await db
+      .update(schema.wallets)
+      .set({ cashBalance: 300, lockedCash: 0 })
+      .where(eq(schema.wallets.userId, USER_ID));
+
+    const results = await Promise.allSettled([
+      service.requestWithdrawal(USER_ID, 300, {
+        bankCode: '700',
+        bankAccount: '700-concurrent-1',
+        accountName: '並發A',
+      }),
+      service.requestWithdrawal(USER_ID, 300, {
+        bankCode: '700',
+        bankAccount: '700-concurrent-2',
+        accountName: '並發B',
+      }),
+    ]);
+
+    const succeeded = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected');
+
+    expect(succeeded.length).toBe(1);
+    expect(failed.length).toBe(1);
+
+    const state = await walletState();
+    expect(state.cash).toBe(0);
+    expect(state.locked).toBe(300);
+  });
+
+  it('8. 每日限額防護：事務內驗限額，超過上限拒絕', async () => {
+    // Cancel all prior withdrawal records for this user so the daily counter
+    // starts from zero (prior tests in this file created pending/success rows).
+    await db
+      .update(schema.transactions)
+      .set({ status: 'cancelled' })
+      .where(
+        and(
+          eq(schema.transactions.userId, USER_ID),
+          eq(schema.transactions.type, 'withdraw_request'),
+        ),
+      );
+
+    // Fund wallet generously so balance is not the limiting factor
+    await db
+      .update(schema.wallets)
+      .set({ cashBalance: 90_000, lockedCash: 0 })
+      .where(eq(schema.wallets.userId, USER_ID));
+
+    // Exhaust the NT$30,000 daily limit with one request
+    await service.requestWithdrawal(USER_ID, 30_000, {
+      bankCode: '700',
+      bankAccount: '700-daily-1',
+      accountName: '每日測試A',
+    });
+
+    // Any further request — even a minimum one — must be rejected
+    await expect(
+      service.requestWithdrawal(USER_ID, 300, {
+        bankCode: '700',
+        bankAccount: '700-daily-2',
+        accountName: '每日測試B',
+      }),
+    ).rejects.toThrow(BadRequestException);
+  });
 });
