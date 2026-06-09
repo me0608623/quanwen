@@ -153,17 +153,17 @@ export default function HomePage() {
 
       <section
         data-hero-root
-        className="relative isolate mx-auto max-w-[1180px] px-4 pb-20 pt-12 sm:px-6 sm:pb-24 lg:px-8 lg:pb-28 lg:pt-20"
+        className="q-hero-shell relative isolate mx-auto max-w-[1180px] px-4 pb-16 pt-9 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8 lg:pb-28 lg:pt-20"
       >
         <HeroBackdrop />
-        <div className="relative z-10 grid items-center gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
+        <div className="relative z-10 grid items-center gap-7 sm:gap-12 lg:grid-cols-[1.05fr_0.95fr] lg:gap-14">
           <div className="max-w-3xl">
             <p data-hero-badge className="q-home-kicker">
               AI 把關的雙邊問卷平台
             </p>
             <h1
               data-hero-title
-              className="mt-5 text-balance font-serif text-[clamp(3rem,4.8vw,4.3rem)] font-semibold leading-[0.92] tracking-[-0.055em] text-[var(--q-ink)]"
+              className="mt-4 text-balance font-serif text-[clamp(3.2rem,13.2vw,3.65rem)] font-semibold leading-[0.93] tracking-[-0.058em] text-[var(--q-ink)] sm:mt-5 sm:text-[clamp(3rem,4.8vw,4.3rem)] sm:leading-[0.92] sm:tracking-[-0.055em]"
             >
               發問卷找對的人，
               <br />
@@ -171,20 +171,20 @@ export default function HomePage() {
             </h1>
             <p
               data-hero-copy
-              className="mt-7 max-w-[38rem] text-pretty text-lg leading-8 text-[var(--q-body-strong)] sm:text-xl sm:leading-9"
+              className="mt-5 max-w-[38rem] text-pretty text-[1.0625rem] leading-[1.75] text-[var(--q-body-strong)] sm:mt-7 sm:text-xl sm:leading-9"
             >
               付費取樣、互惠交換、填答獎勵與 AI
               品質審核集中在同一個平台。研究者更快收到可信樣本，填答者也能清楚拿到回報。
             </p>
             <p
               data-hero-copy
-              className="mt-4 max-w-[34rem] text-pretty text-sm leading-7 text-[var(--q-muted)]"
+              className="mt-3 max-w-[34rem] text-pretty text-[0.9375rem] leading-7 text-[var(--q-muted)] sm:mt-4 sm:text-sm"
             >
               從問卷草稿、受眾媒合、反機器人檢核到金流託管，券問把收樣本的雜事整理成一條可追蹤的流程。
             </p>
             <div
               data-hero-cta
-              className="mt-9 flex flex-col gap-3 sm:flex-row sm:items-center"
+              className="mt-7 flex flex-col gap-3 sm:mt-9 sm:flex-row sm:items-center"
             >
               <Link
                 href="/auth/register"
@@ -236,7 +236,7 @@ export default function HomePage() {
       </section>
 
       <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]/80">
-        <div className="mx-auto grid max-w-[1180px] gap-3 px-4 py-5 text-sm font-medium text-[var(--q-muted)] sm:grid-cols-2 sm:px-6 lg:grid-cols-4 lg:px-8">
+        <div className="mx-auto grid max-w-[1180px] gap-2.5 px-4 py-4 text-[0.8125rem] font-medium leading-5 text-[var(--q-muted)] sm:grid-cols-2 sm:px-6 sm:py-5 sm:text-sm lg:grid-cols-4 lg:px-8">
           {trustItems.map((item) => (
             <span key={item} className="flex items-center gap-2">
               <span className="h-1.5 w-1.5 rounded-full bg-[var(--q-primary)]" />
@@ -257,7 +257,7 @@ export default function HomePage() {
               同一個帳號可以是問卷方、填答者，也可以用互惠模式先取得第一批回覆。
             </p>
           </div>
-          <div className="mt-12 grid gap-4 lg:grid-cols-2">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 lg:grid-cols-2">
             {modeCards.map((card, index) => (
               <article
                 key={card.title}
@@ -328,7 +328,7 @@ export default function HomePage() {
               拒絕垃圾數據，每一分預算都花在真樣本。
             </h2>
           </div>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-3">
             {aiLayers.map((layer) => (
               <article
                 key={layer.title}
@@ -343,7 +343,7 @@ export default function HomePage() {
               </article>
             ))}
           </div>
-          <div className="mt-8 rounded-[1.75rem] border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-6 shadow-[0_18px_60px_rgba(55,47,35,0.08)]">
+          <div className="mt-6 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-5 shadow-[0_18px_60px_rgba(55,47,35,0.08)] sm:mt-8 sm:rounded-[1.75rem] sm:p-6">
             <div className="flex items-center justify-between text-xs font-semibold tracking-[0.08em] text-[var(--q-muted)]">
               <span>品質分數軸</span>
               <span>灰區 AI 介入</span>
@@ -370,16 +370,18 @@ export default function HomePage() {
               多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本，填答方公平競爭。
             </p>
           </div>
-          <div className="mt-12 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
             {antiAbuseCards.map((card) => (
               <article key={card.title} className="q-mini-card">
                 <span className="q-mini-icon">{card.icon}</span>
-                <h3 className="mt-5 text-base font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
-                  {card.title}
-                </h3>
-                <p className="mt-3 text-sm leading-7 text-[var(--q-body)]">
-                  {card.desc}
-                </p>
+                <div className="q-mini-copy">
+                  <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                    {card.title}
+                  </h3>
+                  <p className="mt-2 text-sm leading-7 text-[var(--q-body)] sm:mt-3">
+                    {card.desc}
+                  </p>
+                </div>
               </article>
             ))}
           </div>
@@ -413,7 +415,7 @@ export default function HomePage() {
               </p>
             </div>
           </div>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-3">
             {workflowCards.map((card) => (
               <article key={card.title} className="q-home-card">
                 <h3 className="text-xl font-semibold tracking-[-0.025em] text-[var(--q-ink)]">
@@ -429,7 +431,7 @@ export default function HomePage() {
       </section>
 
       <section className="q-home-section q-home-section-tinted">
-        <div className="q-home-container grid gap-5 lg:grid-cols-2">
+        <div className="q-home-container grid gap-4 sm:gap-5 lg:grid-cols-2">
           <article className="q-proof-card">
             <h2 className="font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--q-ink)]">
               雙邊媒合，讓問卷方找到對的人。
@@ -470,7 +472,7 @@ export default function HomePage() {
               每一筆回覆，都要能被追蹤與信任。
             </h2>
           </div>
-          <div className="mt-12 grid gap-4 md:grid-cols-3">
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-3">
             {trustCards.map((card) => (
               <article
                 key={card.title}
@@ -488,7 +490,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="px-4 pb-20 sm:px-6 lg:px-8">
+      <section className="px-4 pb-16 pt-2 sm:px-6 sm:pb-20 sm:pt-0 lg:px-8">
         <div className="mx-auto max-w-[1180px] rounded-[2.25rem] bg-[var(--q-primary)] px-6 py-14 text-center text-[var(--q-on-primary)] shadow-[0_30px_90px_rgba(169,88,62,0.22)] sm:px-10 lg:py-16">
           <h2 className="mx-auto max-w-2xl text-balance font-serif text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
             準備好收到真實的回覆了嗎？

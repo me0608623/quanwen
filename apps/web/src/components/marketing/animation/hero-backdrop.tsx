@@ -10,11 +10,14 @@ import { ParticleField } from "./particle-field";
  */
 export function HeroBackdrop() {
   return (
-    <div aria-hidden className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-      <HeroThree className="absolute inset-y-0 right-0 h-full w-full opacity-70 sm:w-3/4 lg:w-1/2" />
-      <ParticleField className="absolute inset-0 h-full w-full opacity-60" />
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
+    >
+      <HeroThree className="absolute -top-8 right-[-34%] h-[44rem] w-[155%] opacity-45 sm:inset-y-0 sm:right-0 sm:h-full sm:w-3/4 sm:opacity-70 lg:w-1/2" />
+      <ParticleField className="absolute inset-0 h-full w-full opacity-35 sm:opacity-60" />
       {/* 與下方內容過渡的柔光遮罩,讓暖色畫布不被背景蓋過 */}
-      <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-[var(--q-canvas)]" />
+      <div className="absolute inset-x-0 bottom-0 h-36 bg-gradient-to-b from-transparent via-[var(--q-canvas)]/70 to-[var(--q-canvas)] sm:h-24 sm:via-transparent" />
     </div>
   );
 }

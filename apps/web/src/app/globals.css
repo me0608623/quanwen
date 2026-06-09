@@ -710,16 +710,41 @@
 }
 
 @layer components {
+  .q-hero-shell {
+    background:
+      radial-gradient(
+        circle at 72% 8%,
+        rgba(204, 120, 92, 0.16),
+        transparent 15rem
+      ),
+      radial-gradient(
+        circle at 18% 44%,
+        rgba(232, 165, 90, 0.1),
+        transparent 14rem
+      );
+  }
+
+  @screen sm {
+    .q-hero-shell {
+      background: transparent;
+    }
+  }
+
   .q-home-container {
     @apply mx-auto w-full max-w-[1180px] px-4 sm:px-6 lg:px-8;
   }
 
   .q-home-section {
-    @apply relative py-24 sm:py-28 lg:py-32;
+    @apply relative py-[4.75rem] sm:py-28 lg:py-32;
   }
 
   .q-home-section-tinted {
     background:
+      radial-gradient(
+        circle at 88% 2%,
+        rgba(93, 184, 166, 0.08),
+        transparent 18rem
+      ),
       radial-gradient(
         circle at 12% 18%,
         rgba(204, 120, 92, 0.1),
@@ -733,20 +758,20 @@
   }
 
   .q-home-kicker {
-    @apply text-xs font-semibold tracking-[0.18em] text-[var(--q-muted)];
+    @apply text-[0.6875rem] font-semibold tracking-[0.2em] text-[var(--q-muted)] sm:text-xs sm:tracking-[0.18em];
     text-transform: uppercase;
   }
 
   .q-home-heading {
-    @apply text-balance font-serif text-4xl font-semibold leading-[1.02] tracking-[-0.045em] text-[var(--q-ink)] sm:text-5xl lg:text-6xl;
+    @apply text-balance font-serif text-[2.35rem] font-semibold leading-[1.02] tracking-[-0.05em] text-[var(--q-ink)] sm:text-5xl sm:leading-[1.02] sm:tracking-[-0.045em] lg:text-6xl;
   }
 
   .q-home-lead {
-    @apply max-w-2xl text-pretty text-base leading-8 text-[var(--q-muted)] sm:text-lg;
+    @apply max-w-2xl text-pretty text-[0.98rem] leading-[1.8] text-[var(--q-muted)] sm:text-lg sm:leading-8;
   }
 
   .q-home-card {
-    @apply rounded-[1.75rem] border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-6 shadow-[0_18px_60px_rgba(55,47,35,0.07)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_80px_rgba(55,47,35,0.11)] sm:p-7;
+    @apply rounded-[1.45rem] border border-[var(--q-hairline)] bg-[var(--q-surface-card)] p-5 shadow-[0_14px_42px_rgba(55,47,35,0.065)] transition duration-300 hover:-translate-y-1 hover:shadow-[0_26px_80px_rgba(55,47,35,0.11)] sm:rounded-[1.75rem] sm:p-7 sm:shadow-[0_18px_60px_rgba(55,47,35,0.07)];
   }
 
   .q-home-card-flat {
@@ -759,15 +784,19 @@
   }
 
   .q-step-card {
-    @apply grid grid-cols-[3rem_1fr] gap-5 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-5 shadow-[0_16px_48px_rgba(55,47,35,0.06)] sm:p-6;
+    @apply grid grid-cols-[2.5rem_1fr] gap-4 rounded-[1.35rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-4 shadow-[0_12px_38px_rgba(55,47,35,0.055)] sm:grid-cols-[3rem_1fr] sm:gap-5 sm:rounded-[1.5rem] sm:p-6 sm:shadow-[0_16px_48px_rgba(55,47,35,0.06)];
   }
 
   .q-mini-card {
-    @apply rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-5 transition duration-300 hover:-translate-y-1 hover:bg-[var(--q-canvas)] sm:p-6;
+    @apply grid grid-cols-[2.75rem_1fr] items-start gap-3.5 rounded-[1.35rem] border border-[var(--q-hairline)] bg-[var(--q-canvas)] p-4 shadow-[0_10px_32px_rgba(55,47,35,0.045)] transition duration-300 hover:-translate-y-1 hover:bg-[var(--q-canvas)] sm:block sm:rounded-[1.5rem] sm:p-6 sm:shadow-none;
   }
 
   .q-mini-icon {
-    @apply inline-flex h-10 w-10 items-center justify-center rounded-[0.9rem] bg-[var(--q-surface-cream-strong)] text-sm font-semibold text-[var(--q-ink)];
+    @apply inline-flex h-11 w-11 items-center justify-center rounded-[0.95rem] bg-[var(--q-surface-cream-strong)] text-sm font-semibold text-[var(--q-ink)] sm:h-10 sm:w-10 sm:rounded-[0.9rem];
+  }
+
+  .q-mini-copy {
+    @apply min-w-0 sm:mt-5;
   }
 
   .q-proof-card {
@@ -779,7 +808,7 @@
   }
 
   .q-hero-panel {
-    @apply relative overflow-hidden rounded-[2rem] bg-[var(--q-surface-dark)] p-5 text-[var(--q-on-dark)] shadow-[0_34px_100px_rgba(24,23,21,0.22)] sm:p-7 lg:mt-8;
+    @apply relative overflow-hidden rounded-[1.55rem] bg-[var(--q-surface-dark)] p-4 text-[var(--q-on-dark)] shadow-[0_24px_72px_rgba(24,23,21,0.24)] sm:rounded-[2rem] sm:p-7 sm:shadow-[0_34px_100px_rgba(24,23,21,0.22)] lg:mt-8;
   }
 
   .q-hero-panel::before {
@@ -806,11 +835,11 @@
   }
 
   .q-hero-mode {
-    @apply flex items-start gap-4 rounded-[1.15rem] border border-white/10 bg-white/[0.055] px-4 py-4 transition duration-300 hover:bg-white/[0.085];
+    @apply flex items-start gap-3.5 rounded-[1rem] border border-white/10 bg-white/[0.055] px-3.5 py-3.5 transition duration-300 hover:bg-white/[0.085] sm:gap-4 sm:rounded-[1.15rem] sm:px-4 sm:py-4;
   }
 
   .q-hero-mode-icon {
-    @apply inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-[0.9rem] bg-[var(--q-on-dark)] text-xs font-bold tracking-[-0.04em] text-[var(--q-surface-dark)];
+    @apply inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[0.8rem] bg-[var(--q-on-dark)] text-[0.7rem] font-bold tracking-[-0.04em] text-[var(--q-surface-dark)] sm:h-10 sm:w-10 sm:rounded-[0.9rem] sm:text-xs;
   }
 
   .q-btn {
