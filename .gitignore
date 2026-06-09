@@ -51,3 +51,6 @@ boot.log
 # Obsidian 文件庫：筆記(.md)進 repo，編輯器個人 UI 狀態不進
 quanwen/.obsidian/workspace*.json
 quanwen/.obsidian/cache
+
+.ao/
+.claude/
