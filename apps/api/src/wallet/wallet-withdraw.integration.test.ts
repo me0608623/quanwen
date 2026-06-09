@@ -28,7 +28,9 @@ import { EcpayService } from './ecpay.service';
 import { WalletService } from './wallet.service';
 import { CryptoService } from '../common/crypto.service';
 
-const USER_ID = '11111111-1111-1111-1111-111111111111';
+const USER_ID  = '11111111-1111-1111-1111-111111111111';
+const ADMIN_ID = '22222222-2222-2222-2222-222222222222';
+const ADMIN_IP = '192.168.1.1';
 
 describe('WalletService withdrawal flow (integration)', () => {
   let client: PGlite;
@@ -88,6 +90,9 @@ describe('WalletService withdrawal flow (integration)', () => {
         metadata            JSONB,
         created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
         completed_at        TIMESTAMPTZ,
+        approved_by         UUID REFERENCES users(id) ON DELETE SET NULL,
+        action_at           TIMESTAMPTZ,
+        action_ip           TEXT,
         UNIQUE (external_provider, external_ref)
       );
 
@@ -119,10 +124,12 @@ describe('WalletService withdrawal flow (integration)', () => {
       );
     `);
 
-    // seed user + wallet with NT$1500 cash
+    // seed user + wallet with NT$1500 cash, plus admin user for audit tracking
     await client.exec(`
       INSERT INTO users (id, email, role, display_name)
       VALUES ('${USER_ID}', 'aa@aa.aa', 'respondent', '受試者 aa');
+      INSERT INTO users (id, email, role, display_name)
+      VALUES ('${ADMIN_ID}', 'admin@aa.aa', 'admin', '管理員');
       INSERT INTO wallets (user_id, cash_balance) VALUES ('${USER_ID}', 1500);
     `);
 
@@ -215,20 +222,23 @@ describe('WalletService withdrawal flow (integration)', () => {
     const stateBefore = await walletState();
     expect(stateBefore.locked).toBeGreaterThanOrEqual(400);
 
-    await service.approveWithdrawal(transactionId);
+    await service.approveWithdrawal(transactionId, ADMIN_ID, ADMIN_IP);
 
     const stateAfter = await walletState();
     expect(stateAfter.locked).toBe(stateBefore.locked - 400);
     // approve 不影響 cashBalance（cash 在 request 時已扣）
     expect(stateAfter.cash).toBe(stateBefore.cash);
 
-    // request 單變 success
+    // request 單變 success，且寫入審核追蹤欄位
     const [reqTxn] = await db
       .select()
       .from(schema.transactions)
       .where(eq(schema.transactions.id, transactionId))
       .limit(1);
     expect(reqTxn?.status).toBe('success');
+    expect(reqTxn?.approvedBy).toBe(ADMIN_ID);
+    expect(reqTxn?.actionAt).toBeInstanceOf(Date);
+    expect(reqTxn?.actionIp).toBe(ADMIN_IP);
 
     // 找對應 complete txn
     const completes = await db
@@ -261,7 +271,7 @@ describe('WalletService withdrawal flow (integration)', () => {
     const stateBefore = await walletState();
     expect(stateBefore.locked).toBeGreaterThanOrEqual(350);
 
-    await service.rejectWithdrawal(transactionId, '銀行帳戶資料有誤');
+    await service.rejectWithdrawal(transactionId, '銀行帳戶資料有誤', ADMIN_ID, ADMIN_IP);
 
     const stateAfter = await walletState();
     expect(stateAfter.cash).toBe(stateBefore.cash + 350); // 退回
@@ -274,6 +284,9 @@ describe('WalletService withdrawal flow (integration)', () => {
       .limit(1);
     expect(reqTxn?.status).toBe('cancelled');
     expect(reqTxn?.note ?? '').toContain('銀行帳戶資料有誤');
+    expect(reqTxn?.approvedBy).toBe(ADMIN_ID);
+    expect(reqTxn?.actionAt).toBeInstanceOf(Date);
+    expect(reqTxn?.actionIp).toBe(ADMIN_IP);
 
     // reject 不寫 journal
     const j = await journalTotals(transactionId);
@@ -309,9 +322,9 @@ describe('WalletService withdrawal flow (integration)', () => {
       bankAccount: '700-44444',
       accountName: '陳重審',
     });
-    await service.approveWithdrawal(transactionId);
+    await service.approveWithdrawal(transactionId, ADMIN_ID, ADMIN_IP);
 
-    await expect(service.approveWithdrawal(transactionId)).rejects.toThrow(
+    await expect(service.approveWithdrawal(transactionId, ADMIN_ID, ADMIN_IP)).rejects.toThrow(
       BadRequestException,
     );
   });

@@ -38,6 +38,11 @@ export interface AdminTransaction {
   relatedSurveyId: string | null;
   createdAt: string;
   completedAt: string | null;
+  approvedBy: string | null;
+  actionAt: string | null;
+  actionIp: string | null;
+  approvedByEmail: string | null;
+  approvedByDisplayName: string | null;
 }
 
 export interface AdminTransactionSummary {

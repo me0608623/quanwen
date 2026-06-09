@@ -65,6 +65,10 @@ export const transactions = pgTable('transactions', {
   metadata: jsonb('metadata'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   completedAt: timestamp('completed_at', { withTimezone: true }),
+  // 提領稽核欄位（approveWithdrawal / rejectWithdrawal 時寫入，留存操作員 ID、IP 與時間戳）
+  approvedBy: uuid('approved_by').references(() => users.id, { onDelete: 'set null' }),
+  actionAt: timestamp('action_at', { withTimezone: true }),
+  actionIp: text('action_ip'),
 }, (t) => ({
   // 外部交易冪等：同 provider + 同 ref 只能入帳一次
   uniqueExternalRef: unique('uq_transactions_external').on(t.externalProvider, t.externalRef),
