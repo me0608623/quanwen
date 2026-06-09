@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
@@ -59,8 +59,9 @@ function LoginForm() {
     loginMutation.mutate(
       { email: data.email.trim(), password: data.password },
       {
-        onSuccess: () => {
-          router.push(redirectTo?.startsWith("/") ? redirectTo : "/dashboard");
+        onSuccess: ({ user }) => {
+          const fallbackPath = user.role === "admin" ? "/admin" : "/dashboard";
+          router.push(redirectTo?.startsWith("/") ? redirectTo : fallbackPath);
         },
       }
     );
