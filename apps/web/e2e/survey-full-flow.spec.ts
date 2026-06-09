@@ -55,7 +55,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.getByPlaceholder('題目文字').nth(1).fill('你喜歡哪些程式語言？（可多選）');
       await page.getByPlaceholder('選項 1').nth(1).fill('JavaScript');
       await page.getByPlaceholder('選項 2').nth(1).fill('Python');
-      await page.getByPlaceholder('選項 3').nth(1).fill('Rust');
+      // 多選題預設 2 選項；填答僅用前兩個，不需第 3 個
 
       // 新增第三題：文字問答
       await page.locator('button.border-dashed').last().click();
@@ -147,8 +147,8 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.goto(`/dashboard/surveys/${surveyId}`);
       await page.waitForLoadState('networkidle');
 
-      // 修改標題
-      const titleInput = page.locator('input[type="text"]').first();
+      // 修改標題（draft 編輯器 title input 用 placeholder="未命名問卷"，canEdit=true）
+      const titleInput = page.locator('input[placeholder="未命名問卷"]').first();
       await titleInput.clear();
       await titleInput.fill(`QUA-250 編輯後標題 ${Date.now()}`);
 
@@ -395,8 +395,8 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.goto(`/dashboard/surveys/${surveyId}/stats`);
       await page.waitForLoadState('networkidle');
 
-      // 應該看到統計標題
-      await expect(page.locator('h1, h2').filter({ hasText: /統計|stats|分析/i })).toBeVisible();
+      // 統計頁 h1 是問卷標題；改驗證統計頁特徵元素（分析工具列 / 進階量化分析）
+      await expect(page.getByText(/分析工具列|進階量化分析/).first()).toBeVisible({ timeout: 7000 });
 
       // 應該看到回應數量
       await expect(page.locator('text=/2.*份|2.*responses/i')).toBeVisible({ timeout: 5000 });
@@ -431,7 +431,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.waitForLoadState('networkidle');
 
       // 尋找品質分布區塊
-      const qualitySection = page.locator('text=/品質|quality/i');
+      const qualitySection = page.locator('text=/品質|quality/i').first();
       if (await qualitySection.isVisible({ timeout: 3000 })) {
         await expect(qualitySection).toBeVisible();
 
