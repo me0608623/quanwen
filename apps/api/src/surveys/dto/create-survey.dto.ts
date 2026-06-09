@@ -15,7 +15,8 @@ export const SurveyQuestionSchema = z.object({
   isRequired: z.boolean().default(true),
   // QUA-279: 題目圖片 URL（上傳後回傳的路徑）
   imageUrl: z.string().max(500).nullish(),
-  config: z.record(z.string(), z.unknown()).optional(),
+  // nullish：讀取 API 對未設 config 的題目回傳 null，編輯存檔需可 round-trip（原 .optional() 擋掉 null → PATCH 400）
+  config: z.record(z.string(), z.unknown()).nullish(),
   // 上限 50:台灣縣市 22 個、Google Forms 匯入常見長清單,20 太緊(曾擋下合法匯入)
   options: z.array(QuestionOptionSchema).max(50).optional(),
 }).superRefine((question, ctx) => {

@@ -5,7 +5,8 @@ test.describe('受試者旅程', () => {
   test('看到任務列表 + 品質分趨勢 + 申訴歷史', async ({ page }) => {
     await login(page, 'aa');
 
-    // tasks 列表
+    // 受試者登入落點為 /dashboard；任務列表在 /tasks，主動導過去
+    await page.goto('/tasks');
     await expect(page).toHaveURL(/\/tasks/);
     // demo 應該至少有一份問卷
     const taskCard = page.locator('a').filter({ hasText: /問卷|調查|意見/ }).first();

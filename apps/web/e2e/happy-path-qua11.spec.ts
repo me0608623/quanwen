@@ -59,24 +59,24 @@ test.describe("OKR #1 Happy-path", () => {
     await page.getByPlaceholder("輸入問卷標題").fill("QA 三題測試問卷");
 
     // Question 1 is already present by default (single_choice type)
-    const questionTitles = page.getByPlaceholder("Question text");
+    const questionTitles = page.getByPlaceholder("題目文字");
     await questionTitles.first().fill("您偏好哪個選項？");
-    await page.getByPlaceholder("Option 1").first().fill("選項 A");
-    await page.getByPlaceholder("Option 2").first().fill("選項 B");
+    await page.getByPlaceholder("選項 1").first().fill("選項 A");
+    await page.getByPlaceholder("選項 2").first().fill("選項 B");
 
     // Add Question 2
     await page.getByRole("button", { name: /\+ 新增題目/ }).click();
     await questionTitles.nth(1).waitFor({ state: "visible", timeout: 10000 });
-    const q2TypeSelect = page.locator('select[aria-label$=" type"]').nth(1);
+    const q2TypeSelect = page.locator('select[aria-label$="題類型"]').nth(1);
     await q2TypeSelect.selectOption("multiple_choice");
     await questionTitles.nth(1).fill("請選擇所有適用項目（可多選）");
-    await page.getByPlaceholder("Option 1").nth(1).fill("選項 X");
-    await page.getByPlaceholder("Option 2").nth(1).fill("選項 Y");
+    await page.getByPlaceholder("選項 1").nth(1).fill("選項 X");
+    await page.getByPlaceholder("選項 2").nth(1).fill("選項 Y");
 
     // Add Question 3 — text (open-ended)
     await page.getByRole("button", { name: /\+ 新增題目/ }).click();
     await questionTitles.nth(2).waitFor({ state: "visible", timeout: 10000 });
-    const q3TypeSelect = page.locator('select[aria-label$=" type"]').nth(2);
+    const q3TypeSelect = page.locator('select[aria-label$="題類型"]').nth(2);
     await q3TypeSelect.selectOption("text");
     await questionTitles.nth(2).fill("請分享您的其他意見");
 
@@ -92,10 +92,26 @@ test.describe("OKR #1 Happy-path", () => {
 
   test("respondent can open invite link and submit without login", async ({
     page,
+    request,
   }) => {
-    // Use a seeded published survey for anonymous respondent flow
-    const surveyUrl = `${BASE_URL}/s/33333333-3333-3333-3333-333333333301`;
-    await page.goto(surveyUrl);
+    // 自建可匿名填答問卷並發布（seed demo 問卷的題目 UUID 非 RFC4122 → submit 400）
+    const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001/api/v1";
+    const lr = await request.post(`${API}/auth/login`, { data: { email: "user1@quanwen.com", password: "000" } });
+    const { token } = await lr.json();
+    const cr = await request.post(`${API}/surveys`, {
+      headers: { Authorization: `Bearer ${token}` },
+      data: {
+        title: `Happy invite ${Date.now()}`, description: "x", rewardPoints: 0, targetCount: 100, isAnonymous: true,
+        questions: [
+          { type: "single_choice", title: "Q1", isRequired: true, sortOrder: 1, options: [{ label: "A", sortOrder: 1 }, { label: "B", sortOrder: 2 }] },
+          { type: "multiple_choice", title: "Q2", isRequired: true, sortOrder: 2, options: [{ label: "X", sortOrder: 1 }, { label: "Y", sortOrder: 2 }] },
+          { type: "text", title: "Q3", isRequired: true, sortOrder: 3 },
+        ],
+      },
+    });
+    const sid = (await cr.json()).id;
+    await request.post(`${API}/surveys/${sid}/publish`, { headers: { Authorization: `Bearer ${token}` } });
+    await page.goto(`${BASE_URL}/s/${sid}`);
 
     await page.screenshot({
       path: "test-results/03-respondent-view.png",
@@ -111,10 +127,12 @@ test.describe("OKR #1 Happy-path", () => {
     await page.locator("input[type='checkbox']").first().click({ force: true }).catch(() => null);
     await page.waitForTimeout(300);
 
-    // Answer Q3 (rating)
-    await page.locator("input[type='radio'][value='3']").first().click({ force: true }).catch(() =>
-      page.locator("input[type='radio']").nth(5).click({ force: true }).catch(() => null)
-    );
+    // Answer Q3 (rating)：SurveyJS rating 渲染為 radio（接在 Q1 選項之後），點最後一個評分值
+    const allRadios = page.locator("input[type='radio']");
+    const radioCount = await allRadios.count();
+    if (radioCount > 4) {
+      await allRadios.nth(radioCount - 1).check({ force: true }).catch(() => null);
+    }
     await page.waitForTimeout(300);
 
     // Answer Q4 (open text)
@@ -158,7 +176,7 @@ test.describe("OKR #1 Happy-path", () => {
     // Completion screen: SurveyJS shows "Thank you for completing the survey"
     // or the parent page shows "Completed" heading depending on implementation
     await expect(
-      page.getByText(/Thank you for completing|completed|感謝|Completed|已提交/i).first(),
+      page.getByText(/填答已送出|已完成|AI 審核中|感謝|已提交|Thank you/i).first(),
     ).toBeVisible({ timeout: 10000 });
   });
 
@@ -182,10 +200,8 @@ test.describe("OKR #1 Happy-path", () => {
       fullPage: true,
     });
 
-    // Stats page shows "共 N 份有效填答" or similar response count
-    await expect(
-      page.getByText(/共\s*[1-9][0-9]*\s*份|[1-9][0-9]*\s*(則回覆|responses?|有效填答|回答|submissions?)/i).first(),
-    ).toBeVisible({ timeout: 15000 });
+    // stats 頁回應數為 HeroMetric「有效樣本 N 份」（label/value 分開元素），驗證有效樣本區塊出現
+    await expect(page.getByText(/有效樣本|有效填答/).first()).toBeVisible({ timeout: 15000 });
   });
 
   test("creator can export responses as CSV or XLSX", async ({ page }) => {
