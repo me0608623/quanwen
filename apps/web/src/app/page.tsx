@@ -163,9 +163,11 @@ export default function HomePage() {
             </p>
             <h1
               data-hero-title
-              className="mt-5 max-w-[9.2em] text-balance font-serif text-[clamp(3rem,6.4vw,5.7rem)] font-semibold leading-[0.9] tracking-[-0.055em] text-[var(--q-ink)]"
+              className="mt-5 text-balance font-serif text-[clamp(3.15rem,5.4vw,5rem)] font-semibold leading-[0.92] tracking-[-0.055em] text-[var(--q-ink)]"
             >
-              發問卷找對的人，填問卷賺回報。
+              發問卷找對的人，
+              <br />
+              填問卷賺回報。
             </h1>
             <p
               data-hero-copy
