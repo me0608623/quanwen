@@ -1,6 +1,6 @@
 import { BadRequestException, ForbiddenException, Injectable, Inject, Logger, NotFoundException } from '@nestjs/common';
 import { DB, type AppDb } from '../db';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, inArray, sql, isNotNull } from 'drizzle-orm';
 import { surveys, surveyQuestions, questionOptions, surveyResponses, responseAnswers } from '../db/schema';
 import { welchTTest, oneWayAnova, multipleLinearRegression } from './stats-math';
 
@@ -216,55 +216,39 @@ export class AnalyticsService {
     if (!question) throw new BadRequestException('題目不屬於此問卷');
     if (question.type !== 'rating') throw new BadRequestException('描述統計僅支援評分題');
 
-    const ratings = await this.db
-      .select({ value: responseAnswers.ratingValue })
+    const [agg] = await this.db
+      .select({
+        mean: sql<number | null>`AVG(${responseAnswers.ratingValue})`,
+        stddev: sql<number | null>`STDDEV_POP(${responseAnswers.ratingValue})`,
+        min: sql<number | null>`MIN(${responseAnswers.ratingValue})`,
+        max: sql<number | null>`MAX(${responseAnswers.ratingValue})`,
+        count: sql<number>`COUNT(*)::int`,
+        median: sql<number | null>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${responseAnswers.ratingValue})`,
+        mode: sql<number | null>`MODE() WITHIN GROUP (ORDER BY ${responseAnswers.ratingValue})`,
+      })
       .from(responseAnswers)
       .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
       .where(
         and(
-          eq(surveyResponses.surveyId, surveyId),
+          eq(responseAnswers.surveyId, surveyId),
           eq(responseAnswers.questionId, questionId),
           inArray(surveyResponses.status, ['submitted', 'rewarded']),
+          isNotNull(responseAnswers.ratingValue),
         ),
       );
 
-    const values = ratings.map((r: { value: number | null }) => r.value).filter((v: number | null): v is number => v !== null);
-
-    if (values.length === 0) {
+    if (!agg || agg.count === 0) {
       return { mean: null, median: null, mode: null, stddev: null, min: null, max: null, count: 0 };
     }
 
-    const sorted = [...values].sort((a: number, b: number) => a - b);
-    const sum = values.reduce((s: number, v: number) => s + v, 0);
-    const mean = sum / values.length;
-
-    // Median
-    const mid = Math.floor(sorted.length / 2);
-    const median = sorted.length % 2 !== 0
-      ? sorted[mid]
-      : (sorted[mid - 1] + sorted[mid]) / 2;
-
-    // Mode
-    const freq = new Map<number, number>();
-    for (const v of values) freq.set(v, (freq.get(v) ?? 0) + 1);
-    let maxFreq = 0;
-    let mode: number | null = null;
-    for (const [val, count] of freq) {
-      if (count > maxFreq) { maxFreq = count; mode = val; }
-    }
-
-    // Standard deviation
-    const variance = values.reduce((s: number, v: number) => s + (v - mean) ** 2, 0) / values.length;
-    const stddev = Math.sqrt(variance);
-
     return {
-      mean: Math.round(mean * 100) / 100,
-      median,
-      mode,
-      stddev: Math.round(stddev * 100) / 100,
-      min: sorted[0],
-      max: sorted[sorted.length - 1],
-      count: values.length,
+      mean: agg.mean !== null ? Math.round(Number(agg.mean) * 100) / 100 : null,
+      median: agg.median !== null ? Number(agg.median) : null,
+      mode: agg.mode !== null ? Number(agg.mode) : null,
+      stddev: agg.stddev !== null ? Math.round(Number(agg.stddev) * 100) / 100 : null,
+      min: agg.min !== null ? Number(agg.min) : null,
+      max: agg.max !== null ? Number(agg.max) : null,
+      count: agg.count,
     };
   }
 
@@ -661,46 +645,25 @@ export class AnalyticsService {
       throw new BadRequestException('相關性分析僅支援評分題');
     }
 
-    // 取得同時回答 A 和 B 的所有 response
-    const answersA = await this.db
-      .select({ responseId: responseAnswers.responseId, value: responseAnswers.ratingValue })
-      .from(responseAnswers)
-      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
-      .where(
-        and(
-          eq(surveyResponses.surveyId, surveyId),
-          eq(responseAnswers.questionId, questionAId),
-          inArray(surveyResponses.status, ['submitted', 'rewarded']),
-        ),
-      );
+    // 單一 SQL CORR() 查詢取代兩次全量載入 + JS Pearson 計算
+    const corrResult = await this.db.execute<{ pearsonr: number | null; n: number }>(sql`
+      SELECT
+        CORR(a.rating_value, b.rating_value)::float AS pearsonr,
+        COUNT(*)::int AS n
+      FROM response_answers a
+      JOIN survey_responses sr ON a.response_id = sr.id
+      JOIN response_answers b ON a.response_id = b.response_id
+      WHERE a.survey_id = ${surveyId}
+        AND a.question_id = ${questionAId}
+        AND b.question_id = ${questionBId}
+        AND sr.status IN ('submitted', 'rewarded')
+        AND a.rating_value IS NOT NULL
+        AND b.rating_value IS NOT NULL
+    `);
 
-    const answersB = await this.db
-      .select({ responseId: responseAnswers.responseId, value: responseAnswers.ratingValue })
-      .from(responseAnswers)
-      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
-      .where(
-        and(
-          eq(surveyResponses.surveyId, surveyId),
-          eq(responseAnswers.questionId, questionBId),
-          inArray(surveyResponses.status, ['submitted', 'rewarded']),
-        ),
-      );
+    const row = corrResult.rows[0];
+    const n = Number(row?.n ?? 0);
 
-    const mapA = new Map<string, number>();
-    for (const a of answersA) {
-      if (a.value !== null) mapA.set(a.responseId, a.value);
-    }
-
-    // 配對 (x, y)
-    const pairs: [number, number][] = [];
-    for (const b of answersB) {
-      const aVal = mapA.get(b.responseId);
-      if (aVal !== undefined && b.value !== null) {
-        pairs.push([aVal, b.value]);
-      }
-    }
-
-    const n = pairs.length;
     if (n < 2) {
       return {
         questionA: { id: questionAId, title: qA[0].title },
@@ -711,11 +674,8 @@ export class AnalyticsService {
       };
     }
 
-    const pearsonR = calculatePearsonCorrelation(
-      pairs.map(([x]) => x),
-      pairs.map(([, y]) => y),
-    );
-    if (pearsonR === null) {
+    const rawR = row?.pearsonr;
+    if (rawR === null || rawR === undefined) {
       return {
         questionA: { id: questionAId, title: qA[0].title },
         questionB: { id: questionBId, title: qB[0].title },
@@ -725,6 +685,7 @@ export class AnalyticsService {
       };
     }
 
+    const pearsonR = Math.round(Number(rawR) * 1000) / 1000;
     const absR = Math.abs(pearsonR);
     const interpretation =
       absR >= 0.7 ? '強相關' :
@@ -815,7 +776,27 @@ export class AnalyticsService {
     const qIds = ratingQuestions.map((q: { id: string }) => q.id);
     const allQIds = [...qIds, ...choiceQIds];
 
-    // 取得所有可分群回答（評分值 + 選擇題選項）
+    // 隨機抽樣最多 5000 筆 response，避免 k-means 把全量資料載入記憶體造成 OOM
+    const SEGMENTATION_SAMPLE_LIMIT = 5000;
+    const sampledResponses = await this.db
+      .select({ id: surveyResponses.id })
+      .from(surveyResponses)
+      .where(
+        and(
+          eq(surveyResponses.surveyId, surveyId),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+        ),
+      )
+      .orderBy(sql`RANDOM()`)
+      .limit(SEGMENTATION_SAMPLE_LIMIT);
+
+    const sampledIds = sampledResponses.map((r) => r.id);
+
+    if (sampledIds.length === 0) {
+      return { segments: [], totalRespondents: 0, normalizedToCommonScale: true };
+    }
+
+    // 只取抽樣到的 response 的回答，無需再 JOIN survey_responses（sampledIds 已過濾）
     const allAnswers = await this.db
       .select({
         responseId: responseAnswers.responseId,
@@ -824,12 +805,10 @@ export class AnalyticsService {
         selectedOptionIds: responseAnswers.selectedOptionIds,
       })
       .from(responseAnswers)
-      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
       .where(
         and(
-          eq(surveyResponses.surveyId, surveyId),
+          inArray(responseAnswers.responseId, sampledIds),
           inArray(responseAnswers.questionId, allQIds),
-          inArray(surveyResponses.status, ['submitted', 'rewarded']),
         ),
       );
 
@@ -1227,19 +1206,61 @@ export class AnalyticsService {
     await this.verifyAccess(surveyId, surveyorId);
 
     const questions = await this.db
-      .select()
+      .select({ id: surveyQuestions.id })
       .from(surveyQuestions)
       .where(
         and(
           eq(surveyQuestions.surveyId, surveyId),
-          inArray(surveyQuestions.type, ['rating']),
+          eq(surveyQuestions.type, 'rating'),
         ),
       );
 
+    // 預設：所有評分題都回傳空統計（count=0, nulls），有資料的再覆蓋
     const result: Record<string, DescriptiveStats> = {};
     for (const q of questions) {
-      result[q.id] = await this.getDescriptiveStats(surveyId, surveyorId, q.id);
+      result[q.id] = { mean: null, median: null, mode: null, stddev: null, min: null, max: null, count: 0 };
     }
+
+    if (questions.length === 0) return result;
+
+    const qIds = questions.map((q) => q.id);
+
+    // 單一 GROUP BY 查詢取代 N+1 次 getDescriptiveStats 呼叫
+    const rows = await this.db
+      .select({
+        questionId: responseAnswers.questionId,
+        mean: sql<number | null>`AVG(${responseAnswers.ratingValue})`,
+        stddev: sql<number | null>`STDDEV_POP(${responseAnswers.ratingValue})`,
+        min: sql<number | null>`MIN(${responseAnswers.ratingValue})`,
+        max: sql<number | null>`MAX(${responseAnswers.ratingValue})`,
+        count: sql<number>`COUNT(*)::int`,
+        median: sql<number | null>`PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY ${responseAnswers.ratingValue})`,
+        mode: sql<number | null>`MODE() WITHIN GROUP (ORDER BY ${responseAnswers.ratingValue})`,
+      })
+      .from(responseAnswers)
+      .innerJoin(surveyResponses, eq(responseAnswers.responseId, surveyResponses.id))
+      .where(
+        and(
+          eq(responseAnswers.surveyId, surveyId),
+          inArray(responseAnswers.questionId, qIds),
+          inArray(surveyResponses.status, ['submitted', 'rewarded']),
+          isNotNull(responseAnswers.ratingValue),
+        ),
+      )
+      .groupBy(responseAnswers.questionId);
+
+    for (const row of rows) {
+      result[row.questionId] = {
+        mean: row.mean !== null ? Math.round(Number(row.mean) * 100) / 100 : null,
+        median: row.median !== null ? Number(row.median) : null,
+        mode: row.mode !== null ? Number(row.mode) : null,
+        stddev: row.stddev !== null ? Math.round(Number(row.stddev) * 100) / 100 : null,
+        min: row.min !== null ? Number(row.min) : null,
+        max: row.max !== null ? Number(row.max) : null,
+        count: row.count,
+      };
+    }
+
     return result;
   }
 }
