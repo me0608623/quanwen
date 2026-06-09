@@ -15,16 +15,11 @@ import {
   journalEntries,
   surveys,
 } from '../db/schema';
-
-const POINTS_VALUE_NTD = 0.5; // 1 積分 = NT$0.5（顯示用）
 import { NotificationsService } from '../notifications/notifications.service';
 import { EcpayService } from './ecpay.service';
 import { CryptoService } from '../common/crypto.service';
 import { KycService } from '../kyc/kyc.service';
-
-const PLATFORM_FEE_RATE = 0.10; // 10% 手續費（2026-06-07 由 15% 調降）
-const MIN_WITHDRAWAL = 300;
-const MAX_DAILY_WITHDRAWAL = 30_000;
+import { SystemConfigService } from '../system-config/system-config.service';
 
 @Injectable()
 export class WalletService {
@@ -37,12 +32,13 @@ export class WalletService {
     private readonly crypto: CryptoService,
     @Inject(forwardRef(() => KycService))
     private readonly kyc: KycService,
+    private readonly systemConfig: SystemConfigService,
   ) {}
 
-  // ─── 手續費 / 單份成本（獎金 + 10% 手續費）──────────────────────────────────
+  // ─── 手續費 / 單份成本（獎金 + 手續費率）────────────────────────────────────
   // 鎖定預算、預算檢查、發獎扣款三處必須用同一個單份成本，否則鎖定額與實付額不一致。
   private feeFor(reward: number): number {
-    return Math.ceil(reward * PLATFORM_FEE_RATE);
+    return Math.ceil(reward * this.systemConfig.getPlatformFeeRate());
   }
   private unitCostFor(reward: number): number {
     return reward + this.feeFor(reward);
@@ -90,8 +86,10 @@ export class WalletService {
   // ─── ECPay 儲值 ───────────────────────────────────────────────────────────
 
   async createEcpayOrder(userId: string, amount: number): Promise<string> {
-    if (amount < 100 || amount > 100_000) {
-      throw new BadRequestException('儲值金額需在 NT$100～NT$100,000 之間');
+    const minDeposit = this.systemConfig.getMinDeposit();
+    const maxDeposit = this.systemConfig.getMaxDeposit();
+    if (amount < minDeposit || amount > maxDeposit) {
+      throw new BadRequestException(`儲值金額需在 NT$${minDeposit}～NT$${maxDeposit} 之間`);
     }
     await this.ensureWallet(userId);
 
@@ -269,7 +267,7 @@ export class WalletService {
 
     if (rewardAmount <= 0) return { status: 'skipped' };
 
-    const platformFee = Math.ceil(rewardAmount * PLATFORM_FEE_RATE);
+    const platformFee = this.feeFor(rewardAmount);
     const totalDeduct = rewardAmount + platformFee;
 
     await this.ensureWallet(surveyorId);
@@ -372,7 +370,7 @@ export class WalletService {
           status: txResult.status,
           relatedSurveyId: surveyId,
           relatedResponseId: responseId,
-          note: `平台手續費 10%`,
+          note: `平台手續費 ${Math.round(this.systemConfig.getPlatformFeeRate() * 100)}%`,
           completedAt: txResult.status === 'success' ? now : null,
         })
         .returning();
@@ -449,8 +447,9 @@ export class WalletService {
     amount: number,
     bankInfo: { bankCode: string; bankAccount: string; accountName: string },
   ): Promise<{ transactionId: string }> {
-    if (amount < MIN_WITHDRAWAL) {
-      throw new BadRequestException(`最低提領金額為 NT$${MIN_WITHDRAWAL}`);
+    const minWithdrawal = this.systemConfig.getMinWithdrawal();
+    if (amount < minWithdrawal) {
+      throw new BadRequestException(`最低提領金額為 NT$${minWithdrawal}`);
     }
 
     // Phase B: 提領 ≥ NT$2,000 需先通過 KYC
@@ -478,8 +477,9 @@ export class WalletService {
       );
 
     const usedToday = Number(todayTotal[0]?.total ?? 0);
-    if (usedToday + amount > MAX_DAILY_WITHDRAWAL) {
-      throw new BadRequestException(`每日提領上限 NT$${MAX_DAILY_WITHDRAWAL}，今日已申請 NT$${usedToday}`);
+    const maxDailyWithdrawal = this.systemConfig.getMaxDailyWithdrawal();
+    if (usedToday + amount > maxDailyWithdrawal) {
+      throw new BadRequestException(`每日提領上限 NT$${maxDailyWithdrawal}，今日已申請 NT$${usedToday}`);
     }
 
     // Phase K.2: 用 db.transaction 把 INSERT txn + UPDATE wallets 包成原子操作，
@@ -769,7 +769,7 @@ export class WalletService {
         userId: respondentId,
         type: 'reward_issued',
         title: `獲得 ${pointsAmount} 積分`,
-        body: `感謝你完成問卷！${pointsAmount} 積分已存入錢包（1 積分 ≈ NT$${POINTS_VALUE_NTD}）。`,
+        body: `感謝你完成問卷！${pointsAmount} 積分已存入錢包（1 積分 ≈ NT$${this.systemConfig.getPointsValueNtd()}）。`,
         metadata: { surveyId, responseId, points: pointsAmount },
       })
       .catch((err: unknown) =>
@@ -835,7 +835,7 @@ export class WalletService {
       totalEarned,
       totalSpent,
       thisMonth,
-      estimatedValue: Math.floor((wallet?.pointsBalance ?? 0) * POINTS_VALUE_NTD),
+      estimatedValue: Math.floor((wallet?.pointsBalance ?? 0) * this.systemConfig.getPointsValueNtd()),
     };
   }
 

@@ -4,6 +4,7 @@ import { eq, and, sql, inArray } from 'drizzle-orm';
 import type { AppDb } from '../db';
 import { wallets, transactions, journalEntries, surveys } from '../db/schema';
 import { BadRequestException, NotFoundException } from '@nestjs/common';
+import type { SystemConfigService } from '../system-config/system-config.service';
 
 describe('WalletService', () => {
   let service: WalletService;
@@ -12,6 +13,7 @@ describe('WalletService', () => {
   let mockEcpay: any;
   let mockCrypto: any;
   let mockKyc: any;
+  let mockSystemConfig: Partial<SystemConfigService>;
 
   beforeEach(() => {
     mockDb = {
@@ -32,6 +34,14 @@ describe('WalletService', () => {
     };
     mockKyc = {
       assertKycForWithdrawal: vi.fn(),
+    };
+    mockSystemConfig = {
+      getPlatformFeeRate: vi.fn().mockReturnValue(0.10),
+      getPointsValueNtd: vi.fn().mockReturnValue(0.5),
+      getMinWithdrawal: vi.fn().mockReturnValue(300),
+      getMaxDailyWithdrawal: vi.fn().mockReturnValue(30_000),
+      getMinDeposit: vi.fn().mockReturnValue(100),
+      getMaxDeposit: vi.fn().mockReturnValue(100_000),
     };
 
     // Helper to make chainable query builder
@@ -56,6 +66,7 @@ describe('WalletService', () => {
       mockEcpay,
       mockCrypto,
       mockKyc,
+      mockSystemConfig as SystemConfigService,
     );
   });
 

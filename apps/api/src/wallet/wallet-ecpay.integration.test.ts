@@ -31,6 +31,16 @@ process.env.PII_ENCRYPTION_KEY = 'test-pii-key-quanwen-integration-test-only';
 import * as schema from '../db/schema';
 import { EcpayService } from './ecpay.service';
 import { WalletService } from './wallet.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+const mockSystemConfig: Partial<SystemConfigService> = {
+  getPlatformFeeRate: () => 0.10,
+  getPointsValueNtd: () => 0.5,
+  getMinWithdrawal: () => 300,
+  getMaxDailyWithdrawal: () => 30_000,
+  getMinDeposit: () => 100,
+  getMaxDeposit: () => 100_000,
+};
 
 const AA_ID = '11111111-1111-1111-1111-111111111111';
 
@@ -161,7 +171,7 @@ describe('WalletService.processEcpayCallback (integration)', () => {
       isApproved: async () => false,
     } as never;
 
-    service = new WalletService(db as never, notifications, ecpay, crypto, kyc);
+    service = new WalletService(db as never, notifications, ecpay, crypto, kyc, mockSystemConfig as SystemConfigService);
   });
 
   afterAll(async () => {

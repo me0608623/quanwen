@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { APP_GUARD } from '@nestjs/core';
 import { DatabaseModule } from './db';
+import { SystemConfigModule } from './system-config/system-config.module';
 import { CommonModule } from './common/common.module';
 import { RedisModule } from './common/redis/redis.module';
 import { RedisThrottlerStorage } from './common/throttler/redis-throttler.storage';
@@ -26,6 +27,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 @Module({
   imports: [
     DatabaseModule,
+    SystemConfigModule,
     CommonModule,
     RedisModule,
     ScheduleModule.forRoot(),

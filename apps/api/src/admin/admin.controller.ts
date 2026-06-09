@@ -1,5 +1,5 @@
 import {
-  Controller, Get, Post, Body, Param, Query, Req,
+  Controller, Get, Post, Put, Body, Param, Query, Req,
   UseGuards, HttpCode, HttpStatus,
 } from '@nestjs/common';
 import type { Request } from 'express';
@@ -12,6 +12,7 @@ import { AppealsService } from '../responses/appeals.service';
 import { ResponsesService } from '../responses/responses.service';
 import { ReconciliationService } from '../wallet/reconciliation.service';
 import { MultiAccountDetectorService } from './multi-account-detector.service';
+import { SystemConfigService } from '../system-config/system-config.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { AdminGuard } from './admin.guard';
 import type { AuthenticatedUser } from '../auth/strategies/jwt.strategy';
@@ -36,6 +37,11 @@ type VerifyLotteryDto = z.infer<typeof VerifyLotterySchema>;
 const InterveneLotterySchema = z.object({ adminNote: z.string().trim().min(5).max(500) });
 type InterveneLotteryDto = z.infer<typeof InterveneLotterySchema>;
 
+const UpdateConfigSchema = z.object({
+  value: z.string().min(1).max(200).describe('設定值'),
+});
+type UpdateConfigDto = z.infer<typeof UpdateConfigSchema>;
+
 @Controller('admin')
 @UseGuards(JwtAuthGuard, AdminGuard)
 export class AdminController {
@@ -49,6 +55,7 @@ export class AdminController {
     private readonly reconciliation: ReconciliationService,
     private readonly multiAccountDetector: MultiAccountDetectorService,
     private readonly mutualService: MutualService,
+    private readonly systemConfig: SystemConfigService,
   ) {}
 
   // ─── 統計總覽 ────────────────────────────────────────────────────────────────
@@ -281,5 +288,26 @@ export class AdminController {
   ) {
     const user = req.user as AuthenticatedUser;
     return this.appeals.dismissAppeal(id, user.id, dto.adminNote);
+  }
+
+  // ─── 系統設定（issue-40：費率 / 限額動態化）────────────────────────────────
+
+  /** GET /admin/config — 列出所有系統設定 */
+  @Get('config')
+  getConfig() {
+    return this.systemConfig.getAll();
+  }
+
+  /** PUT /admin/config/:key — 更新單一設定值 */
+  @Put('config/:key')
+  @HttpCode(HttpStatus.OK)
+  async updateConfig(
+    @Param('key') key: string,
+    @Req() req: Request,
+    @Body(new ZodValidationPipe(UpdateConfigSchema)) dto: UpdateConfigDto,
+  ) {
+    const user = req.user as AuthenticatedUser;
+    await this.systemConfig.set(key, dto.value, user.id);
+    return { key, value: dto.value };
   }
 }
