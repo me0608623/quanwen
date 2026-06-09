@@ -5,6 +5,7 @@ import { HeroIntro } from "@/components/marketing/animation/hero-intro";
 import { ScrollReveal } from "@/components/marketing/animation/scroll-reveal";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { ScrollStorySection } from "@/components/marketing/scroll-story-section";
 
 const heroModes = [
   {
@@ -76,38 +77,37 @@ const mutualSteps = [
 
 const aiLayers = [
   {
-    title: "Layer 1 行為訊號偵測",
+    step: "Layer 1",
+    title: "行為訊號偵測",
     description:
       "比對填答耗時、作答頻率與點擊模式，先攔下機器人與明顯亂填樣本。",
   },
   {
-    title: "Layer 2 邏輯與注意力檢核",
+    step: "Layer 2",
+    title: "邏輯與注意力檢核",
     description: "搭配反向題與注意力檢核題，淘汰答非所問或注意力渙散的回覆。",
   },
   {
-    title: "Layer 3 AI 灰區裁決",
+    step: "Layer 3",
+    title: "AI 灰區裁決",
     description: "分數落在灰區時啟動語義分析，針對可疑樣本做更精準的最終判定。",
   },
 ];
 
 const antiAbuseCards = [
   {
-    icon: "⏱",
     title: "填答頻率上限",
     desc: "每人每小時與每日填答數量設有限制，正常使用足夠，短時間刷量會被擋下。",
   },
   {
-    icon: "⚡",
     title: "填太快即時警告",
     desc: "作答速度異常時會在填答中提醒，時間不足以閱讀的回覆不會發放獎勵。",
   },
   {
-    icon: "偵",
     title: "自動化行為偵測",
     desc: "偵測連續快速填答與爬蟲式操作後，系統會暫停該帳號的填答資格。",
   },
   {
-    icon: "信",
     title: "信譽分與停權",
     desc: "品質不佳會扣信譽分、降低接案優先權。連續退件則暫停接案。",
   },
@@ -151,6 +151,7 @@ export default function HomePage() {
       <ScrollReveal />
       <MarketingNav />
 
+      {/* ── Hero ──────────────────────────────────────────────────────────── */}
       <section
         data-hero-root
         className="q-hero-shell relative isolate mx-auto max-w-[1180px] px-4 pb-16 pt-9 sm:px-6 sm:pb-24 sm:pt-12 lg:px-8 lg:pb-28 lg:pt-20"
@@ -163,24 +164,18 @@ export default function HomePage() {
             </p>
             <h1
               data-hero-title
-              className="mt-4 text-balance font-serif text-[clamp(3.2rem,13.2vw,3.65rem)] font-semibold leading-[0.93] tracking-[-0.058em] text-[var(--q-ink)] sm:mt-5 sm:text-[clamp(3rem,4.8vw,4.3rem)] sm:leading-[0.92] sm:tracking-[-0.055em]"
+              className="mt-4 text-balance font-sans font-bold text-[clamp(2.9rem,12.5vw,3.5rem)] leading-[0.95] tracking-[-0.055em] text-[var(--q-ink)] sm:mt-5 sm:text-[clamp(2.8rem,4.6vw,4.1rem)] sm:leading-[0.93] sm:tracking-[-0.05em]"
             >
-              發問卷找對的人，
+              問卷找到對象，
               <br />
-              填問卷賺回報。
+              回答拿到獎賞。
             </h1>
             <p
               data-hero-copy
               className="mt-5 max-w-[38rem] text-pretty text-[1.0625rem] leading-[1.75] text-[var(--q-body-strong)] sm:mt-7 sm:text-xl sm:leading-9"
             >
-              付費取樣、互惠交換、填答獎勵與 AI
-              品質審核集中在同一個平台。研究者更快收到可信樣本，填答者也能清楚拿到回報。
-            </p>
-            <p
-              data-hero-copy
-              className="mt-3 max-w-[34rem] text-pretty text-[0.9375rem] leading-7 text-[var(--q-muted)] sm:mt-4 sm:text-sm"
-            >
-              從問卷草稿、受眾媒合、反機器人檢核到金流託管，券問把收樣本的雜事整理成一條可追蹤的流程。
+              券問把受眾媒合、填答獎勵、互惠交換與 AI
+              品質審核整合在一起，讓研究者更快收到可信樣本，也讓填答者把時間換成實際回饋。
             </p>
             <div
               data-hero-cta
@@ -204,7 +199,7 @@ export default function HomePage() {
                 <p className="text-xs font-semibold tracking-[0.18em] text-[var(--q-on-dark-soft)]">
                   WORKSPACE
                 </p>
-                <h2 className="mt-3 font-serif text-3xl font-semibold leading-none tracking-[-0.035em] text-[var(--q-on-dark)] sm:text-4xl">
+                <h2 className="mt-3 font-sans text-2xl font-bold leading-tight tracking-[-0.04em] text-[var(--q-on-dark)] sm:text-3xl">
                   一個帳號，四種任務。
                 </h2>
               </div>
@@ -235,6 +230,7 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Trust strip ───────────────────────────────────────────────────── */}
       <section className="border-y border-[var(--q-hairline-soft)] bg-[var(--q-surface-soft)]/80">
         <div className="mx-auto grid max-w-[1180px] gap-2.5 px-4 py-4 text-[0.8125rem] font-medium leading-5 text-[var(--q-muted)] sm:grid-cols-2 sm:px-6 sm:py-5 sm:text-sm lg:grid-cols-4 lg:px-8">
           {trustItems.map((item) => (
@@ -246,6 +242,7 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Four use modes ─────────────────────────────────────────────────── */}
       <section id="modes" className="q-home-section">
         <div className="q-home-container">
           <div className="max-w-3xl">
@@ -257,37 +254,54 @@ export default function HomePage() {
               同一個帳號可以是問卷方、填答者，也可以用互惠模式先取得第一批回覆。
             </p>
           </div>
-          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 lg:grid-cols-2">
-            {modeCards.map((card, index) => (
-              <article
-                key={card.title}
-                className={`q-home-card ${index === 0 ? "lg:translate-y-8" : ""}`}
-              >
-                <p className="q-card-label">{card.label}</p>
-                <h3 className="mt-4 text-2xl font-semibold leading-tight tracking-[-0.03em] text-[var(--q-ink)]">
-                  {card.title}
-                </h3>
-                <p className="mt-4 text-pretty text-sm leading-7 text-[var(--q-body)]">
-                  {card.desc}
-                </p>
-                {card.href ? (
-                  <a
-                    href={card.href}
-                    className="mt-5 inline-flex text-sm font-semibold text-[var(--q-primary-active)] underline-offset-4 hover:underline"
-                  >
-                    看互惠運作
-                  </a>
-                ) : null}
-              </article>
-            ))}
+
+          {/* Bento-style: first two cards taller, last two shorter */}
+          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 lg:grid-cols-[1.15fr_0.85fr]">
+            {/* Left column: two stacked */}
+            <div className="flex flex-col gap-3.5 sm:gap-4">
+              {modeCards.slice(0, 2).map((card) => (
+                <article key={card.title} className="q-home-card q-home-card-feature">
+                  <p className="q-card-label">{card.label}</p>
+                  <h3 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.025em] text-[var(--q-ink)] sm:text-2xl">
+                    {card.title}
+                  </h3>
+                  <p className="mt-4 text-pretty text-sm leading-7 text-[var(--q-body)]">
+                    {card.desc}
+                  </p>
+                </article>
+              ))}
+            </div>
+            {/* Right column: two stacked */}
+            <div className="flex flex-col gap-3.5 sm:gap-4 lg:mt-10">
+              {modeCards.slice(2, 4).map((card) => (
+                <article key={card.title} className="q-home-card">
+                  <p className="q-card-label">{card.label}</p>
+                  <h3 className="mt-4 text-xl font-semibold leading-tight tracking-[-0.025em] text-[var(--q-ink)]">
+                    {card.title}
+                  </h3>
+                  <p className="mt-4 text-pretty text-sm leading-7 text-[var(--q-body)]">
+                    {card.desc}
+                  </p>
+                  {card.href ? (
+                    <a
+                      href={card.href}
+                      className="mt-5 inline-flex text-sm font-semibold text-[var(--q-primary-active)] underline-offset-4 hover:underline"
+                    >
+                      看互惠運作
+                    </a>
+                  ) : null}
+                </article>
+              ))}
+            </div>
           </div>
         </div>
       </section>
 
-      <section
-        id="mutual-flow"
-        className="q-home-section q-home-section-tinted"
-      >
+      {/* ── Scroll story: 4 stages ─────────────────────────────────────────── */}
+      <ScrollStorySection />
+
+      {/* ── Mutual flow ────────────────────────────────────────────────────── */}
+      <section id="mutual-flow" className="q-home-section">
         <div className="q-home-container">
           <div className="grid gap-8 lg:grid-cols-[0.9fr_1.1fr] lg:items-start">
             <div>
@@ -320,30 +334,36 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="q-home-section">
+      {/* ── Quality audit pipeline ─────────────────────────────────────────── */}
+      <section className="q-home-section q-home-section-tinted">
         <div className="q-home-container">
-          <div className="max-w-3xl">
-            <p className="q-home-kicker">品質審核</p>
-            <h2 className="q-home-heading mt-4">
-              拒絕垃圾數據，每一分預算都花在真樣本。
-            </h2>
+          <div className="grid gap-10 lg:grid-cols-[1fr_1fr] lg:gap-16 lg:items-start">
+            <div>
+              <h2 className="q-home-heading">
+                拒絕垃圾數據，每一分預算都花在真樣本。
+              </h2>
+              <p className="q-home-lead mt-5">
+                三層審核從行為偵測到 AI 語義分析，分數落在灰區才啟動深度裁決。
+              </p>
+            </div>
+            <div className="grid gap-3.5 sm:gap-4">
+              {aiLayers.map((layer) => (
+                <article key={layer.title} className="q-audit-step">
+                  <div className="q-audit-step-num">{layer.step}</div>
+                  <div>
+                    <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+                      {layer.title}
+                    </h3>
+                    <p className="mt-1.5 text-sm leading-7 text-[var(--q-body)]">
+                      {layer.description}
+                    </p>
+                  </div>
+                </article>
+              ))}
+            </div>
           </div>
-          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-3">
-            {aiLayers.map((layer) => (
-              <article
-                key={layer.title}
-                className="q-home-card q-home-card-flat"
-              >
-                <h3 className="text-lg font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
-                  {layer.title}
-                </h3>
-                <p className="mt-4 text-sm leading-7 text-[var(--q-body)]">
-                  {layer.description}
-                </p>
-              </article>
-            ))}
-          </div>
-          <div className="mt-6 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-5 shadow-[0_18px_60px_rgba(55,47,35,0.08)] sm:mt-8 sm:rounded-[1.75rem] sm:p-6">
+          {/* Score visualization */}
+          <div className="mt-8 rounded-[1.5rem] border border-[var(--q-hairline)] bg-[var(--q-surface-soft)] p-5 shadow-[0_18px_60px_rgba(55,47,35,0.08)] sm:mt-10 sm:rounded-[1.75rem] sm:p-6">
             <div className="flex items-center justify-between text-xs font-semibold tracking-[0.08em] text-[var(--q-muted)]">
               <span>品質分數軸</span>
               <span>灰區 AI 介入</span>
@@ -353,7 +373,7 @@ export default function HomePage() {
                 <span className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[var(--q-canvas)] bg-[var(--q-accent-teal)] shadow-[0_0_0_6px_rgba(93,184,166,0.18)]" />
               </div>
             </div>
-            <p className="mt-5 max-w-2xl text-sm leading-7 text-[var(--q-muted)]">
+            <p className="mt-4 max-w-2xl text-sm leading-7 text-[var(--q-muted)]">
               分數落在約 40 到 75 的灰區樣本，才會交由 AI
               灰區裁決做深度語義分析。
             </p>
@@ -361,42 +381,44 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="q-home-section q-home-section-tinted">
+      {/* ── Anti-abuse: 2x2 bento grid ─────────────────────────────────────── */}
+      <section className="q-home-section">
         <div className="q-home-container">
-          <div className="max-w-3xl">
-            <p className="q-home-kicker">防刷機制</p>
-            <h2 className="q-home-heading mt-4">獎勵只發給認真填答的人。</h2>
-            <p className="q-home-lead mt-5">
-              多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本，填答方公平競爭。
-            </p>
-          </div>
-          <div className="mt-8 grid gap-3.5 sm:mt-12 sm:gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {antiAbuseCards.map((card) => (
-              <article key={card.title} className="q-mini-card">
-                <span className="q-mini-icon">{card.icon}</span>
-                <div className="q-mini-copy">
-                  <h3 className="text-base font-semibold tracking-[-0.02em] text-[var(--q-ink)]">
+          <div className="grid gap-8 lg:grid-cols-[1fr_1.4fr] lg:gap-16 lg:items-center">
+            <div>
+              <p className="q-home-kicker">防刷機制</p>
+              <h2 className="q-home-heading mt-4">
+                獎勵只發給認真填答的人。
+              </h2>
+              <p className="q-home-lead mt-5">
+                多重防濫用機制守住每一份問卷的品質，讓問卷方拿到真實樣本，填答方公平競爭。
+              </p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              {antiAbuseCards.map((card) => (
+                <article key={card.title} className="q-abuse-card">
+                  <h3 className="text-sm font-semibold tracking-[-0.015em] text-[var(--q-ink)]">
                     {card.title}
                   </h3>
-                  <p className="mt-2 text-sm leading-7 text-[var(--q-body)] sm:mt-3">
+                  <p className="mt-2 text-xs leading-6 text-[var(--q-body)]">
                     {card.desc}
                   </p>
-                </div>
-              </article>
-            ))}
+                </article>
+              ))}
+            </div>
           </div>
-          <p className="mt-7 max-w-3xl text-xs leading-6 text-[var(--q-muted)]">
+          <p className="mt-6 max-w-3xl text-xs leading-6 text-[var(--q-muted)]">
             搭配 AI 三層品質審核，從填答行為到答案內容雙重把關。
           </p>
         </div>
       </section>
 
-      <section className="q-home-section">
+      {/* ── Workflow: import / analytics / lottery ─────────────────────────── */}
+      <section className="q-home-section q-home-section-tinted">
         <div className="q-home-container">
           <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-end">
             <div>
-              <p className="q-home-kicker">從建立到分析</p>
-              <h2 className="q-home-heading mt-4">
+              <h2 className="q-home-heading">
                 匯入、分析、抽獎，平台都幫你收好。
               </h2>
               <p className="q-home-lead mt-5">
@@ -407,7 +429,7 @@ export default function HomePage() {
               <p className="text-xs font-semibold tracking-[0.18em] text-[var(--q-on-dark-soft)]">
                 SAMPLE STATUS
               </p>
-              <p className="mt-4 text-4xl font-semibold tracking-[-0.05em] text-[var(--q-on-dark)]">
+              <p className="mt-4 font-sans text-4xl font-bold tracking-[-0.06em] text-[var(--q-on-dark)]">
                 286
               </p>
               <p className="mt-2 text-sm text-[var(--q-on-dark-soft)]">
@@ -430,10 +452,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="q-home-section q-home-section-tinted">
+      {/* ── Social proof: dual panel ───────────────────────────────────────── */}
+      <section className="q-home-section">
         <div className="q-home-container grid gap-4 sm:gap-5 lg:grid-cols-2">
           <article className="q-proof-card">
-            <h2 className="font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--q-ink)]">
+            <h2 className="q-home-heading">
               雙邊媒合，讓問卷方找到對的人。
             </h2>
             <ul className="mt-7 space-y-4 text-sm leading-7 text-[var(--q-body)]">
@@ -443,7 +466,7 @@ export default function HomePage() {
             </ul>
           </article>
           <article className="q-proof-card q-proof-card-dark">
-            <h2 className="font-serif text-4xl font-semibold leading-tight tracking-[-0.04em] text-[var(--q-on-dark)]">
+            <h2 className="q-home-heading-dark">
               填答者拿到想要的在地獎勵。
             </h2>
             <ul className="mt-7 space-y-4 text-sm leading-7 text-[var(--q-on-dark-soft)]">
@@ -453,7 +476,7 @@ export default function HomePage() {
             </ul>
             <div className="mt-8 rounded-[1.25rem] border border-white/10 bg-white/[0.06] p-5">
               <p className="text-xs text-[var(--q-on-dark-soft)]">我的收益</p>
-              <p className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[var(--q-on-dark)]">
+              <p className="mt-2 font-sans text-3xl font-bold tracking-[-0.05em] text-[var(--q-on-dark)]">
                 NT$ 2,860
               </p>
               <p className="mt-2 text-xs text-[var(--q-accent-teal)]">
@@ -464,7 +487,8 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="q-home-section">
+      {/* ── Trust foundation ──────────────────────────────────────────────── */}
+      <section className="q-home-section q-home-section-tinted">
         <div className="q-home-container">
           <div className="max-w-3xl">
             <p className="q-home-kicker">信任基礎</p>
@@ -490,9 +514,10 @@ export default function HomePage() {
         </div>
       </section>
 
+      {/* ── Final CTA ─────────────────────────────────────────────────────── */}
       <section className="px-4 pb-16 pt-2 sm:px-6 sm:pb-20 sm:pt-0 lg:px-8">
         <div className="mx-auto max-w-[1180px] rounded-[2.25rem] bg-[var(--q-primary)] px-6 py-14 text-center text-[var(--q-on-primary)] shadow-[0_30px_90px_rgba(169,88,62,0.22)] sm:px-10 lg:py-16">
-          <h2 className="mx-auto max-w-2xl text-balance font-serif text-4xl font-semibold leading-[1.02] tracking-[-0.045em] sm:text-5xl">
+          <h2 className="mx-auto max-w-2xl text-balance font-sans text-4xl font-bold leading-[1.02] tracking-[-0.05em] sm:text-5xl">
             準備好收到真實的回覆了嗎？
           </h2>
           <p className="mx-auto mt-5 max-w-xl text-pretty text-base leading-8 text-[var(--q-on-primary)]/90">
