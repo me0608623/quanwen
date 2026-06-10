@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { useAvailableSurveys, useConfirmLotteryReceipt, useCreateAppeal, useLotteryResults, useMyAppeals, useMyResponses, useReportLotteryIssue, useRespondentAssistant, useTaskCategoryCounts, type LotteryResult, type LotteryWinning, type MyResponseRecord } from '@/hooks/use-responses';
 import { SURVEY_CATEGORY_LABELS, type SurveyCategory } from '@/hooks/use-surveys';
 import { useState, useEffect } from 'react';
+import { useTabsKeyboard } from '@/hooks/use-tabs-keyboard';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import { lotteryDisclosure } from '@/lib/lottery-display';
 import { useMyProfile, type RespondentProfile } from '@/hooks/use-profile';
@@ -14,6 +15,9 @@ import { lotteryWinnerActions } from '@/lib/lottery-result-actions';
 
 const TAB = { available: '可填問卷', history: '填答紀錄', lottery: '抽獎回饋', brand: '企業品牌問卷' } as const;
 type TabKey = keyof typeof TAB;
+const TAB_KEYS = ['available', 'history', 'lottery', 'brand'] as const satisfies readonly TabKey[];
+
+const PAGE_SIZE = 20;
 
 function rewardLabel(survey: { rewardMode?: 'fixed' | 'lottery'; rewardPoints: number; lotteryPrize?: string | null }) {
   return survey.rewardMode === 'lottery' ? `抽 ${survey.lotteryPrize ?? '獎品'}` : `NT$${survey.rewardPoints}`;
@@ -32,11 +36,14 @@ function isRespondentProfile(profile: unknown): profile is RespondentProfile {
 
 export default function TasksPage() {
   const [tab, setTab] = useState<TabKey>('available');
+  const { handleKeyDown: handleTabKeyDown, registerRef: registerTabRef } = useTabsKeyboard(TAB_KEYS, tab, setTab);
   const [category, setCategory] = useState<SurveyCategory | ''>('');
   const [sortBy, setSortBy] = useState<'recommended' | 'reward' | 'newest'>('recommended');
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [availableLimit, setAvailableLimit] = useState(PAGE_SIZE);
+  const [historyLimit, setHistoryLimit] = useState(PAGE_SIZE);
   const { data: myProfile } = useMyProfile();
   const respondentProfile = isRespondentProfile(myProfile) ? myProfile : null;
   const { data: surveys = [], isLoading: surveysLoading, isError: surveysError, refetch: refetchSurveys } = useAvailableSurveys(category || undefined);
@@ -70,6 +77,9 @@ export default function TasksPage() {
       /* ignore */
     }
   }, [sortBy, urgentOnly]);
+
+  // Reset pagination when filters change so the user sees fresh results from the top
+  useEffect(() => { setAvailableLimit(PAGE_SIZE); }, [category, sortBy, urgentOnly, query]);
 
   // KPI 計算
   const availableCount = surveys.length;
@@ -174,11 +184,18 @@ export default function TasksPage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-border mb-6">
+      <div role="tablist" aria-label="任務頁籤" className="flex border-b border-border mb-6">
         {(Object.entries(TAB) as [TabKey, string][]).map(([key, label]) => (
           <button
             key={key}
+            ref={(el) => registerTabRef(key, el)}
+            role="tab"
+            id={`tasks-tab-${key}`}
+            aria-selected={tab === key}
+            aria-controls={`tasks-panel-${key}`}
+            tabIndex={tab === key ? 0 : -1}
             onClick={() => setTab(key)}
+            onKeyDown={handleTabKeyDown}
             className={[
               'px-4 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2',
               key === 'brand'
@@ -313,7 +330,7 @@ export default function TasksPage() {
 
       {/* Available surveys */}
       {tab === 'available' && (
-        <div className="space-y-3">
+        <div role="tabpanel" id="tasks-panel-available" aria-labelledby="tasks-tab-available" className="space-y-3">
           {surveysLoading && (
             <div className="space-y-3" aria-hidden>
               {[0, 1, 2].map((i) => (
@@ -359,7 +376,7 @@ export default function TasksPage() {
             </p>
           )}
 
-          {displayedSurveys.map((s) => (
+          {displayedSurveys.slice(0, availableLimit).map((s) => (
             <Link
               key={s.id}
               href={`/tasks/${s.id}`}
@@ -458,12 +475,22 @@ export default function TasksPage() {
               </div>
             </Link>
           ))}
+
+          {availableLimit < displayedSurveys.length && (
+            <button
+              type="button"
+              onClick={() => setAvailableLimit((n) => n + PAGE_SIZE)}
+              className="w-full rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              載入更多（還有 {displayedSurveys.length - availableLimit} 份）
+            </button>
+          )}
         </div>
       )}
 
       {/* 企業品牌問卷(淡金色) */}
       {tab === 'brand' && (
-        <div className="space-y-3">
+        <div role="tabpanel" id="tasks-panel-brand" aria-labelledby="tasks-tab-brand" className="space-y-3">
           {/* 金色主打橫幅 */}
           <div className="relative overflow-hidden rounded-xl border border-[#E5CF8C] bg-gradient-to-br from-[#FBF3DC] via-[#F8ECC8] to-[#F3E3AC] p-5">
             <div className="pointer-events-none absolute -right-10 -top-10 h-28 w-28 rounded-full bg-[#C9A227]/15 blur-2xl" />
@@ -533,7 +560,7 @@ export default function TasksPage() {
 
       {/* History */}
       {tab === 'history' && (
-        <div className="space-y-3">
+        <div role="tabpanel" id="tasks-panel-history" aria-labelledby="tasks-tab-history" className="space-y-3">
           {historyLoading && (
             <div className="space-y-3" aria-hidden>
               {[0, 1].map((i) => (
@@ -581,7 +608,7 @@ export default function TasksPage() {
             </div>
           )}
 
-          {history.map((r) => (
+          {history.slice(0, historyLimit).map((r) => (
             <div key={r.responseId} className="rounded-xl border border-border bg-background p-4 flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{r.surveyTitle}</p>
@@ -662,11 +689,21 @@ export default function TasksPage() {
               </div>
             </div>
           ))}
+
+          {historyLimit < history.length && (
+            <button
+              type="button"
+              onClick={() => setHistoryLimit((n) => n + PAGE_SIZE)}
+              className="w-full rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              載入更多（還有 {history.length - historyLimit} 筆）
+            </button>
+          )}
         </div>
       )}
 
       {tab === 'lottery' && (
-        <div className="space-y-3">
+        <div role="tabpanel" id="tasks-panel-lottery" aria-labelledby="tasks-tab-lottery" className="space-y-3">
           {lotteryResultsLoading && (
             <div className="space-y-3" aria-hidden>
               {[0, 1].map((i) => (

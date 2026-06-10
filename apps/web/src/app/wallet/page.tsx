@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Coins, Banknote, TrendingUp, Clock, Ticket } from 'lucide-react';
 import {
@@ -21,6 +21,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useEscapeKey } from '@/components/ui/use-escape-key';
 import { useLockBodyScroll } from '@/components/ui/use-lock-body-scroll';
 import { useFocusTrap } from '@/components/ui/use-focus-trap';
+import { useTabsKeyboard } from '@/hooks/use-tabs-keyboard';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
@@ -144,67 +145,219 @@ function DepositDialog({ onClose }: { onClose: () => void }) {
 
 // ─── 提領 Dialog ─────────────────────────────────────────────────────────────
 
+const WITHDRAW_CONFIRM_THRESHOLD = 1000;
+
+function maskBankAccount(account: string): string {
+  if (account.length <= 7) return account;
+  const first = account.slice(0, 3);
+  const last = account.slice(-4);
+  const maskedLen = account.length - 7;
+  return `${first}${'*'.repeat(maskedLen)}${last}`;
+}
+
+function WithdrawConfirmDialog({
+  amount,
+  bankCode,
+  bankAccount,
+  accountName,
+  isPending,
+  error,
+  onConfirm,
+  onCancel,
+}: {
+  amount: number;
+  bankCode: string;
+  bankAccount: string;
+  accountName: string;
+  isPending: boolean;
+  error: Error | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const confirmRef = useRef<HTMLDivElement>(null);
+  const [confirmEnabled, setConfirmEnabled] = useState(false);
+  useEscapeKey(onCancel);
+  useFocusTrap(confirmRef);
+
+  useEffect(() => {
+    const t = setTimeout(() => setConfirmEnabled(true), 1000);
+    return () => clearTimeout(t);
+  }, []);
+
+  const bankName: Record<string, string> = {
+    '004': '台灣銀行',
+    '005': '土地銀行',
+    '006': '合作金庫',
+    '007': '第一銀行',
+    '008': '華南銀行',
+    '009': '彰化銀行',
+    '011': '上海銀行',
+    '012': '台北富邦',
+    '013': '國泰世華',
+    '017': '兆豐銀行',
+    '021': '花旗銀行',
+    '050': '台灣企銀',
+    '700': '中華郵政',
+    '808': '玉山銀行',
+    '812': '台新銀行',
+    '822': '中國信託',
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50" onClick={onCancel}>
+      <div
+        ref={confirmRef}
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-withdraw-title"
+        aria-describedby="confirm-withdraw-desc"
+        onClick={(e) => e.stopPropagation()}
+        className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-2xl"
+      >
+        <h3 id="confirm-withdraw-title" className="mb-1 text-base font-semibold">確認提現</h3>
+        <p id="confirm-withdraw-desc" className="mb-4 text-xs text-muted-foreground">
+          此操作不可取消，請確認無誤。
+        </p>
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 space-y-1.5">
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-amber-700">提現金額</span>
+            <span className="text-lg font-bold tabular-nums text-amber-900">NT${amount.toLocaleString()}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-amber-700">銀行</span>
+            <span className="text-sm font-medium text-amber-900">
+              {bankName[bankCode] ?? bankCode} {bankCode}
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-amber-700">帳號</span>
+            <span className="font-mono text-sm font-medium text-amber-900">{maskBankAccount(bankAccount)}</span>
+          </div>
+          <div className="flex items-baseline justify-between">
+            <span className="text-xs text-amber-700">戶名</span>
+            <span className="text-sm font-medium text-amber-900">{accountName}</span>
+          </div>
+        </div>
+        {error && <p className="mt-2 text-xs text-destructive">{error.message}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            disabled={isPending}
+            className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50"
+          >
+            取消
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={isPending || !confirmEnabled}
+            aria-disabled={isPending || !confirmEnabled}
+            className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground disabled:opacity-50 hover:bg-destructive/90"
+          >
+            {isPending ? '處理中...' : '確認提現'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function WithdrawDialog({ maxAmount, onClose }: { maxAmount: number; onClose: () => void }) {
   const dialogRef = useRef<HTMLDivElement>(null);
   useEscapeKey(onClose);
   useLockBodyScroll();
   useFocusTrap(dialogRef);
   const [form, setForm] = useState({ amount: '', bankCode: '', bankAccount: '', accountName: '' });
+  const [showConfirm, setShowConfirm] = useState(false);
   const withdraw = useRequestWithdrawal();
   const update = (field: string, value: string) => setForm((prev) => ({ ...prev, [field]: value }));
 
+  const parsedAmount = parseInt(form.amount, 10);
   const isValid =
-    parseInt(form.amount, 10) >= 300 &&
-    parseInt(form.amount, 10) <= maxAmount &&
+    parsedAmount >= 300 &&
+    parsedAmount <= maxAmount &&
     form.bankCode.length === 3 &&
     form.bankAccount.length >= 10 &&
     form.accountName.length >= 2;
 
+  const handleSubmitClick = useCallback(() => {
+    if (parsedAmount >= WITHDRAW_CONFIRM_THRESHOLD) {
+      setShowConfirm(true);
+    } else {
+      withdraw.mutate(
+        { amount: parsedAmount, bankCode: form.bankCode, bankAccount: form.bankAccount, accountName: form.accountName },
+        { onSuccess: onClose },
+      );
+    }
+  }, [parsedAmount, form.bankCode, form.bankAccount, form.accountName, withdraw, onClose]);
+
+  const handleConfirm = useCallback(() => {
+    withdraw.mutate(
+      { amount: parsedAmount, bankCode: form.bankCode, bankAccount: form.bankAccount, accountName: form.accountName },
+      { onSuccess: onClose },
+    );
+  }, [parsedAmount, form.bankCode, form.bankAccount, form.accountName, withdraw, onClose]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label="申請提領"
-        onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl"
-      >
-        <h3 className="mb-4 text-base font-semibold">申請提領</h3>
-        <div className="space-y-3">
-          {[
-            { label: '提領金額（NT$，最小 300）', field: 'amount', type: 'number', placeholder: `最多 NT$${Math.min(maxAmount, 30000).toLocaleString()}` },
-            { label: '銀行代碼（3 碼）', field: 'bankCode', placeholder: '例：004（台灣銀行）' },
-            { label: '銀行帳號', field: 'bankAccount', placeholder: '帳號（10-16 碼）' },
-            { label: '戶名', field: 'accountName', placeholder: '銀行帳戶戶名' },
-          ].map(({ label, field, type = 'text', placeholder }) => (
-            <div key={field}>
-              <label className="mb-1 block text-xs font-medium">{label}</label>
-              <input
-                type={type}
-                value={form[field as keyof typeof form]}
-                onChange={(e) => update(field, e.target.value)}
-                placeholder={placeholder}
-                aria-label={label}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-              />
-            </div>
-          ))}
-        </div>
-        {withdraw.error && <p className="mt-2 text-xs text-destructive">{(withdraw.error as Error).message}</p>}
-        <p className="mt-3 text-xs text-muted-foreground">提領手續費 NT$15，預計 1-3 個工作日撥款。</p>
-        <div className="mt-4 flex justify-end gap-2">
-          <button onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">取消</button>
-          <button
-            onClick={() => withdraw.mutate({ amount: parseInt(form.amount, 10), bankCode: form.bankCode, bankAccount: form.bankAccount, accountName: form.accountName }, { onSuccess: onClose })}
-            disabled={withdraw.isPending || !isValid}
-            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
-          >
-            送出申請
-          </button>
+    <>
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={onClose}>
+        <div
+          ref={dialogRef}
+          role="dialog"
+          aria-modal="true"
+          aria-label="申請提領"
+          onClick={(e) => e.stopPropagation()}
+          className="w-full max-w-sm rounded-xl border border-border bg-background p-6 shadow-xl"
+        >
+          <h3 className="mb-4 text-base font-semibold">申請提領</h3>
+          <div className="space-y-3">
+            {[
+              { label: '提領金額（NT$，最小 300）', field: 'amount', type: 'number', placeholder: `最多 NT$${Math.min(maxAmount, 30000).toLocaleString()}` },
+              { label: '銀行代碼（3 碼）', field: 'bankCode', placeholder: '例：004（台灣銀行）' },
+              { label: '銀行帳號', field: 'bankAccount', placeholder: '帳號（10-16 碼）' },
+              { label: '戶名', field: 'accountName', placeholder: '銀行帳戶戶名' },
+            ].map(({ label, field, type = 'text', placeholder }) => (
+              <div key={field}>
+                <label className="mb-1 block text-xs font-medium">{label}</label>
+                <input
+                  type={type}
+                  value={form[field as keyof typeof form]}
+                  onChange={(e) => update(field, e.target.value)}
+                  placeholder={placeholder}
+                  aria-label={label}
+                  className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                />
+              </div>
+            ))}
+          </div>
+          {withdraw.error && !showConfirm && (
+            <p className="mt-2 text-xs text-destructive">{(withdraw.error as Error).message}</p>
+          )}
+          <p className="mt-3 text-xs text-muted-foreground">提領手續費 NT$15，預計 1-3 個工作日撥款。</p>
+          <div className="mt-4 flex justify-end gap-2">
+            <button onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">取消</button>
+            <button
+              onClick={handleSubmitClick}
+              disabled={withdraw.isPending || !isValid}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground disabled:opacity-50 hover:bg-primary/90"
+            >
+              送出申請
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+      {showConfirm && (
+        <WithdrawConfirmDialog
+          amount={parsedAmount}
+          bankCode={form.bankCode}
+          bankAccount={form.bankAccount}
+          accountName={form.accountName}
+          isPending={withdraw.isPending}
+          error={withdraw.error as Error | null}
+          onConfirm={handleConfirm}
+          onCancel={() => setShowConfirm(false)}
+        />
+      )}
+    </>
   );
 }
 
@@ -426,6 +579,8 @@ function WalletContent() {
   const [banner, setBanner] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cash' | 'points' | 'coupons'>('cash');
   const { data: myCoupons = [] } = useMyCoupons();
+  const WALLET_TABS = ['cash', 'points', 'coupons'] as const;
+  const { handleKeyDown: handleTabKeyDown, registerRef: registerTabRef } = useTabsKeyboard(WALLET_TABS, activeTab, setActiveTab);
 
   useEffect(() => {
     if (searchParams.get('deposit') === 'done') {
@@ -462,17 +617,32 @@ function WalletContent() {
       {showWithdraw && <WithdrawDialog maxAmount={wallet?.cashBalance ?? 0} onClose={() => setShowWithdraw(false)} />}
 
       {/* Tab 切換 — Phase A 法規語義：受試者用「我的收益」避免電支條例「儲值」字眼 */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+      <div role="tablist" aria-label="錢包頁籤" className="flex gap-1 rounded-xl bg-slate-100 p-1">
         <TabButton
+          tabKey="cash"
           active={activeTab === 'cash'}
           onClick={() => setActiveTab('cash')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
           icon={<Banknote className="h-4 w-4" />}
           label={isRespondent ? '我的收益' : '現金錢包'}
         />
-        <TabButton active={activeTab === 'points'} onClick={() => setActiveTab('points')} icon={<Coins className="h-4 w-4" />} label="積分" badge={wallet?.pointsBalance ? wallet.pointsBalance.toLocaleString() : undefined} />
         <TabButton
+          tabKey="points"
+          active={activeTab === 'points'}
+          onClick={() => setActiveTab('points')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
+          icon={<Coins className="h-4 w-4" />}
+          label="積分"
+          badge={wallet?.pointsBalance ? wallet.pointsBalance.toLocaleString() : undefined}
+        />
+        <TabButton
+          tabKey="coupons"
           active={activeTab === 'coupons'}
           onClick={() => setActiveTab('coupons')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
           icon={<Ticket className="h-4 w-4" />}
           label="優惠券夾"
           badge={myCoupons.filter((c) => c.status === 'active').length > 0 ? String(myCoupons.filter((c) => c.status === 'active').length) : undefined}
@@ -480,7 +650,7 @@ function WalletContent() {
       </div>
 
       {activeTab === 'cash' && (
-        <>
+        <div role="tabpanel" id="wallet-panel-cash" aria-labelledby="wallet-tab-cash">
           {/* 現金餘額卡片 */}
           <div className="rounded-xl border border-border bg-card p-6">
             <p className="text-sm text-muted-foreground">
@@ -527,11 +697,11 @@ function WalletContent() {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">交易紀錄</h2>
             <TxList txns={cashTxns} />
           </section>
-        </>
+        </div>
       )}
 
       {activeTab === 'points' && (
-        <>
+        <div role="tabpanel" id="wallet-panel-points" aria-labelledby="wallet-tab-points">
           <PointsCard />
 
           {/* 積分交易紀錄 */}
@@ -539,21 +709,38 @@ function WalletContent() {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">積分明細</h2>
             <TxList txns={pointsTxns} />
           </section>
-        </>
+        </div>
       )}
 
-      {activeTab === 'coupons' && <CouponFolder />}
+      {activeTab === 'coupons' && (
+        <div role="tabpanel" id="wallet-panel-coupons" aria-labelledby="wallet-tab-coupons">
+          <CouponFolder />
+        </div>
+      )}
     </main>
   );
 }
 
-function TabButton({ active, onClick, icon, label, badge }: {
-  active: boolean; onClick: () => void;
-  icon: React.ReactNode; label: string; badge?: string;
+function TabButton({ tabKey, active, onClick, onKeyDown, registerRef, icon, label, badge }: {
+  tabKey: 'cash' | 'points' | 'coupons';
+  active: boolean;
+  onClick: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+  registerRef: (key: 'cash' | 'points' | 'coupons', el: HTMLButtonElement | null) => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: string;
 }) {
   return (
     <button
+      ref={(el) => registerRef(tabKey, el)}
+      role="tab"
+      id={`wallet-tab-${tabKey}`}
+      aria-selected={active}
+      aria-controls={`wallet-panel-${tabKey}`}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       className={cn(
         'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all',
         active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-800',

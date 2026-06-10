@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useMutualPair, useSubmitMutualResponse, useReEnqueueMutual, useSubmitMutualProof, useRateMutual, type MutualQuestion, type MutualUnlocked, type MutualPairDetail } from '@/hooks/use-mutual';
+import { useMutualPair, useMutualPoolStats, useSubmitMutualResponse, useReEnqueueMutual, useSubmitMutualProof, useRateMutual, type MutualQuestion, type MutualUnlocked, type MutualPairDetail } from '@/hooks/use-mutual';
 import { useMe } from '@/hooks/use-auth';
 import { RatingScale, RatingScaleConfig } from '@/components/survey-editor/rating-scale';
 
@@ -18,7 +18,7 @@ export default function MutualFillPage() {
   const router = useRouter();
   const pairId = params.id;
 
-  const { data, isLoading, error } = useMutualPair(pairId);
+  const { data, isLoading, error, failureCount } = useMutualPair(pairId);
   const { data: me } = useMe();
   const submit = useSubmitMutualResponse();
   const reEnqueue = useReEnqueueMutual();
@@ -26,13 +26,44 @@ export default function MutualFillPage() {
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
 
   if (isLoading) {
-    return <main className="mx-auto max-w-3xl px-4 py-10 text-muted-foreground">載入中…</main>;
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10 space-y-4" aria-busy="true" aria-label="載入中">
+        {failureCount > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            連線中斷，正在重試... ({failureCount}/3)
+          </div>
+        )}
+        <div className="animate-pulse space-y-4">
+          <div className="h-8 w-1/3 rounded bg-muted" />
+          <div className="h-4 w-2/3 rounded bg-muted" />
+          <div className="h-24 rounded-xl bg-muted" />
+          <div className="h-4 w-1/2 rounded bg-muted" />
+        </div>
+      </main>
+    );
   }
   if (error || !data) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          找不到此配對或無權存取。
+          {error ? (
+            <>
+              <p>連線失敗，3 次重試後仍無法載入。</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-3 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/5"
+              >
+                重新整理
+              </button>
+            </>
+          ) : (
+            <p>找不到此配對或無權存取。</p>
+          )}
         </div>
         <Link href="/mutual" className="mt-4 inline-block text-sm text-primary hover:underline">
           ← 回互惠列表
@@ -53,17 +84,7 @@ export default function MutualFillPage() {
   }
 
   if (pair.status === 'waiting') {
-    return (
-      <main className="mx-auto max-w-3xl px-4 py-10 space-y-4">
-        <h1 className="text-2xl font-bold">⏳ 配對中</h1>
-        <p className="text-sm text-muted-foreground">
-          系統正在幫你找另一個發了互惠問卷的人，每 30 秒掃一次。配對成功後會在這裡看到對方的問卷。
-        </p>
-        <Link href="/mutual" className="inline-block text-sm font-medium text-primary hover:underline">
-          ← 回互惠列表
-        </Link>
-      </main>
-    );
+    return <WaitingView pairId={pairId} createdAt={pair.createdAt} />;
   }
 
   if (pair.status === 'expired') {
@@ -218,6 +239,130 @@ export default function MutualFillPage() {
           </button>
         </div>
       </form>
+    </main>
+  );
+}
+
+function WaitingView({ pairId, createdAt }: { pairId: string; createdAt: string }) {
+  const router = useRouter();
+  const { data: pairData, failureCount, isError, refetch } = useMutualPair(pairId);
+  const { data: poolStats } = useMutualPoolStats();
+
+  const [elapsedSecs, setElapsedSecs] = useState(() =>
+    Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000),
+  );
+  const [redirectIn, setRedirectIn] = useState<number | null>(null);
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setElapsedSecs(Math.floor((Date.now() - new Date(createdAt).getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(id);
+  }, [createdAt]);
+
+  useEffect(() => {
+    if (pairData && pairData.pair.status !== 'waiting') {
+      setRedirectIn(3);
+    }
+  }, [pairData]);
+
+  useEffect(() => {
+    if (redirectIn === null) return;
+    if (redirectIn <= 0) {
+      router.refresh();
+      return;
+    }
+    const t = setTimeout(() => setRedirectIn((n) => (n !== null ? n - 1 : null)), 1000);
+    return () => clearTimeout(t);
+  }, [redirectIn, router]);
+
+  const formatElapsed = (secs: number): string => {
+    if (secs < 60) return `${secs} 秒`;
+    const mins = Math.floor(secs / 60);
+    if (mins < 60) return `${mins} 分鐘`;
+    return `${Math.floor(mins / 60)} 小時 ${mins % 60} 分鐘`;
+  };
+
+  if (redirectIn !== null) {
+    return (
+      <main className="mx-auto max-w-3xl px-4 py-10 space-y-4 text-center">
+        <div className="inline-flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 text-3xl">
+          🎉
+        </div>
+        <h1 className="text-2xl font-bold text-emerald-700">配對成功！</h1>
+        <p className="text-sm text-muted-foreground">
+          {redirectIn > 0 ? `${redirectIn} 秒後自動跳轉…` : '跳轉中…'}
+        </p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="mx-auto max-w-3xl px-4 py-10 space-y-6">
+      <div>
+        <Link href="/mutual" className="text-sm text-muted-foreground hover:underline">
+          ← 回互惠列表
+        </Link>
+        <h1 className="mt-2 text-2xl font-bold">⏳ 配對中</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          系統正在幫你找另一個發了互惠問卷的人，每 30 秒掃描一次。
+        </p>
+      </div>
+
+      {/* Connection error / retry banner */}
+      {isError ? (
+        <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <p className="text-sm text-destructive">連線失敗，請重新整理後再試。</p>
+          <button
+            onClick={() => void refetch()}
+            className="ml-4 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+          >
+            重新整理
+          </button>
+        </div>
+      ) : failureCount > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            連線中斷，正在重試… ({Math.min(failureCount, 3)}/3)
+          </p>
+        </div>
+      ) : null}
+
+      {/* Progress bar — indeterminate animation */}
+      <div
+        className="h-2 w-full overflow-hidden rounded-full bg-muted"
+        role="progressbar"
+        aria-label="配對進度"
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className="q-progress-bar h-full w-1/3 rounded-full bg-primary" />
+      </div>
+
+      {/* Status cards */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="rounded-xl border border-border bg-card p-4">
+          <p className="text-xs text-muted-foreground">已等待</p>
+          <p className="mt-1 text-xl font-bold tabular-nums">{formatElapsed(elapsedSecs)}</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card p-4">
+          <div className="flex items-center gap-1.5">
+            <span className="inline-block h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            <p className="text-xs text-muted-foreground">目前配對池</p>
+          </div>
+          {poolStats !== undefined ? (
+            <p className="mt-1 text-xl font-bold tabular-nums">
+              {poolStats.waiting} 份等待配對
+            </p>
+          ) : (
+            <div className="mt-1 h-7 w-24 animate-pulse rounded bg-muted" />
+          )}
+        </div>
+      </div>
+
+      <p className="text-xs text-muted-foreground text-center">
+        每 15 秒自動更新 · 配對成功後自動跳轉
+      </p>
     </main>
   );
 }

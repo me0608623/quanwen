@@ -7,6 +7,8 @@ import { toCsv } from '@/lib/to-csv';
 import Link from 'next/link';
 import { useMySurveys, useDeleteSurvey, useDuplicateSurvey, useSurveyorAssistant, SURVEY_CATEGORY_LABELS } from '@/hooks/use-surveys';
 
+const PAGE_SIZE = 20;
+
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
   pending_review: '審核中',
@@ -33,6 +35,7 @@ export default function DashboardPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'pending_review' | 'published' | 'closed'>('all');
   const [sortBy, setSortBy] = useState<'newest' | 'reward' | 'responses'>('newest');
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [surveyLimit, setSurveyLimit] = useState(PAGE_SIZE);
 
   const copyShareLink = (id: string) => {
     const url = `${window.location.origin}/s/${id}`;
@@ -61,6 +64,9 @@ export default function DashboardPage() {
       /* ignore */
     }
   }, [sortBy, statusFilter]);
+
+  // Reset pagination when filters change
+  useEffect(() => { setSurveyLimit(PAGE_SIZE); }, [statusFilter, sortBy, query]);
 
   // KPI 計算（從 surveys list 直接算）
   const totalSurveys = surveys.length;
@@ -255,7 +261,7 @@ export default function DashboardPage() {
 
       {/* Survey list */}
       <div className="space-y-3">
-        {filteredSurveys.map((survey) => {
+        {filteredSurveys.slice(0, surveyLimit).map((survey) => {
           const completion = survey.targetCount > 0
             ? Math.round(((survey.completedCount ?? 0) / survey.targetCount) * 100)
             : 0;
@@ -370,6 +376,16 @@ export default function DashboardPage() {
             </div>
           );
         })}
+
+        {surveyLimit < filteredSurveys.length && (
+          <button
+            type="button"
+            onClick={() => setSurveyLimit((n) => n + PAGE_SIZE)}
+            className="w-full rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+          >
+            載入更多（還有 {filteredSurveys.length - surveyLimit} 份）
+          </button>
+        )}
       </div>
     </main>
   );

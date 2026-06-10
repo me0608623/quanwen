@@ -352,6 +352,58 @@ export const SYSTEM_CONFIG_DDL = `
   ON CONFLICT DO NOTHING;
 `;
 
+/** Sprint 6: notifications (notification_type enum must precede pending_notifications) */
+export const NOTIFICATIONS_DDL = `
+  CREATE TYPE notification_type AS ENUM (
+    'survey_approved','survey_rejected','new_response',
+    'response_milestone','daily_response_digest',
+    'reward_issued','system'
+  );
+  CREATE TABLE notifications (
+    id         UUID              PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id    UUID              NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type       notification_type NOT NULL,
+    title      VARCHAR(200)      NOT NULL,
+    body       TEXT,
+    metadata   JSONB,
+    is_read    BOOLEAN           NOT NULL DEFAULT false,
+    created_at TIMESTAMPTZ       NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX notifications_user_idx ON notifications(user_id);
+  CREATE INDEX notifications_read_idx ON notifications(user_id, is_read);
+`;
+
+/** Issue #38: pending_notifications queue */
+export const PENDING_NOTIFICATIONS_DDL = `
+  CREATE TYPE pending_notification_status AS ENUM ('pending','done','failed');
+  CREATE TABLE pending_notifications (
+    id             UUID                        PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id        UUID                        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    type           notification_type           NOT NULL,
+    title          VARCHAR(200)                NOT NULL,
+    body           TEXT,
+    metadata       JSONB,
+    status         pending_notification_status NOT NULL DEFAULT 'pending',
+    attempts       INTEGER                     NOT NULL DEFAULT 0,
+    next_retry_at  TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    last_error     TEXT,
+    created_at     TIMESTAMPTZ                 NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMPTZ                 NOT NULL DEFAULT NOW()
+  );
+  CREATE INDEX pending_notifications_status_retry_idx ON pending_notifications(status, next_retry_at);
+  CREATE INDEX pending_notifications_user_idx          ON pending_notifications(user_id);
+`;
+
 /** All tables in dependency order — use this in integration tests instead of inlining DDL. */
 export const FULL_SCHEMA_DDL =
-  USERS_DDL + DAILY_USAGE_DDL + SURVEYS_DDL + RESPONSES_DDL + LOTTERY_DDL + PROFILES_DDL + MUTUAL_DDL + LOGIC_RULES_DDL + SYSTEM_CONFIG_DDL;
+  USERS_DDL +
+  DAILY_USAGE_DDL +
+  SURVEYS_DDL +
+  RESPONSES_DDL +
+  LOTTERY_DDL +
+  PROFILES_DDL +
+  MUTUAL_DDL +
+  LOGIC_RULES_DDL +
+  SYSTEM_CONFIG_DDL +
+  NOTIFICATIONS_DDL +
+  PENDING_NOTIFICATIONS_DDL;

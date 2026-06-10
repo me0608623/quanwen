@@ -70,6 +70,7 @@
     "@types/pdf-parse": "^1.1.5",
     "@types/pdfmake": "^0.3.3",
     "@types/pg": "^8.20.0",
+    "@types/supertest": "^6.0.3",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.60.0",
     "@vitest/coverage-v8": "^4.1.7",

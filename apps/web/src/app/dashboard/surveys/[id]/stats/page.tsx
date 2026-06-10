@@ -33,6 +33,7 @@ import { GroupComparisonSection } from '@/components/stats/group-comparison-pane
 import { RegressionSection } from '@/components/stats/regression-panel';
 import { SegmentationSection } from '@/components/stats/segmentation-panel';
 import { AiReportExport } from '@/components/stats/ai-report-export';
+import { StatsPageSkeleton, StatsPanelSkeleton, PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 
 interface OptionCount { optionId: string; label: string; count: number }
 interface QuestionStat {
@@ -87,14 +88,7 @@ function TrendChart({ surveyId }: { surveyId: string }) {
   const { data: trend = [], isLoading } = useSurveyTrend(surveyId);
 
   if (isLoading) {
-    return (
-      <section className="rounded-lg border border-border p-5">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-          近 14 天填答趨勢
-        </h2>
-        <div className="h-24 animate-pulse rounded bg-muted" />
-      </section>
-    );
+    return <StatsPanelSkeleton minHeight={172} label="近 14 天填答趨勢" />;
   }
 
   return (
@@ -135,13 +129,7 @@ function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; tota
         受訪者清單（匿名化） · 共 {data?.total ?? totalResponses} 人
       </h2>
 
-      {isLoading && (
-        <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-8 animate-pulse rounded bg-muted" />
-          ))}
-        </div>
-      )}
+      {isLoading && <PanelSkeletonContent rows={3} />}
 
       {data && data.respondents.length === 0 && (
         <p className="text-sm text-muted-foreground">尚無受訪者資料</p>
@@ -317,7 +305,7 @@ export default function SurveyStatsPage() {
   const handleExportJson = () =>
     downloadBinary(`/surveys/${id}/export.json`, `survey_${id}_responses.json`);
 
-  if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入中…</div>;
+  if (isLoading) return <StatsPageSkeleton />;
   if (!stats) return <div className="p-10 text-sm text-destructive">無法取得統計資料</div>;
 
   const qualityScore = stats.qualityDistribution?.avgScore;
@@ -773,7 +761,7 @@ function ScaleReliabilityPanel({ surveyId }: { surveyId: string }) {
     setSelectionInitialized(true);
   }, [allData, selectionInitialized]);
 
-  if (isLoading) return <section className="h-24 animate-pulse rounded-xl bg-muted" />;
+  if (isLoading) return <StatsPanelSkeleton minHeight={160} label="量表信度統計" />;
   if (!allData || availableItems.length < 2) return null;
   const displayData = data ?? allData;
 
