@@ -15,6 +15,8 @@ import { lotteryWinnerActions } from '@/lib/lottery-result-actions';
 const TAB = { available: '可填問卷', history: '填答紀錄', lottery: '抽獎回饋', brand: '企業品牌問卷' } as const;
 type TabKey = keyof typeof TAB;
 
+const PAGE_SIZE = 20;
+
 function rewardLabel(survey: { rewardMode?: 'fixed' | 'lottery'; rewardPoints: number; lotteryPrize?: string | null }) {
   return survey.rewardMode === 'lottery' ? `抽 ${survey.lotteryPrize ?? '獎品'}` : `NT$${survey.rewardPoints}`;
 }
@@ -37,6 +39,8 @@ export default function TasksPage() {
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [query, setQuery] = useState('');
   const [nudgeDismissed, setNudgeDismissed] = useState(false);
+  const [availableLimit, setAvailableLimit] = useState(PAGE_SIZE);
+  const [historyLimit, setHistoryLimit] = useState(PAGE_SIZE);
   const { data: myProfile } = useMyProfile();
   const respondentProfile = isRespondentProfile(myProfile) ? myProfile : null;
   const { data: surveys = [], isLoading: surveysLoading, isError: surveysError, refetch: refetchSurveys } = useAvailableSurveys(category || undefined);
@@ -70,6 +74,9 @@ export default function TasksPage() {
       /* ignore */
     }
   }, [sortBy, urgentOnly]);
+
+  // Reset pagination when filters change so the user sees fresh results from the top
+  useEffect(() => { setAvailableLimit(PAGE_SIZE); }, [category, sortBy, urgentOnly, query]);
 
   // KPI 計算
   const availableCount = surveys.length;
@@ -359,7 +366,7 @@ export default function TasksPage() {
             </p>
           )}
 
-          {displayedSurveys.map((s) => (
+          {displayedSurveys.slice(0, availableLimit).map((s) => (
             <Link
               key={s.id}
               href={`/tasks/${s.id}`}
@@ -458,6 +465,16 @@ export default function TasksPage() {
               </div>
             </Link>
           ))}
+
+          {availableLimit < displayedSurveys.length && (
+            <button
+              type="button"
+              onClick={() => setAvailableLimit((n) => n + PAGE_SIZE)}
+              className="w-full rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              載入更多（還有 {displayedSurveys.length - availableLimit} 份）
+            </button>
+          )}
         </div>
       )}
 
@@ -581,7 +598,7 @@ export default function TasksPage() {
             </div>
           )}
 
-          {history.map((r) => (
+          {history.slice(0, historyLimit).map((r) => (
             <div key={r.responseId} className="rounded-xl border border-border bg-background p-4 flex items-center justify-between">
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate">{r.surveyTitle}</p>
@@ -662,6 +679,16 @@ export default function TasksPage() {
               </div>
             </div>
           ))}
+
+          {historyLimit < history.length && (
+            <button
+              type="button"
+              onClick={() => setHistoryLimit((n) => n + PAGE_SIZE)}
+              className="w-full rounded-xl border border-dashed border-border py-3 text-sm font-medium text-muted-foreground hover:bg-muted transition-colors"
+            >
+              載入更多（還有 {history.length - historyLimit} 筆）
+            </button>
+          )}
         </div>
       )}
 
