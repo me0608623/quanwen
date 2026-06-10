@@ -21,6 +21,9 @@ export default [
       '@next/next/no-html-link-for-pages': 'warn',
       '@next/next/no-page-custom-font': 'warn',
       'import/no-anonymous-default-export': 'warn',
+      // a11y: enforce accessible labels on interactive elements (catches icon-only buttons)
+      'jsx-a11y/control-has-associated-label': 'warn',
+      'jsx-a11y/interactive-supports-focus': 'warn',
     },
   },
 ];
