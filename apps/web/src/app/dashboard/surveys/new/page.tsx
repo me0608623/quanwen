@@ -13,6 +13,7 @@ import { SurveyPreviewPlayer } from '@/components/survey-editor/survey-preview-p
 import { ImageUploader } from '@/components/survey-editor/image-uploader';
 import { WelcomeImagesEditor } from '@/components/survey-editor/welcome-images-editor';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
+import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
 
 function localDateTimeInputValue(date: Date): string {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -63,7 +64,6 @@ export default function NewSurveyPage() {
   const [questions, setQuestions] = useState<SurveyQuestion[]>([defaultQuestion()]);
   const savedRef = useRef(false);
 
-  // 有實質填寫內容且尚未儲存時，關閉/重整分頁前警告，避免丟失建立中的問卷
   const hasContent =
     title.trim() !== '' ||
     description.trim() !== '' ||
@@ -71,16 +71,8 @@ export default function NewSurveyPage() {
     rewardPoints > 0 ||
     lotteryPrize.trim() !== '' ||
     questions.some((q) => (q.title ?? '').trim() !== '');
-  useEffect(() => {
-    if (!hasContent) return;
-    const handler = (e: BeforeUnloadEvent) => {
-      if (savedRef.current) return;
-      e.preventDefault();
-      e.returnValue = '';
-    };
-    window.addEventListener('beforeunload', handler);
-    return () => window.removeEventListener('beforeunload', handler);
-  }, [hasContent]);
+
+  useUnsavedChangesGuard(hasContent && !savedRef.current);
   const livePreviewDraft = useDebouncedValue({ title, description, questions, coverImageUrl }, 300);
 
   // 定價顧問：依題目估算「建議單份獎勵」（debounced；發問卷者完全自訂）
@@ -195,7 +187,10 @@ export default function NewSurveyPage() {
         <h1 className="text-2xl font-bold">新增問卷</h1>
         <button
           type="button"
-          onClick={() => router.back()}
+          onClick={() => {
+            if (hasContent && !savedRef.current && !window.confirm('有未儲存的變更，確定要離開嗎？')) return;
+            router.back();
+          }}
           className="text-sm text-muted-foreground hover:underline"
         >
           ← 返回
