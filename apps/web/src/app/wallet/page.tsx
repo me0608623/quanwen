@@ -21,6 +21,7 @@ import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { useEscapeKey } from '@/components/ui/use-escape-key';
 import { useLockBodyScroll } from '@/components/ui/use-lock-body-scroll';
 import { useFocusTrap } from '@/components/ui/use-focus-trap';
+import { useTabsKeyboard } from '@/hooks/use-tabs-keyboard';
 
 const IS_DEV = process.env.NODE_ENV !== 'production';
 
@@ -578,6 +579,8 @@ function WalletContent() {
   const [banner, setBanner] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'cash' | 'points' | 'coupons'>('cash');
   const { data: myCoupons = [] } = useMyCoupons();
+  const WALLET_TABS = ['cash', 'points', 'coupons'] as const;
+  const { handleKeyDown: handleTabKeyDown, registerRef: registerTabRef } = useTabsKeyboard(WALLET_TABS, activeTab, setActiveTab);
 
   useEffect(() => {
     if (searchParams.get('deposit') === 'done') {
@@ -614,17 +617,32 @@ function WalletContent() {
       {showWithdraw && <WithdrawDialog maxAmount={wallet?.cashBalance ?? 0} onClose={() => setShowWithdraw(false)} />}
 
       {/* Tab 切換 — Phase A 法規語義：受試者用「我的收益」避免電支條例「儲值」字眼 */}
-      <div className="flex gap-1 rounded-xl bg-slate-100 p-1">
+      <div role="tablist" aria-label="錢包頁籤" className="flex gap-1 rounded-xl bg-slate-100 p-1">
         <TabButton
+          tabKey="cash"
           active={activeTab === 'cash'}
           onClick={() => setActiveTab('cash')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
           icon={<Banknote className="h-4 w-4" />}
           label={isRespondent ? '我的收益' : '現金錢包'}
         />
-        <TabButton active={activeTab === 'points'} onClick={() => setActiveTab('points')} icon={<Coins className="h-4 w-4" />} label="積分" badge={wallet?.pointsBalance ? wallet.pointsBalance.toLocaleString() : undefined} />
         <TabButton
+          tabKey="points"
+          active={activeTab === 'points'}
+          onClick={() => setActiveTab('points')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
+          icon={<Coins className="h-4 w-4" />}
+          label="積分"
+          badge={wallet?.pointsBalance ? wallet.pointsBalance.toLocaleString() : undefined}
+        />
+        <TabButton
+          tabKey="coupons"
           active={activeTab === 'coupons'}
           onClick={() => setActiveTab('coupons')}
+          onKeyDown={handleTabKeyDown}
+          registerRef={registerTabRef}
           icon={<Ticket className="h-4 w-4" />}
           label="優惠券夾"
           badge={myCoupons.filter((c) => c.status === 'active').length > 0 ? String(myCoupons.filter((c) => c.status === 'active').length) : undefined}
@@ -632,7 +650,7 @@ function WalletContent() {
       </div>
 
       {activeTab === 'cash' && (
-        <>
+        <div role="tabpanel" id="wallet-panel-cash" aria-labelledby="wallet-tab-cash">
           {/* 現金餘額卡片 */}
           <div className="rounded-xl border border-border bg-card p-6">
             <p className="text-sm text-muted-foreground">
@@ -679,11 +697,11 @@ function WalletContent() {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">交易紀錄</h2>
             <TxList txns={cashTxns} />
           </section>
-        </>
+        </div>
       )}
 
       {activeTab === 'points' && (
-        <>
+        <div role="tabpanel" id="wallet-panel-points" aria-labelledby="wallet-tab-points">
           <PointsCard />
 
           {/* 積分交易紀錄 */}
@@ -691,21 +709,38 @@ function WalletContent() {
             <h2 className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">積分明細</h2>
             <TxList txns={pointsTxns} />
           </section>
-        </>
+        </div>
       )}
 
-      {activeTab === 'coupons' && <CouponFolder />}
+      {activeTab === 'coupons' && (
+        <div role="tabpanel" id="wallet-panel-coupons" aria-labelledby="wallet-tab-coupons">
+          <CouponFolder />
+        </div>
+      )}
     </main>
   );
 }
 
-function TabButton({ active, onClick, icon, label, badge }: {
-  active: boolean; onClick: () => void;
-  icon: React.ReactNode; label: string; badge?: string;
+function TabButton({ tabKey, active, onClick, onKeyDown, registerRef, icon, label, badge }: {
+  tabKey: 'cash' | 'points' | 'coupons';
+  active: boolean;
+  onClick: () => void;
+  onKeyDown: (e: React.KeyboardEvent<HTMLButtonElement>) => void;
+  registerRef: (key: 'cash' | 'points' | 'coupons', el: HTMLButtonElement | null) => void;
+  icon: React.ReactNode;
+  label: string;
+  badge?: string;
 }) {
   return (
     <button
+      ref={(el) => registerRef(tabKey, el)}
+      role="tab"
+      id={`wallet-tab-${tabKey}`}
+      aria-selected={active}
+      aria-controls={`wallet-panel-${tabKey}`}
+      tabIndex={active ? 0 : -1}
       onClick={onClick}
+      onKeyDown={onKeyDown}
       className={cn(
         'flex flex-1 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-all',
         active ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-600 hover:text-slate-800',
