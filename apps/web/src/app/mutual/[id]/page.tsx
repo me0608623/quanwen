@@ -18,7 +18,7 @@ export default function MutualFillPage() {
   const router = useRouter();
   const pairId = params.id;
 
-  const { data, isLoading, error } = useMutualPair(pairId);
+  const { data, isLoading, error, failureCount } = useMutualPair(pairId);
   const { data: me } = useMe();
   const submit = useSubmitMutualResponse();
   const reEnqueue = useReEnqueueMutual();
@@ -28,6 +28,15 @@ export default function MutualFillPage() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10 space-y-4" aria-busy="true" aria-label="載入中">
+        {failureCount > 0 && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800"
+          >
+            連線中斷，正在重試... ({failureCount}/3)
+          </div>
+        )}
         <div className="animate-pulse space-y-4">
           <div className="h-8 w-1/3 rounded bg-muted" />
           <div className="h-4 w-2/3 rounded bg-muted" />
@@ -41,7 +50,20 @@ export default function MutualFillPage() {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
-          找不到此配對或無權存取。
+          {error ? (
+            <>
+              <p>連線失敗，3 次重試後仍無法載入。</p>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="mt-3 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-semibold text-destructive hover:bg-destructive/5"
+              >
+                重新整理
+              </button>
+            </>
+          ) : (
+            <p>找不到此配對或無權存取。</p>
+          )}
         </div>
         <Link href="/mutual" className="mt-4 inline-block text-sm text-primary hover:underline">
           ← 回互惠列表
@@ -223,7 +245,7 @@ export default function MutualFillPage() {
 
 function WaitingView({ pairId, createdAt }: { pairId: string; createdAt: string }) {
   const router = useRouter();
-  const { data: pairData } = useMutualPair(pairId);
+  const { data: pairData, failureCount, isError, refetch } = useMutualPair(pairId);
   const { data: poolStats } = useMutualPoolStats();
 
   const [elapsedSecs, setElapsedSecs] = useState(() =>
@@ -286,6 +308,25 @@ function WaitingView({ pairId, createdAt }: { pairId: string; createdAt: string 
           系統正在幫你找另一個發了互惠問卷的人，每 30 秒掃描一次。
         </p>
       </div>
+
+      {/* Connection error / retry banner */}
+      {isError ? (
+        <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <p className="text-sm text-destructive">連線失敗，請重新整理後再試。</p>
+          <button
+            onClick={() => void refetch()}
+            className="ml-4 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+          >
+            重新整理
+          </button>
+        </div>
+      ) : failureCount > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            連線中斷，正在重試… ({Math.min(failureCount, 3)}/3)
+          </p>
+        </div>
+      ) : null}
 
       {/* Progress bar — indeterminate animation */}
       <div

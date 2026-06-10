@@ -3,6 +3,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 
+function shouldRetry(failureCount: number, error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  if (status && status >= 400 && status < 500) return false;
+  return failureCount < 3;
+}
+
+function retryDelay(attempt: number): number {
+  return Math.min(1000 * 2 ** attempt, 30_000);
+}
+
 export type MutualStatus =
   | 'waiting'
   | 'matched'
@@ -127,7 +137,9 @@ export function useMyMutualPairs() {
       return data;
     },
     staleTime: 10_000,
-    refetchInterval: 30_000, // 自動偵測新配對
+    refetchInterval: 30_000,
+    retry: shouldRetry,
+    retryDelay,
   });
 }
 
@@ -140,6 +152,8 @@ export function useMutualPoolStats() {
     },
     staleTime: 15_000,
     refetchInterval: 15_000,
+    retry: shouldRetry,
+    retryDelay,
   });
 }
 
@@ -152,6 +166,8 @@ export function useMutualPool() {
     },
     staleTime: 15_000,
     refetchInterval: 30_000,
+    retry: shouldRetry,
+    retryDelay,
   });
 }
 
@@ -181,6 +197,8 @@ export function useMutualPair(id: string | undefined) {
     },
     enabled: !!id,
     staleTime: 5_000,
+    retry: shouldRetry,
+    retryDelay,
     refetchInterval: (query) =>
       query.state.data?.pair.status === 'waiting' ? 15_000 : false,
   });
