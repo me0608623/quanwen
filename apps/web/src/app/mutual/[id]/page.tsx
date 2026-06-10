@@ -245,7 +245,7 @@ export default function MutualFillPage() {
 
 function WaitingView({ pairId, createdAt }: { pairId: string; createdAt: string }) {
   const router = useRouter();
-  const { data: pairData } = useMutualPair(pairId);
+  const { data: pairData, failureCount, isError, refetch } = useMutualPair(pairId);
   const { data: poolStats } = useMutualPoolStats();
 
   const [elapsedSecs, setElapsedSecs] = useState(() =>
@@ -308,6 +308,25 @@ function WaitingView({ pairId, createdAt }: { pairId: string; createdAt: string 
           系統正在幫你找另一個發了互惠問卷的人，每 30 秒掃描一次。
         </p>
       </div>
+
+      {/* Connection error / retry banner */}
+      {isError ? (
+        <div className="flex items-center justify-between rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3">
+          <p className="text-sm text-destructive">連線失敗，請重新整理後再試。</p>
+          <button
+            onClick={() => void refetch()}
+            className="ml-4 rounded-md border border-destructive/40 bg-background px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+          >
+            重新整理
+          </button>
+        </div>
+      ) : failureCount > 0 ? (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-700">
+            連線中斷，正在重試… ({Math.min(failureCount, 3)}/3)
+          </p>
+        </div>
+      ) : null}
 
       {/* Progress bar — indeterminate animation */}
       <div
