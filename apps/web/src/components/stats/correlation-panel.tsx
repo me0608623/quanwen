@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useCorrelation } from '@/hooks/use-analytics';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 
 interface QuestionStat {
   questionId: string;
@@ -22,10 +23,8 @@ export function CorrelationSection({
 }) {
   const ratingQuestions = questionStats.filter((q) => q.type === 'rating');
 
-  if (ratingQuestions.length < 2) return null;
-
-  const [qA, setQA] = useState(ratingQuestions[0].questionId);
-  const [qB, setQB] = useState(ratingQuestions[1].questionId);
+  const [qA, setQA] = useState(ratingQuestions[0]?.questionId ?? '');
+  const [qB, setQB] = useState(ratingQuestions[1]?.questionId ?? '');
   const [analyze, setAnalyze] = useState(false);
 
   const { data, isLoading, error } = useCorrelation(
@@ -35,7 +34,14 @@ export function CorrelationSection({
     analyze && qA !== qB,
   );
 
-  if (ratingQuestions.length < 2) return null;
+  if (ratingQuestions.length < 2) {
+    return (
+      <EmptyCapabilityCard
+        title="相關性分析（Pearson）"
+        description="需要至少 2 題評分題，才能計算題目間的相關係數。"
+      />
+    );
+  }
 
   return (
     <section className="rounded-lg border border-border p-5">

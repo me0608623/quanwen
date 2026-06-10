@@ -34,6 +34,7 @@ import { RegressionSection } from '@/components/stats/regression-panel';
 import { SegmentationSection } from '@/components/stats/segmentation-panel';
 import { AiReportExport } from '@/components/stats/ai-report-export';
 import { StatsPageSkeleton, StatsPanelSkeleton, PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 
 interface OptionCount { optionId: string; label: string; count: number }
 interface QuestionStat {
@@ -495,7 +496,7 @@ export default function SurveyStatsPage() {
         <RegressionSection questionStats={stats.questionStats} surveyId={id} />
 
         {/* 分群分析 */}
-        <SegmentationSection surveyId={id} />
+        <SegmentationSection surveyId={id} questionStats={stats.questionStats} />
 
         {/* AI 品質建議（純建議，不影響上架） */}
         <AiQualityAdviceSection surveyId={id} />
@@ -762,7 +763,14 @@ function ScaleReliabilityPanel({ surveyId }: { surveyId: string }) {
   }, [allData, selectionInitialized]);
 
   if (isLoading) return <StatsPanelSkeleton minHeight={160} label="量表信度統計" />;
-  if (!allData || availableItems.length < 2) return null;
+  if (!allData || availableItems.length < 2) {
+    return (
+      <EmptyCapabilityCard
+        title="量表信度統計"
+        description="需要一個多題量表題組（至少 2 題評分題）才能計算 Cronbach's α。"
+      />
+    );
+  }
   const displayData = data ?? allData;
 
   return (

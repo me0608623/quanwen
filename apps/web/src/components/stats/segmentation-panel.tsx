@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useSegmentation } from '@/hooks/use-analytics';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 import {
   BarChart,
   Bar,
@@ -16,14 +17,32 @@ import {
 
 const SEGMENT_COLORS = ['#126b8a', '#8B5CF6', '#10b981', '#f59e0b', '#ef4444'];
 
+interface QuestionStat {
+  questionId: string;
+  type: string;
+}
+
+const SEGMENTABLE_TYPES = ['rating', 'single_choice', 'multiple_choice', 'numeric'];
+
 /**
  * 分群分析區段 — K-means 將回應者分群 + radar bar chart
  */
-export function SegmentationSection({ surveyId }: { surveyId: string }) {
+export function SegmentationSection({ surveyId, questionStats }: { surveyId: string; questionStats: QuestionStat[] }) {
+  const hasSegmentableQuestions = questionStats.some((q) => SEGMENTABLE_TYPES.includes(q.type));
+
   const [k, setK] = useState(3);
   const [analyze, setAnalyze] = useState(false);
 
   const { data, isLoading, error } = useSegmentation(surveyId, k, analyze);
+
+  if (!hasSegmentableQuestions) {
+    return (
+      <EmptyCapabilityCard
+        title="回應者分群分析（K-means）"
+        description="需要至少 1 題可數值化的題目（評分、選擇或數字題）才能執行分群。"
+      />
+    );
+  }
 
   return (
     <section className="rounded-lg border border-border p-5">

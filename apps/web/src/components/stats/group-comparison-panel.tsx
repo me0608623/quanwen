@@ -4,6 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useGroupComparison, useInterpretStatistics } from '@/hooks/use-analytics';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 
 interface QuestionStat {
   questionId: string;
@@ -37,7 +38,14 @@ export function GroupComparisonSection({
   const { data, isLoading, error } = useGroupComparison(surveyId, ratingId, groupId, analyze);
   const interpret = useInterpretStatistics();
 
-  if (ratingQuestions.length < 1 || groupQuestions.length < 1) return null;
+  if (ratingQuestions.length < 1 || groupQuestions.length < 1) {
+    return (
+      <EmptyCapabilityCard
+        title="差異性分析（t 檢定 / 單因子變異數分析）"
+        description="需要至少 1 題評分題與 1 題分組用的單選題。"
+      />
+    );
+  }
 
   const runInterpret = () =>
     interpret.mutate({ surveyId, analysisType: 'group_comparison', ratingQuestionId: ratingId, groupQuestionId: groupId });

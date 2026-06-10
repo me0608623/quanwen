@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRegression, useInterpretStatistics } from '@/hooks/use-analytics';
 import { AiInterpretBlock } from './group-comparison-panel';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 
 interface QuestionStat {
   questionId: string;
@@ -32,7 +33,14 @@ export function RegressionSection({
   const { data, isLoading, error } = useRegression(surveyId, dependentId, independents, analyze);
   const interpret = useInterpretStatistics();
 
-  if (ratingQuestions.length < 2) return null;
+  if (ratingQuestions.length < 2) {
+    return (
+      <EmptyCapabilityCard
+        title="迴歸分析（多元線性迴歸）"
+        description="需要至少 2 題評分題才能建立預測模型。"
+      />
+    );
+  }
 
   const toggleIndependent = (id: string) => {
     setAnalyze(false);
