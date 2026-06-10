@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRegression, useInterpretStatistics } from '@/hooks/use-analytics';
 import { AiInterpretBlock } from './group-comparison-panel';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 
 interface QuestionStat {
   questionId: string;
@@ -88,9 +89,8 @@ export function RegressionSection({
       {independents.length === 0 && <p className="mt-2 text-xs text-amber-600">請至少勾選 1 個自變數</p>}
 
       {analyze && isLoading && (
-        <div className="mt-4 space-y-2">
-          <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
-          <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
+        <div className="mt-4">
+          <PanelSkeletonContent rows={3} />
         </div>
       )}
       {error && <p className="mt-3 text-xs text-red-600">分析失敗，請稍後再試</p>}

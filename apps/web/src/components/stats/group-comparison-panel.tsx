@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useGroupComparison, useInterpretStatistics } from '@/hooks/use-analytics';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 
 interface QuestionStat {
   questionId: string;
@@ -81,12 +82,7 @@ export function GroupComparisonSection({
         </button>
       </div>
 
-      {analyze && isLoading && (
-        <div className="space-y-2">
-          <div className="h-3 w-3/5 animate-pulse rounded bg-muted" />
-          <div className="h-3 w-2/5 animate-pulse rounded bg-muted" />
-        </div>
-      )}
+      {analyze && isLoading && <PanelSkeletonContent rows={3} />}
       {error && <p className="text-xs text-red-600">分析失敗，請稍後再試</p>}
 
       {data && !isLoading && (

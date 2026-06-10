@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useSegmentation } from '@/hooks/use-analytics';
+import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
 import {
   BarChart,
   Bar,
@@ -57,12 +58,7 @@ export function SegmentationSection({ surveyId }: { surveyId: string }) {
         </button>
       </div>
 
-      {analyze && isLoading && (
-        <div className="space-y-2">
-          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: '60%' }} />
-          <div className="h-3 animate-pulse rounded bg-muted" style={{ width: '40%' }} />
-        </div>
-      )}
+      {analyze && isLoading && <PanelSkeletonContent rows={3} />}
 
       {error && (
         <p className="text-xs text-red-600">分群失敗，請稍後再試</p>
