@@ -447,45 +447,68 @@ export class WalletService {
     amount: number,
     bankInfo: { bankCode: string; bankAccount: string; accountName: string },
   ): Promise<{ transactionId: string }> {
+    // Stateless fast-fail — no DB access, safe outside transaction
     const minWithdrawal = this.systemConfig.getMinWithdrawal();
     if (amount < minWithdrawal) {
       throw new BadRequestException(`最低提領金額為 NT$${minWithdrawal}`);
     }
 
-    // Phase B: 提領 ≥ NT$2,000 需先通過 KYC
+    // KYC reads a separate table and does not participate in the withdrawal
+    // accounting — safe to call before the transaction.
     await this.kyc.assertKycForWithdrawal(userId, amount);
 
-    const wallet = await this.getWallet(userId);
-    if (!wallet) throw new NotFoundException('找不到錢包');
+    await this.ensureWallet(userId);
 
-    if (wallet.cashBalance < amount) {
-      throw new BadRequestException('餘額不足');
-    }
-
-    // 每日提領上限
-    const todayTotal = await this.db
-      .select({ total: sql<number>`COALESCE(SUM(amount), 0)` })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.userId, userId),
-          eq(transactions.type, 'withdraw_request'),
-          // 被駁回/取消的提領已退回餘額，不應佔用每日額度。
-          sql`status NOT IN ('failed', 'cancelled')`,
-          sql`created_at >= NOW() - interval '1 day'`,
-        ),
-      );
-
-    const usedToday = Number(todayTotal[0]?.total ?? 0);
-    const maxDailyWithdrawal = this.systemConfig.getMaxDailyWithdrawal();
-    if (usedToday + amount > maxDailyWithdrawal) {
-      throw new BadRequestException(`每日提領上限 NT$${maxDailyWithdrawal}，今日已申請 NT$${usedToday}`);
-    }
-
-    // Phase K.2: 用 db.transaction 把 INSERT txn + UPDATE wallets 包成原子操作，
-    // 避免併發提領導致 TOCTOU 雙重扣款（之前是 read-then-write，兩 request 都可能過 balance check）
+    // All balance/limit validation and the wallet deduction happen inside a
+    // single transaction.  The wallet row is locked with FOR UPDATE at the
+    // start so that concurrent requests for the same user are serialised:
+    // the second request cannot read a stale balance or stale daily total
+    // until the first transaction commits or rolls back.
+    // This eliminates the TOCTOU window that existed when both checks lived
+    // outside the transaction (issue #35).
     const txnId = await this.db.transaction(async (tx) => {
-      // 在 transaction 內重新驗 balance 並更新（cash_balance >= amount 是 atomic guard）
+      // 1. Acquire row-level lock → serialises concurrent withdrawals for this user
+      const walletRows = await tx
+        .select({
+          cashBalance: wallets.cashBalance,
+          version: wallets.version,
+        })
+        .from(wallets)
+        .where(eq(wallets.userId, userId))
+        .for('update');
+
+      const wallet = walletRows[0];
+      if (!wallet) throw new NotFoundException('找不到錢包');
+
+      // 2. Balance check (inside tx, after acquiring the lock)
+      if (wallet.cashBalance < amount) {
+        throw new BadRequestException('餘額不足');
+      }
+
+      // 3. Daily limit check (inside tx, serialised by the wallet lock)
+      //    被駁回/取消的提領已退回餘額，不應佔用每日額度。
+      const todayResult = await tx
+        .select({ total: sql<number>`COALESCE(SUM(amount), 0)` })
+        .from(transactions)
+        .where(
+          and(
+            eq(transactions.userId, userId),
+            eq(transactions.type, 'withdraw_request'),
+            sql`status NOT IN ('failed', 'cancelled')`,
+            sql`created_at >= NOW() - interval '1 day'`,
+          ),
+        );
+
+      const usedToday = Number(todayResult[0]?.total ?? 0);
+      const maxDailyWithdrawal = this.systemConfig.getMaxDailyWithdrawal();
+      if (usedToday + amount > maxDailyWithdrawal) {
+        throw new BadRequestException(
+          `每日提領上限 NT$${maxDailyWithdrawal}，今日已申請 NT$${usedToday}`,
+        );
+      }
+
+      // 4. Atomic deduction — secondary guard (handles edge cases where lock
+      //    semantics differ between PGlite in tests and real PG in prod)
       const updateResult = await tx
         .update(wallets)
         .set({
@@ -498,10 +521,10 @@ export class WalletService {
         .returning({ id: wallets.id });
 
       if (updateResult.length === 0) {
-        // 餘額已被別的併發 request 扣掉
         throw new BadRequestException('餘額不足（可能有其他提領正在處理）');
       }
 
+      // 5. Create the withdrawal request record
       const [txn] = await tx
         .insert(transactions)
         .values({

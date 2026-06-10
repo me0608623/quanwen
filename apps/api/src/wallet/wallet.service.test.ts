@@ -502,7 +502,7 @@ describe('WalletService', () => {
     });
 
     it('should call kyc.assertKycForWithdrawal for >= 2000', async () => {
-      // Mock wallet exists
+      // ensureWallet() reads the wallet on the outer db before the tx
       const mockWallet = { cashBalance: 5000, lockedCash: 0, pointsBalance: 0, version: 1, createdAt: new Date(), updatedAt: new Date() };
       const mockSelect = {
         from: vi.fn().mockReturnThis(),
@@ -511,30 +511,31 @@ describe('WalletService', () => {
       };
       mockDb.select.mockReturnValueOnce(mockSelect);
 
-      // Mock daily limit
-      const mockSelectDaily = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue([{ total: 0 }]),
-      };
-      mockDb.select.mockReturnValueOnce(mockSelectDaily);
+      // Inside the tx (issue #35): (1) FOR UPDATE wallet lock, (2) daily-limit sum
+      const txSelect = vi.fn()
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          for: vi.fn().mockResolvedValue([{ cashBalance: 5000, version: 1 }]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue([{ total: 0 }]),
+        });
 
-      // Mock transactional deduction and insert
       const mockTxUpdate = {
         set: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         returning: vi.fn().mockResolvedValue([{ id: 'w1' }]),
       };
-      mockDb.update.mockReturnValueOnce(mockTxUpdate);
-
       const mockTxInsert = {
         values: vi.fn().mockReturnThis(),
         returning: vi.fn().mockResolvedValue([{ id: 't1' }]),
       };
-      mockDb.insert.mockReturnValueOnce(mockTxInsert);
 
       mockDb.transaction.mockImplementation((cb: (tx: any) => Promise<void>) => {
         return cb({
+          select: txSelect,
           update: vi.fn(() => mockTxUpdate),
           insert: vi.fn(() => mockTxInsert),
         });
@@ -545,7 +546,7 @@ describe('WalletService', () => {
     });
 
     it('should enforce daily limit', async () => {
-      // Mock getWallet call inside requestWithdrawal
+      // ensureWallet() reads the wallet on the outer db before the tx
       const mockWallet = { cashBalance: 5000, lockedCash: 0, pointsBalance: 0, version: 1, createdAt: new Date(), updatedAt: new Date() };
       const mockSelectWallet = {
         from: vi.fn().mockReturnThis(),
@@ -554,25 +555,31 @@ describe('WalletService', () => {
       };
       mockDb.select.mockReturnValueOnce(mockSelectWallet);
 
-      // Mock ensureWallet call (also uses getWallet)
-      mockDb.select.mockReturnValueOnce(mockSelectWallet);
-
-      // Mock daily limit check
-      const mockSelectDaily = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-      };
-      mockDb.select.mockReturnValueOnce(mockSelectDaily);
-      // Mock the SQL aggregation result
-      const dailyLimitResult = [{ total: MAX_DAILY_WITHDRAWAL - 1000 }];
-      mockSelectDaily.where.mockResolvedValueOnce(dailyLimitResult);
+      // Inside the tx (issue #35): wallet lock passes, daily-limit sum already near cap
+      const txSelect = vi.fn()
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          for: vi.fn().mockResolvedValue([{ cashBalance: 5000, version: 1 }]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue([{ total: MAX_DAILY_WITHDRAWAL - 1000 }]),
+        });
+      mockDb.transaction.mockImplementation((cb: (tx: any) => Promise<void>) => {
+        return cb({
+          select: txSelect,
+          update: vi.fn(),
+          insert: vi.fn(),
+        });
+      });
 
       // This should throw because daily limit would be exceeded (29000 + 2000 > 30000)
       await expect(service.requestWithdrawal('u1', 2000, { bankCode: '004', bankAccount: '1234567890', accountName: 'A' })).rejects.toThrow(BadRequestException);
     });
 
     it('should create pending withdrawal and lock balance', async () => {
-      // Mock getWallet call inside requestWithdrawal
+      // ensureWallet() reads the wallet on the outer db before the tx
       const mockWallet = { cashBalance: 5000, lockedCash: 0, pointsBalance: 0, version: 1, createdAt: new Date(), updatedAt: new Date() };
       const mockSelectWallet = {
         from: vi.fn().mockReturnThis(),
@@ -581,34 +588,31 @@ describe('WalletService', () => {
       };
       mockDb.select.mockReturnValueOnce(mockSelectWallet);
 
-      // Mock ensureWallet call (also uses getWallet)
-      mockDb.select.mockReturnValueOnce(mockSelectWallet);
-
-      // Mock daily limit check
-      const mockSelectDaily = {
-        from: vi.fn().mockReturnThis(),
-        where: vi.fn().mockReturnThis(),
-      };
-      mockDb.select.mockReturnValueOnce(mockSelectDaily);
-      // Mock the SQL aggregation result - 0 used today
-      const dailyLimitResult = [{ total: 0 }];
-      mockSelectDaily.where.mockResolvedValueOnce(dailyLimitResult);
+      // Inside the tx (issue #35): FOR UPDATE wallet lock + daily-limit sum (0 used)
+      const txSelect = vi.fn()
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockReturnThis(),
+          for: vi.fn().mockResolvedValue([{ cashBalance: 5000, version: 1 }]),
+        })
+        .mockReturnValueOnce({
+          from: vi.fn().mockReturnThis(),
+          where: vi.fn().mockResolvedValue([{ total: 0 }]),
+        });
 
       const mockTxUpdate = {
         set: vi.fn().mockReturnThis(),
         where: vi.fn().mockReturnThis(),
         returning: vi.fn().mockResolvedValue([{ id: 'w1' }]),
       };
-      mockDb.update.mockReturnValueOnce(mockTxUpdate);
-
       const mockTxInsert = {
         values: vi.fn().mockReturnThis(),
         returning: vi.fn().mockResolvedValue([{ id: 't1' }]),
       };
-      mockDb.insert.mockReturnValueOnce(mockTxInsert);
 
       mockDb.transaction.mockImplementation((cb: (tx: any) => Promise<void>) => {
         return cb({
+          select: txSelect,
           update: vi.fn(() => mockTxUpdate),
           insert: vi.fn(() => mockTxInsert),
         });
