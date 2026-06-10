@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { useTabsKeyboard } from '@/hooks/use-tabs-keyboard';
 import { useRouter } from 'next/navigation';
 import { extractApiError } from '@/lib/extract-error';
 import { useSubmitImportAppeal } from '@/hooks/use-import-appeals';
@@ -31,11 +32,14 @@ const TABS: { key: ImportTab; label: string; icon: string }[] = [
   { key: 'surveycake', label: 'SurveyCake', icon: '🎂' },
 ];
 
+const IMPORT_TAB_KEYS = TABS.map((t) => t.key) as readonly ImportTab[];
+
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export default function SurveyImportPage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<ImportTab>('excel');
+  const { handleKeyDown: handleTabKeyDown, registerRef: registerTabRef } = useTabsKeyboard(IMPORT_TAB_KEYS, activeTab, setActiveTab);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -54,12 +58,19 @@ export default function SurveyImportPage() {
       </div>
 
       {/* Tab selector */}
-      <div className="flex gap-1 rounded-lg border border-border p-1">
+      <div role="tablist" aria-label="匯入格式" className="flex gap-1 rounded-lg border border-border p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
+            ref={(el) => registerTabRef(tab.key, el)}
+            role="tab"
+            id={`import-tab-${tab.key}`}
+            aria-selected={activeTab === tab.key}
+            aria-controls={`import-panel-${tab.key}`}
+            tabIndex={activeTab === tab.key ? 0 : -1}
             type="button"
             onClick={() => { setActiveTab(tab.key); setResult(null); setError(null); }}
+            onKeyDown={handleTabKeyDown}
             className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-primary text-primary-foreground'
@@ -74,53 +85,67 @@ export default function SurveyImportPage() {
 
       {/* Tab panels */}
       {activeTab === 'excel' && (
-        <ExcelImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-excel" aria-labelledby="import-tab-excel">
+          <ExcelImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'csv' && (
-        <CsvImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-csv" aria-labelledby="import-tab-csv">
+          <CsvImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'json' && (
-        <JsonImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-json" aria-labelledby="import-tab-json">
+          <JsonImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'google-forms' && (
-        <GoogleFormsImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-google-forms" aria-labelledby="import-tab-google-forms">
+          <GoogleFormsImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'google-sheets' && (
-        <GoogleSheetsImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-google-sheets" aria-labelledby="import-tab-google-sheets">
+          <GoogleSheetsImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'pdf' && (
-        <PdfImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-pdf" aria-labelledby="import-tab-pdf">
+          <PdfImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
       {activeTab === 'surveycake' && (
-        <SurveyCakeImportPanel
-          onSuccess={(r) => { setResult(r); setError(null); }}
-          onError={(e) => { setError(e); setResult(null); }}
-          disabled={!!result}
-        />
+        <div role="tabpanel" id="import-panel-surveycake" aria-labelledby="import-tab-surveycake">
+          <SurveyCakeImportPanel
+            onSuccess={(r) => { setResult(r); setError(null); }}
+            onError={(e) => { setError(e); setResult(null); }}
+            disabled={!!result}
+          />
+        </div>
       )}
 
       {/* Error display */}
