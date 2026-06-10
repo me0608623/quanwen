@@ -122,21 +122,21 @@ export function SurveyRendererSurveyJS({
           --sjs-corner-radius: 20px;
           --sjs-shadow-small: none;
           --sjs-shadow-inner: none;
-          --sjs-border-default: rgba(255,255,255,0.15);
-          --sjs-border-light: rgba(255,255,255,0.1);
-          --sjs-questionpanel-hovercolor: rgba(255,255,255,0.12);
-          color: #f1f5f9;
+          --sjs-border-default: rgba(0,0,0,0.08);
+          --sjs-border-light: rgba(0,0,0,0.06);
+          --sjs-questionpanel-hovercolor: #f1f5f9;
+          color: #0f172a;
         }
         .surveyjs-wrapper .sd-root-modern {
-          --sjs-primary-backcolor: #2563eb;
+          --sjs-primary-backcolor: #07183d;
           --sjs-primary-forecolor: #ffffff;
-          --sjs-primary-backcolor-light: rgba(37,99,235,0.15);
-          --sjs-primary-backcolor-dark: #1d4ed8;
-          --sjs-question-background: rgba(255,255,255,0.06);
+          --sjs-primary-backcolor-light: rgba(37,99,235,0.08);
+          --sjs-primary-backcolor-dark: #2563eb;
+          --sjs-question-background: rgba(255,255,255,0.9);
           --sjs-questionpanel-backcolor: transparent;
           --sjs-general-backcolor: transparent;
-          --sjs-general-backcolor-dim: rgba(255,255,255,0.04);
-          --sjs-font-editorfont-color: #f1f5f9;
+          --sjs-general-backcolor-dim: #f8fafc;
+          --sjs-font-editorfont-color: #0f172a;
         }
         .surveyjs-wrapper .sd-container-modern {
           margin: 0;
@@ -148,12 +148,12 @@ export function SurveyRendererSurveyJS({
           height: 4px;
           overflow: hidden;
           border-radius: 2px;
-          background: rgba(255,255,255,0.1);
+          background: rgba(0,0,0,0.08);
         }
         .surveyjs-wrapper .sd-progress__bar {
           border-radius: inherit;
-          background: linear-gradient(90deg, #2563eb, #60a5fa);
-          box-shadow: 0 0 10px rgba(37,99,235,0.5);
+          background: linear-gradient(90deg, #07183d, #2563eb);
+          box-shadow: 0 2px 8px rgba(37,99,235,0.3);
           transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
         }
         .surveyjs-wrapper .sd-container-modern__title {
@@ -162,32 +162,28 @@ export function SurveyRendererSurveyJS({
         .surveyjs-wrapper .sd-page__title {
           display: none;
         }
-        /* ===== Question cards — glassmorphism ===== */
+        /* ===== Question cards — light glassmorphism ===== */
         .surveyjs-wrapper .sd-question {
           margin-bottom: 0.9rem;
           overflow: hidden;
-          border: 1px solid rgba(255,255,255,0.15);
+          border: 1px solid rgba(0,0,0,0.08);
           border-radius: 20px;
-          background: linear-gradient(
-            145deg,
-            rgba(255,255,255,0.08) 0%,
-            rgba(37,99,235,0.12) 100%
-          );
+          background: rgba(255,255,255,0.9);
           backdrop-filter: blur(20px) saturate(180%);
           box-shadow:
-            0 8px 32px rgba(0,0,0,0.6),
-            inset 0 1px 0 rgba(255,255,255,0.1);
+            0 4px 24px rgba(0,0,0,0.06),
+            inset 0 1px 0 rgba(255,255,255,0.8);
           transition:
             transform 300ms cubic-bezier(0.4,0,0.2,1),
             border-color 300ms ease,
             box-shadow 300ms ease;
         }
         .surveyjs-wrapper .sd-question:focus-within {
-          transform: translateY(-2px);
-          border-color: rgba(96,165,250,0.5);
+          transform: translateY(-1px);
+          border-color: rgba(37,99,235,0.3);
           box-shadow:
-            0 12px 40px rgba(37,99,235,0.2),
-            inset 0 1px 0 rgba(255,255,255,0.1);
+            0 8px 32px rgba(37,99,235,0.1),
+            inset 0 1px 0 rgba(255,255,255,0.8);
         }
         .surveyjs-wrapper .sd-question__header {
           padding-bottom: 0.4rem;
@@ -196,24 +192,20 @@ export function SurveyRendererSurveyJS({
           font-size: 1rem;
           font-weight: 650;
           letter-spacing: -0.01em;
-          color: #ffffff;
+          color: #0f172a;
         }
         .surveyjs-wrapper .sd-question__required-text {
-          color: #60a5fa;
+          color: #2563eb;
         }
         .surveyjs-wrapper .sd-description {
-          color: rgba(255,255,255,0.6);
+          color: #475569;
           line-height: 1.65;
         }
-        /* ===== Option items — glass cards ===== */
+        /* ===== Option items — light cards ===== */
         .surveyjs-wrapper .sd-item {
           border-radius: 12px;
-          border: 1px solid rgba(255,255,255,0.08);
-          background: linear-gradient(
-            145deg,
-            rgba(255,255,255,0.05) 0%,
-            rgba(255,255,255,0.02) 100%
-          );
+          border: 1px solid rgba(0,0,0,0.08);
+          background: #ffffff;
           transition:
             background 300ms cubic-bezier(0.4,0,0.2,1),
             border-color 300ms ease,
@@ -221,122 +213,114 @@ export function SurveyRendererSurveyJS({
             transform 300ms cubic-bezier(0.4,0,0.2,1);
         }
         .surveyjs-wrapper .sd-item:hover {
-          background: linear-gradient(
-            145deg,
-            rgba(255,255,255,0.12) 0%,
-            rgba(37,99,235,0.15) 100%
-          );
-          border-color: rgba(96,165,250,0.5);
-          transform: translateY(-2px);
-          box-shadow: 0 12px 40px rgba(37,99,235,0.2);
+          background: #f1f5f9;
+          border-color: rgba(37,99,235,0.2);
+          transform: translateY(-1px);
+          box-shadow: 0 8px 32px rgba(37,99,235,0.1);
         }
         .surveyjs-wrapper .sd-item--checked {
-          background: linear-gradient(
-            145deg,
-            rgba(37,99,235,0.3) 0%,
-            rgba(29,78,216,0.25) 100%
-          );
-          border-color: rgba(96,165,250,0.8);
+          background: rgba(37,99,235,0.08);
+          border-color: rgba(37,99,235,0.4);
           box-shadow:
-            0 0 30px rgba(37,99,235,0.3),
-            inset 0 0 20px rgba(255,255,255,0.05);
+            0 0 20px rgba(37,99,235,0.15),
+            inset 0 0 12px rgba(37,99,235,0.05);
         }
         .surveyjs-wrapper .sd-item--checked .sd-item__control-label {
-          color: #93c5fd;
+          color: #07183d;
         }
         .surveyjs-wrapper .sd-item__decorator {
-          border-color: rgba(255,255,255,0.3);
+          border-color: rgba(0,0,0,0.2);
         }
         .surveyjs-wrapper .sd-item__control-label {
-          color: rgba(255,255,255,0.85);
+          color: #0f172a;
         }
-        /* ===== Buttons — glass blue ===== */
+        /* ===== Buttons — primary dark blue ===== */
         .surveyjs-wrapper .sd-btn {
-          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          background: #07183d;
           border-color: transparent;
-          border-radius: 999px;
+          border-radius: 8px;
           color: white;
           font-weight: 600;
           min-height: 2.75rem;
           padding-inline: 1.4rem;
           transition:
-            transform 200ms cubic-bezier(0.4,0,0.2,1),
-            box-shadow 200ms ease;
+            background 200ms ease,
+            transform 200ms cubic-bezier(0.4,0,0.2,1);
         }
         .surveyjs-wrapper .sd-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 32px rgba(37,99,235,0.4);
+          background: #2563eb;
         }
         .surveyjs-wrapper .sd-btn:active {
-          transform: scale(0.95);
+          transform: scale(0.97);
         }
         .surveyjs-wrapper .sd-btn:focus-visible,
         .surveyjs-wrapper input:focus-visible,
         .surveyjs-wrapper textarea:focus-visible,
         .surveyjs-wrapper select:focus-visible {
-          outline: 2px solid rgba(96,165,250,0.6);
+          outline: 2px solid rgba(7,24,61,0.3);
           outline-offset: 2px;
         }
         .surveyjs-wrapper .sd-navigation__complete-btn {
-          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          background: #07183d;
           border-color: transparent;
           color: white;
         }
-        /* ===== Inputs — glass dark ===== */
+        .surveyjs-wrapper .sd-navigation__complete-btn:hover {
+          background: #2563eb;
+        }
+        /* ===== Inputs — light ===== */
         .surveyjs-wrapper .sd-input,
         .surveyjs-wrapper .sd-comment {
-          border-radius: 12px;
-          border-color: rgba(255,255,255,0.15);
-          background: rgba(255,255,255,0.06);
-          color: #f1f5f9;
+          border-radius: 8px;
+          border-color: rgba(0,0,0,0.08);
+          background: #ffffff;
+          color: #0f172a;
           transition:
             border-color 200ms ease,
-            box-shadow 200ms ease,
-            background-color 200ms ease;
+            box-shadow 200ms ease;
         }
         .surveyjs-wrapper .sd-input:focus,
         .surveyjs-wrapper .sd-comment:focus {
-          border-color: rgba(96,165,250,0.6);
-          background: rgba(255,255,255,0.1);
-          box-shadow: 0 0 0 3px rgba(37,99,235,0.2);
+          border-color: #07183d;
+          box-shadow: 0 0 0 3px rgba(7,24,61,0.1);
         }
         .surveyjs-wrapper .sd-input::placeholder,
         .surveyjs-wrapper .sd-comment::placeholder {
-          color: rgba(255,255,255,0.3);
+          color: #94a3b8;
         }
         /* ===== Rating ===== */
         .surveyjs-wrapper .sd-rating {
-          color: rgba(255,255,255,0.4);
+          color: #94a3b8;
         }
         .surveyjs-wrapper .sd-rating__item {
-          color: rgba(255,255,255,0.4);
+          color: #94a3b8;
           transition: color 200ms ease, transform 200ms ease;
         }
         .surveyjs-wrapper .sd-rating__item:hover {
-          color: rgba(255,255,255,0.7);
+          color: #475569;
           transform: scale(1.15);
         }
         .surveyjs-wrapper .sd-rating__item--selected {
-          color: #60a5fa;
+          color: #2563eb;
         }
         /* ===== Matrix ===== */
         .surveyjs-wrapper .sd-matrix__label {
-          color: rgba(255,255,255,0.7);
+          color: #475569;
         }
         .surveyjs-wrapper .sd-table {
-          border-color: rgba(255,255,255,0.1);
+          border-color: rgba(0,0,0,0.08);
         }
         .surveyjs-wrapper .sd-table th {
-          color: rgba(255,255,255,0.6);
+          color: #475569;
         }
         .surveyjs-wrapper .sd-table td {
-          border-color: rgba(255,255,255,0.08);
+          border-color: rgba(0,0,0,0.06);
         }
         /* ===== Validation errors ===== */
         .surveyjs-wrapper .sd-question__erbox {
-          color: #fca5a5;
-          background: rgba(239,68,68,0.15);
-          border-color: rgba(239,68,68,0.3);
+          color: #dc2626;
+          background: #fef2f2;
+          border-color: #fca5a5;
           border-radius: 10px;
         }
         /* ===== Reduced motion ===== */
