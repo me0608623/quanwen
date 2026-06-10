@@ -43,7 +43,6 @@ export function SidebarNav({ model }: SidebarNavProps) {
 
   useEffect(() => {
     if (!model) return;
-    // Schedule initial sync out of the synchronous effect body to avoid cascading renders
     const timer = setTimeout(refresh, 0);
     model.onValueChanged.add(refresh);
     return () => {
@@ -69,13 +68,12 @@ export function SidebarNav({ model }: SidebarNavProps) {
     <>
       {/* ===== Desktop sidebar (md+) ===== */}
       <aside
-        className="glass-sidebar hidden md:flex md:flex-col md:items-center md:rounded-[20px] md:border md:border-white/15 md:p-5"
+        className="hidden md:flex md:flex-col md:items-center md:rounded-[16px] md:border md:p-5"
         style={{
-          background:
-            'linear-gradient(145deg, rgba(255,255,255,0.08) 0%, rgba(37,99,235,0.12) 100%)',
+          background: '#f8fafc',
           backdropFilter: 'blur(20px) saturate(180%)',
-          boxShadow:
-            '0 8px 32px rgba(0,0,0,0.6), inset 0 1px 0 rgba(255,255,255,0.1)',
+          borderColor: 'rgba(0,0,0,0.08)',
+          boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
           minWidth: 140,
           maxWidth: 170,
           alignSelf: 'flex-start',
@@ -85,23 +83,23 @@ export function SidebarNav({ model }: SidebarNavProps) {
       >
         {/* Progress header */}
         <div className="mb-2 text-center">
-          <div className="text-[11px] font-medium tracking-wide text-blue-300">
+          <div className="text-[11px] font-medium tracking-wide text-[#07183d]">
             作答進度
           </div>
-          <div className="mt-0.5 text-lg font-bold text-white">
+          <div className="mt-0.5 text-lg font-bold text-[#0f172a]">
             {answeredCount}
-            <span className="text-sm font-normal text-gray-400">/{total}</span>
+            <span className="text-sm font-normal text-[#94a3b8]">/{total}</span>
           </div>
         </div>
 
         {/* Progress bar */}
-        <div className="mb-5 h-[3px] w-full overflow-hidden rounded-full bg-white/10">
+        <div className="mb-5 h-[3px] w-full overflow-hidden rounded-full bg-[rgba(0,0,0,0.08)]">
           <div
             className="h-full rounded-full"
             style={{
               width: `${pct}%`,
-              background: 'linear-gradient(90deg, #2563eb, #60a5fa)',
-              boxShadow: '0 0 10px rgba(37,99,235,0.5)',
+              background: 'linear-gradient(90deg, #07183d, #2563eb)',
+              boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
               transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
             }}
           />
@@ -121,37 +119,48 @@ export function SidebarNav({ model }: SidebarNavProps) {
                 aria-label={`第 ${i + 1} 題${d.answered ? '（已作答）' : ''}`}
               >
                 <span
-                  className={`block rounded-full border-2 transition-all duration-300 ${
-                    isCurrent
-                      ? 'h-3.5 w-3.5 border-white bg-white'
-                      : d.answered
-                        ? 'h-2.5 w-2.5 border-blue-400 bg-blue-600'
-                        : 'h-2.5 w-2.5 border-white/30 bg-transparent'
-                  }`}
+                  className="block rounded-full border-2 transition-all duration-300"
                   style={
                     isCurrent
-                      ? { boxShadow: '0 0 20px rgba(255,255,255,0.6)', transform: 'scale(1.4)' }
+                      ? {
+                          width: 14,
+                          height: 14,
+                          borderColor: '#07183d',
+                          backgroundColor: '#07183d',
+                          boxShadow: '0 0 12px rgba(7,24,61,0.3)',
+                          transform: 'scale(1.3)',
+                        }
                       : d.answered
-                        ? { boxShadow: '0 0 8px rgba(37,99,235,0.6)' }
-                        : undefined
+                        ? {
+                            width: 10,
+                            height: 10,
+                            borderColor: '#2563eb',
+                            backgroundColor: '#2563eb',
+                            boxShadow: '0 0 6px rgba(37,99,235,0.4)',
+                          }
+                        : {
+                            width: 10,
+                            height: 10,
+                            borderColor: 'rgba(0,0,0,0.2)',
+                            backgroundColor: 'transparent',
+                          }
                   }
                 />
                 {/* Tooltip on hover */}
                 {hovered === i && (
                   <span
-                    className="absolute right-[calc(100%+12px)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg border border-white/20 px-3 py-2 text-left pointer-events-none z-50"
+                    className="absolute right-[calc(100%+12px)] top-1/2 -translate-y-1/2 whitespace-nowrap rounded-lg border px-3 py-2 text-left pointer-events-none z-50"
                     style={{
-                      background:
-                        'linear-gradient(145deg, rgba(7,24,61,0.96), rgba(0,26,51,0.96))',
-                      backdropFilter: 'blur(12px)',
-                      boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+                      background: '#07183d',
+                      borderColor: 'rgba(7,24,61,0.2)',
+                      boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
                     }}
                   >
                     <span className="block text-[11px] font-semibold text-white">
                       第 {i + 1} 題
                     </span>
                     <span
-                      className={`block text-[11px] ${d.answered ? 'text-blue-200' : 'text-gray-400'}`}
+                      className={`block text-[11px] ${d.answered ? 'text-blue-200' : 'text-[#94a3b8]'}`}
                     >
                       {d.answered ? d.preview : '尚未作答'}
                     </span>
@@ -165,16 +174,16 @@ export function SidebarNav({ model }: SidebarNavProps) {
         {/* Legend */}
         <div className="mt-5 space-y-1.5 text-[10px]">
           <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full border-2 border-blue-400 bg-blue-600" />
-            <span className="text-gray-400">已答</span>
+            <span className="inline-block h-2 w-2 rounded-full border-2 border-[#2563eb] bg-[#2563eb]" />
+            <span className="text-[#94a3b8]">已答</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full border-2 border-white bg-white" />
-            <span className="text-gray-400">當前</span>
+            <span className="inline-block h-2 w-2 rounded-full border-2 border-[#07183d] bg-[#07183d]" />
+            <span className="text-[#94a3b8]">當前</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="inline-block h-2 w-2 rounded-full border-2 border-white/30 bg-transparent" />
-            <span className="text-gray-400">未答</span>
+            <span className="inline-block h-2 w-2 rounded-full border-2 border-[rgba(0,0,0,0.2)] bg-transparent" />
+            <span className="text-[#94a3b8]">未答</span>
           </div>
         </div>
       </aside>
@@ -183,24 +192,23 @@ export function SidebarNav({ model }: SidebarNavProps) {
       <div
         className="fixed inset-x-0 bottom-0 z-40 flex items-center gap-2 overflow-x-auto px-4 py-3 md:hidden"
         style={{
-          background:
-            'linear-gradient(145deg, rgba(255,255,255,0.08), rgba(37,99,235,0.12))',
+          background: 'rgba(255,255,255,0.95)',
           backdropFilter: 'blur(20px) saturate(180%)',
-          borderTop: '1px solid rgba(255,255,255,0.15)',
-          boxShadow: '0 -4px 24px rgba(0,0,0,0.4)',
+          borderTop: '1px solid rgba(0,0,0,0.08)',
+          boxShadow: '0 -4px 24px rgba(0,0,0,0.06)',
           scrollSnapType: 'x mandatory',
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        <span className="shrink-0 text-[11px] font-semibold text-blue-300">
+        <span className="shrink-0 text-[11px] font-semibold text-[#07183d]">
           {answeredCount}/{total}
         </span>
-        <div className="h-[3px] w-10 shrink-0 overflow-hidden rounded-full bg-white/10">
+        <div className="h-[3px] w-10 shrink-0 overflow-hidden rounded-full bg-[rgba(0,0,0,0.08)]">
           <div
             className="h-full rounded-full"
             style={{
               width: `${pct}%`,
-              background: 'linear-gradient(90deg, #2563eb, #60a5fa)',
+              background: 'linear-gradient(90deg, #07183d, #2563eb)',
             }}
           />
         </div>
@@ -215,19 +223,30 @@ export function SidebarNav({ model }: SidebarNavProps) {
               aria-label={`第 ${i + 1} 題`}
             >
               <span
-                className={`block rounded-full border-2 transition-all duration-300 ${
-                  isCurrent
-                    ? 'h-3 w-3 border-white bg-white'
-                    : d.answered
-                      ? 'h-2 w-2 border-blue-400 bg-blue-600'
-                      : 'h-2 w-2 border-white/30 bg-transparent'
-                }`}
+                className="block rounded-full border-2 transition-all duration-300"
                 style={
                   isCurrent
-                    ? { boxShadow: '0 0 14px rgba(255,255,255,0.6)' }
+                    ? {
+                        width: 12,
+                        height: 12,
+                        borderColor: '#07183d',
+                        backgroundColor: '#07183d',
+                        boxShadow: '0 0 8px rgba(7,24,61,0.3)',
+                      }
                     : d.answered
-                      ? { boxShadow: '0 0 6px rgba(37,99,235,0.5)' }
-                      : undefined
+                      ? {
+                          width: 8,
+                          height: 8,
+                          borderColor: '#2563eb',
+                          backgroundColor: '#2563eb',
+                          boxShadow: '0 0 4px rgba(37,99,235,0.4)',
+                        }
+                      : {
+                          width: 8,
+                          height: 8,
+                          borderColor: 'rgba(0,0,0,0.2)',
+                          backgroundColor: 'transparent',
+                        }
                 }
               />
             </button>
