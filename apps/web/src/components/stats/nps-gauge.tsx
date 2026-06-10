@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { useNps, type NpsResult } from '@/hooks/use-analytics';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 import {
   PieChart,
   Pie,
@@ -173,7 +174,12 @@ export function NpsSection({ questionStats, surveyId }: { questionStats: Questio
   const { data, isLoading, error } = useNps(surveyId, selectedRating?.questionId, !!selectedRating);
 
   if (ratingQuestions.length === 0) {
-    return null;
+    return (
+      <EmptyCapabilityCard
+        title="NPS 淨推薦值"
+        description="需要至少 1 題 0–10 評分或量表題才能計算 NPS。"
+      />
+    );
   }
 
   return (

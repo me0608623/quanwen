@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { useCrossTab } from '@/hooks/use-analytics';
 import type { CrossTabResult } from '@/hooks/use-analytics';
 import { PanelSkeletonContent } from '@/components/stats/panel-skeleton';
+import { EmptyCapabilityCard } from '@/components/stats/empty-capability-card';
 import {
   BarChart,
   Bar,
@@ -128,7 +129,12 @@ export function CrossTabSection({ questionStats, surveyId }: { questionStats: Qu
   const { data, isLoading, error } = useCrossTab(surveyId, qA, qB, !!qA && !!qB);
 
   if (singleChoiceQuestions.length < 2) {
-    return null;
+    return (
+      <EmptyCapabilityCard
+        title="交叉分析"
+        description="需要至少 2 題單選題才能交叉比對。"
+      />
+    );
   }
 
   return (
