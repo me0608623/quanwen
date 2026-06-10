@@ -27,6 +27,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 11.4.0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -47,6 +61,24 @@ jobs:
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/quanwen-api:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      # 同步 Drizzle schema 到 Neon —— 必須在 Render redeploy 之前，否則新 image 開機查到缺的表會崩潰（42P01，2026-06-10 事故）。
+      # 安全設計：drizzle.config 的 strict 在 CI 關閉（DRIZZLE_PUSH_NONINTERACTIVE=true）→ 純新增（CREATE TABLE / ADD COLUMN）
+      # 自動套用；破壞性語句（drop / truncate / not-null on data）會跳 prompt，</dev/null 給 EOF → 中止此步 → fail-fast 不觸發
+      # redeploy，交由人工審查。schema 同步失敗就不部署，避免又部署一個會崩的 image。
+      - name: Sync Neon schema (drizzle-kit push)
+        working-directory: apps/api
+        timeout-minutes: 5
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+          DRIZZLE_PUSH_NONINTERACTIVE: 'true'
+        run: |
+          if [ -z "$DATABASE_URL" ]; then
+            echo "::error::NEON_DATABASE_URL secret 未設定，無法同步 schema（部署中止以免新 image 開機崩潰）"
+            exit 1
+          fi
+          echo "同步 Drizzle schema 到 Neon（純新增自動套用；破壞性變更會中止此步交人工審查）..."
+          pnpm exec drizzle-kit push </dev/null
 
       # Render service autoDeploy=no → 必須用 API 觸發；deploy 會重新 pull latest image
       - name: Trigger Render redeploy
