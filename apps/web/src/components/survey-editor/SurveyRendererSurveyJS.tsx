@@ -14,6 +14,8 @@ export interface SurveyRendererSurveyJSProps {
   survey: PublicSurvey;
   onSubmit: (answers: AnswerInput[]) => Promise<void>;
   submitting?: boolean;
+  /** Called once after the SurveyJS model is created; parent can use it for sidebar integration. */
+  onModelReady?: (model: SurveyModel) => void;
 }
 
 // 把 hex 主色壓暗一階，給按鈕 hover / dark 變體用
@@ -37,6 +39,7 @@ export function SurveyRendererSurveyJS({
   survey,
   onSubmit,
   submitting = false,
+  onModelReady,
 }: SurveyRendererSurveyJSProps) {
   const modelRef = useRef<SurveyModel | null>(null);
   const submittingRef = useRef(submitting);
@@ -70,6 +73,14 @@ export function SurveyRendererSurveyJS({
   }
 
   const model = modelRef.current;
+
+  // Expose model to parent (fires once after mount)
+  useEffect(() => {
+    if (modelRef.current && onModelReady) {
+      onModelReady(modelRef.current);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleComplete = useCallback(
     async (sender: SurveyModel) => {
@@ -108,25 +119,24 @@ export function SurveyRendererSurveyJS({
           box-shadow: none;
         }
         .surveyjs-wrapper .sd-root-modern {
-          --sjs-corner-radius: 18px;
+          --sjs-corner-radius: 20px;
           --sjs-shadow-small: none;
           --sjs-shadow-inner: none;
-          --sjs-border-default: rgba(148, 163, 184, 0.28);
-          --sjs-border-light: rgba(226, 232, 240, 0.95);
-          --sjs-questionpanel-hovercolor: #ffffff;
-          color: #0f172a;
+          --sjs-border-default: rgba(255,255,255,0.15);
+          --sjs-border-light: rgba(255,255,255,0.1);
+          --sjs-questionpanel-hovercolor: rgba(255,255,255,0.12);
+          color: #f1f5f9;
         }
         .surveyjs-wrapper .sd-root-modern {
-          --sjs-primary-backcolor: var(--qw-accent, #126b8a);
+          --sjs-primary-backcolor: #2563eb;
           --sjs-primary-forecolor: #ffffff;
-          --sjs-primary-backcolor-light: color-mix(in srgb, var(--qw-accent, #126b8a) 10%, transparent);
-          --sjs-primary-backcolor-dark: var(--qw-accent-dark, #0f5d78);
-          /* ⚠️ SurveyJS 的 fallback 鏈會撿到 shadcn 的 --background（HSL 分量格式，非合法色值）
-             導致題目卡背景變透明、題目全部黏在一起。明確定義 SJS 變數，讓 fallback 不會走到 --background。 */
-          --sjs-question-background: #ffffff;
-          --sjs-questionpanel-backcolor: #ffffff;
-          --sjs-general-backcolor: #ffffff;
-          --sjs-general-backcolor-dim: #f1f3f5;
+          --sjs-primary-backcolor-light: rgba(37,99,235,0.15);
+          --sjs-primary-backcolor-dark: #1d4ed8;
+          --sjs-question-background: rgba(255,255,255,0.06);
+          --sjs-questionpanel-backcolor: transparent;
+          --sjs-general-backcolor: transparent;
+          --sjs-general-backcolor-dim: rgba(255,255,255,0.04);
+          --sjs-font-editorfont-color: #f1f5f9;
         }
         .surveyjs-wrapper .sd-container-modern {
           margin: 0;
@@ -135,42 +145,49 @@ export function SurveyRendererSurveyJS({
           min-width: 0;
         }
         .surveyjs-wrapper .sd-progress {
-          height: 0.5rem;
+          height: 4px;
           overflow: hidden;
-          border-radius: 999px;
-          background: rgba(226, 232, 240, 0.86);
+          border-radius: 2px;
+          background: rgba(255,255,255,0.1);
         }
         .surveyjs-wrapper .sd-progress__bar {
           border-radius: inherit;
-          background: linear-gradient(90deg, var(--qw-accent, #126b8a), var(--qw-accent-dark, #0f5d78));
-          transition: width 240ms ease;
+          background: linear-gradient(90deg, #2563eb, #60a5fa);
+          box-shadow: 0 0 10px rgba(37,99,235,0.5);
+          transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
         }
-        /* 只隱藏「問卷層級」標題（頁首已另行顯示）。
-           ⚠️ 不能用 .sd-title 一刀切 — SurveyJS 每題標題也帶 sd-title class，
-           曾導致填答頁看不到題目文字、選項全部連在一起。 */
         .surveyjs-wrapper .sd-container-modern__title {
           display: none;
         }
         .surveyjs-wrapper .sd-page__title {
           display: none;
         }
-        /* 題目卡之間留間距，題目不互相黏在一起 */
+        /* ===== Question cards — glassmorphism ===== */
         .surveyjs-wrapper .sd-question {
           margin-bottom: 0.9rem;
           overflow: hidden;
-          border: 1px solid rgba(226, 232, 240, 0.96);
-          border-radius: 22px;
-          background: rgba(255, 255, 255, 0.92);
-          box-shadow: 0 18px 56px rgba(15, 23, 42, 0.06);
+          border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 20px;
+          background: linear-gradient(
+            145deg,
+            rgba(255,255,255,0.08) 0%,
+            rgba(37,99,235,0.12) 100%
+          );
+          backdrop-filter: blur(20px) saturate(180%);
+          box-shadow:
+            0 8px 32px rgba(0,0,0,0.6),
+            inset 0 1px 0 rgba(255,255,255,0.1);
           transition:
-            transform 180ms ease,
-            border-color 180ms ease,
-            box-shadow 180ms ease;
+            transform 300ms cubic-bezier(0.4,0,0.2,1),
+            border-color 300ms ease,
+            box-shadow 300ms ease;
         }
         .surveyjs-wrapper .sd-question:focus-within {
-          transform: translateY(-1px);
-          border-color: color-mix(in srgb, var(--qw-accent, #126b8a) 36%, rgba(226, 232, 240, 1));
-          box-shadow: 0 22px 70px rgba(15, 23, 42, 0.09);
+          transform: translateY(-2px);
+          border-color: rgba(96,165,250,0.5);
+          box-shadow:
+            0 12px 40px rgba(37,99,235,0.2),
+            inset 0 1px 0 rgba(255,255,255,0.1);
         }
         .surveyjs-wrapper .sd-question__header {
           padding-bottom: 0.4rem;
@@ -179,87 +196,161 @@ export function SurveyRendererSurveyJS({
           font-size: 1rem;
           font-weight: 650;
           letter-spacing: -0.01em;
-          color: #0f172a;
+          color: #ffffff;
         }
         .surveyjs-wrapper .sd-question__required-text {
-          color: var(--qw-accent, #126b8a);
+          color: #60a5fa;
         }
         .surveyjs-wrapper .sd-description {
-          color: #64748b;
+          color: rgba(255,255,255,0.6);
           line-height: 1.65;
         }
+        /* ===== Option items — glass cards ===== */
+        .surveyjs-wrapper .sd-item {
+          border-radius: 12px;
+          border: 1px solid rgba(255,255,255,0.08);
+          background: linear-gradient(
+            145deg,
+            rgba(255,255,255,0.05) 0%,
+            rgba(255,255,255,0.02) 100%
+          );
+          transition:
+            background 300ms cubic-bezier(0.4,0,0.2,1),
+            border-color 300ms ease,
+            box-shadow 300ms ease,
+            transform 300ms cubic-bezier(0.4,0,0.2,1);
+        }
+        .surveyjs-wrapper .sd-item:hover {
+          background: linear-gradient(
+            145deg,
+            rgba(255,255,255,0.12) 0%,
+            rgba(37,99,235,0.15) 100%
+          );
+          border-color: rgba(96,165,250,0.5);
+          transform: translateY(-2px);
+          box-shadow: 0 12px 40px rgba(37,99,235,0.2);
+        }
+        .surveyjs-wrapper .sd-item--checked {
+          background: linear-gradient(
+            145deg,
+            rgba(37,99,235,0.3) 0%,
+            rgba(29,78,216,0.25) 100%
+          );
+          border-color: rgba(96,165,250,0.8);
+          box-shadow:
+            0 0 30px rgba(37,99,235,0.3),
+            inset 0 0 20px rgba(255,255,255,0.05);
+        }
+        .surveyjs-wrapper .sd-item--checked .sd-item__control-label {
+          color: #93c5fd;
+        }
+        .surveyjs-wrapper .sd-item__decorator {
+          border-color: rgba(255,255,255,0.3);
+        }
+        .surveyjs-wrapper .sd-item__control-label {
+          color: rgba(255,255,255,0.85);
+        }
+        /* ===== Buttons — glass blue ===== */
         .surveyjs-wrapper .sd-btn {
-          background-color: var(--qw-accent, #126b8a);
-          border-color: var(--qw-accent, #126b8a);
+          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          border-color: transparent;
           border-radius: 999px;
           color: white;
           font-weight: 600;
           min-height: 2.75rem;
-          padding-inline: 1.2rem;
+          padding-inline: 1.4rem;
           transition:
-            transform 160ms ease,
-            background-color 160ms ease,
-            box-shadow 160ms ease;
+            transform 200ms cubic-bezier(0.4,0,0.2,1),
+            box-shadow 200ms ease;
         }
         .surveyjs-wrapper .sd-btn:hover {
-          transform: translateY(-1px);
-          background-color: var(--qw-accent-dark, #0f5d78);
-          box-shadow: 0 14px 32px color-mix(in srgb, var(--qw-accent, #126b8a) 22%, transparent);
+          transform: translateY(-2px);
+          box-shadow: 0 12px 32px rgba(37,99,235,0.4);
+        }
+        .surveyjs-wrapper .sd-btn:active {
+          transform: scale(0.95);
         }
         .surveyjs-wrapper .sd-btn:focus-visible,
         .surveyjs-wrapper input:focus-visible,
         .surveyjs-wrapper textarea:focus-visible,
         .surveyjs-wrapper select:focus-visible {
-          outline: 2px solid color-mix(in srgb, var(--qw-accent, #126b8a) 42%, transparent);
+          outline: 2px solid rgba(96,165,250,0.6);
           outline-offset: 2px;
         }
         .surveyjs-wrapper .sd-navigation__complete-btn {
-          background-color: var(--qw-accent, #126b8a);
-          border-color: var(--qw-accent, #126b8a);
+          background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+          border-color: transparent;
           color: white;
         }
+        /* ===== Inputs — glass dark ===== */
         .surveyjs-wrapper .sd-input,
         .surveyjs-wrapper .sd-comment {
-          border-radius: 16px;
-          border-color: rgba(203, 213, 225, 0.95);
-          background: rgba(248, 250, 252, 0.72);
+          border-radius: 12px;
+          border-color: rgba(255,255,255,0.15);
+          background: rgba(255,255,255,0.06);
+          color: #f1f5f9;
           transition:
-            border-color 160ms ease,
-            box-shadow 160ms ease,
-            background-color 160ms ease;
+            border-color 200ms ease,
+            box-shadow 200ms ease,
+            background-color 200ms ease;
         }
         .surveyjs-wrapper .sd-input:focus,
         .surveyjs-wrapper .sd-comment:focus {
-          border-color: color-mix(in srgb, var(--qw-accent, #126b8a) 44%, rgba(203, 213, 225, 1));
-          background: #ffffff;
-          box-shadow: 0 0 0 4px color-mix(in srgb, var(--qw-accent, #126b8a) 10%, transparent);
+          border-color: rgba(96,165,250,0.6);
+          background: rgba(255,255,255,0.1);
+          box-shadow: 0 0 0 3px rgba(37,99,235,0.2);
         }
-        .surveyjs-wrapper .sd-item {
-          border-radius: 14px;
-          transition:
-            background-color 160ms ease,
-            color 160ms ease;
+        .surveyjs-wrapper .sd-input::placeholder,
+        .surveyjs-wrapper .sd-comment::placeholder {
+          color: rgba(255,255,255,0.3);
         }
-        .surveyjs-wrapper .sd-item:hover {
-          background: rgba(241, 245, 249, 0.75);
+        /* ===== Rating ===== */
+        .surveyjs-wrapper .sd-rating {
+          color: rgba(255,255,255,0.4);
         }
-        .surveyjs-wrapper .sd-item--checked .sd-item__control-label {
-          color: var(--qw-accent, #126b8a);
+        .surveyjs-wrapper .sd-rating__item {
+          color: rgba(255,255,255,0.4);
+          transition: color 200ms ease, transform 200ms ease;
         }
-        .surveyjs-wrapper .sd-item__decorator {
-          border-color: rgba(148, 163, 184, 0.9);
+        .surveyjs-wrapper .sd-rating__item:hover {
+          color: rgba(255,255,255,0.7);
+          transform: scale(1.15);
         }
         .surveyjs-wrapper .sd-rating__item--selected {
-          color: var(--qw-accent, #126b8a);
+          color: #60a5fa;
         }
+        /* ===== Matrix ===== */
+        .surveyjs-wrapper .sd-matrix__label {
+          color: rgba(255,255,255,0.7);
+        }
+        .surveyjs-wrapper .sd-table {
+          border-color: rgba(255,255,255,0.1);
+        }
+        .surveyjs-wrapper .sd-table th {
+          color: rgba(255,255,255,0.6);
+        }
+        .surveyjs-wrapper .sd-table td {
+          border-color: rgba(255,255,255,0.08);
+        }
+        /* ===== Validation errors ===== */
+        .surveyjs-wrapper .sd-question__erbox {
+          color: #fca5a5;
+          background: rgba(239,68,68,0.15);
+          border-color: rgba(239,68,68,0.3);
+          border-radius: 10px;
+        }
+        /* ===== Reduced motion ===== */
         @media (prefers-reduced-motion: reduce) {
           .surveyjs-wrapper .sd-question,
           .surveyjs-wrapper .sd-btn,
-          .surveyjs-wrapper .sd-progress__bar {
+          .surveyjs-wrapper .sd-progress__bar,
+          .surveyjs-wrapper .sd-item,
+          .surveyjs-wrapper .sd-rating__item {
             transition: none;
           }
           .surveyjs-wrapper .sd-question:focus-within,
-          .surveyjs-wrapper .sd-btn:hover {
+          .surveyjs-wrapper .sd-btn:hover,
+          .surveyjs-wrapper .sd-item:hover {
             transform: none;
           }
         }
