@@ -1020,6 +1020,111 @@ export class WalletService {
     this.logger.log(`Budget unlocked: survey=${surveyId} refund=${toUnlock}`);
   }
 
+  // ─── 管理員：手動調整現金餘額 ─────────────────────────────────────────────
+  // amount 正=增加，負=扣除；存入 transactions 的金額恆正（Math.abs）
+  // 雙向 journal_entries：DR platform_adjustment / CR wallet_userId（增加）
+  //                      ：DR wallet_userId / CR platform_adjustment（扣除）
+
+  async adminAdjustBalance(params: {
+    userId: string;
+    adminId: string;
+    amount: number; // integer NT$，正=增加，負=扣除
+    reason: string;
+  }): Promise<void> {
+    const { userId, adminId, amount, reason } = params;
+    if (!Number.isInteger(amount) || amount === 0) {
+      throw new BadRequestException('amount 必須為非零整數 NT$');
+    }
+
+    await this.ensureWallet(userId);
+    const absAmount = Math.abs(amount);
+    const isIncrease = amount > 0;
+    const now = new Date();
+
+    await this.db.transaction(async (tx) => {
+      if (!isIncrease) {
+        // 扣除：需確保餘額不為負
+        const updateResult = await tx
+          .update(wallets)
+          .set({
+            cashBalance: sql`cash_balance - ${absAmount}`,
+            version: sql`version + 1`,
+            updatedAt: now,
+          })
+          .where(and(eq(wallets.userId, userId), sql`cash_balance >= ${absAmount}`))
+          .returning({ id: wallets.id });
+
+        if (updateResult.length === 0) {
+          throw new BadRequestException('餘額不足，無法扣除');
+        }
+      } else {
+        await tx
+          .update(wallets)
+          .set({
+            cashBalance: sql`cash_balance + ${absAmount}`,
+            version: sql`version + 1`,
+            updatedAt: now,
+          })
+          .where(eq(wallets.userId, userId));
+      }
+
+      const [txn] = await tx
+        .insert(transactions)
+        .values({
+          userId,
+          type: 'admin_adjustment',
+          amount: absAmount,
+          status: 'success',
+          note: `管理員調整：${isIncrease ? '+' : '-'}NT$${absAmount}（${reason}）`,
+          metadata: { adminId, reason, direction: isIncrease ? 'increase' : 'decrease' },
+          approvedBy: adminId,
+          actionAt: now,
+          completedAt: now,
+        })
+        .returning();
+
+      // 雙向分錄（platform_adjustment 為對沖帳）
+      if (isIncrease) {
+        await tx.insert(journalEntries).values([
+          { transactionId: txn.id, accountName: 'platform_adjustment', debitAmount: absAmount, creditAmount: 0 },
+          { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: 0, creditAmount: absAmount },
+        ]);
+      } else {
+        await tx.insert(journalEntries).values([
+          { transactionId: txn.id, accountName: `wallet_${userId}`, debitAmount: absAmount, creditAmount: 0 },
+          { transactionId: txn.id, accountName: 'platform_adjustment', debitAmount: 0, creditAmount: absAmount },
+        ]);
+      }
+    });
+
+    this.logger.log(`Admin balance adjustment: user=${userId} amount=${amount} admin=${adminId} reason=${reason}`);
+
+    this.notifications
+      .create({
+        userId,
+        type: 'system',
+        title: `帳戶餘額已由平台調整 ${isIncrease ? '+' : ''}NT$${isIncrease ? absAmount : -absAmount}`,
+        body: `調整原因：${reason}`,
+        metadata: { adminId, amount, reason },
+      })
+      .catch((err: unknown) =>
+        this.logger.error(`admin_adjustment 通知失敗 userId=${userId}`, err),
+      );
+  }
+
+  // ─── 管理員：查看用戶錢包詳情 ──────────────────────────────────────────────
+
+  async getAdminWalletDetail(userId: string) {
+    const wallet = await this.getWallet(userId);
+    const recentTxns = await this.db
+      .select()
+      .from(transactions)
+      .where(eq(transactions.userId, userId))
+      .orderBy(desc(transactions.createdAt))
+      .limit(20);
+    return { wallet, recentTransactions: recentTxns };
+  }
+
   // ─── 管理員：審核提領申請 ──────────────────────────────────────────────────
 
   async getPendingWithdrawals() {

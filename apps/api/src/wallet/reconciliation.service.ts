@@ -169,8 +169,10 @@ export class ReconciliationService {
       actual: payableBalance,
     });
 
-    // 7. 不變式：托管帳（escrow_ecpay + escrow_mock）= wallets 加總 + 累計手續費 + 退款
+    // 7. 不變式：托管帳（escrow_ecpay + escrow_mock）= wallets 加總 + 累計手續費 + 管理員調整淨額
     //    Dev 環境用 mockDeposit 走 escrow_mock；prod 走 escrow_ecpay；合計才完整
+    //    管理員調整（admin_adjustment）不經 ECPay，以 platform_adjustment 帳戶補償：
+    //      增加用戶餘額：DR platform_adjustment / CR wallet_* → expectedEscrow += platform_adj_credits - platform_adj_debits
     const mockEscrowRow = await this.db
       .select({
         debits: sql<number>`COALESCE(SUM(debit_amount), 0)::int`,
@@ -181,15 +183,25 @@ export class ReconciliationService {
     const mockEscrowBalance = (mockEscrowRow[0]?.debits ?? 0) - (mockEscrowRow[0]?.credits ?? 0);
     const totalEscrow = escrowBalance + mockEscrowBalance;
 
-    const expectedEscrow = walletCashSum + walletLockedSum + report.totals.platformFeeRevenue;
+    // platform_adjustment net credit = 管理員從用戶扣除的淨額（正=平台回收，負=平台補貼）
+    const platformAdjRow = await this.db
+      .select({
+        debits: sql<number>`COALESCE(SUM(debit_amount), 0)::int`,
+        credits: sql<number>`COALESCE(SUM(credit_amount), 0)::int`,
+      })
+      .from(journalEntries)
+      .where(eq(journalEntries.accountName, 'platform_adjustment'));
+    const platformAdjNetCredit = (platformAdjRow[0]?.credits ?? 0) - (platformAdjRow[0]?.debits ?? 0);
+
+    const expectedEscrow = walletCashSum + walletLockedSum + report.totals.platformFeeRevenue + platformAdjNetCredit;
     const escrowDiff = totalEscrow - expectedEscrow;
     report.invariants.push({
-      label: '托管帳 ≈ wallets 加總 + 累計手續費（容差 0）',
+      label: '托管帳 ≈ wallets 加總 + 累計手續費 + 管理員調整（容差 0）',
       pass: Math.abs(escrowDiff) === 0,
       expected: expectedEscrow,
       actual: totalEscrow,
       note: escrowDiff !== 0
-        ? `差額 ${escrowDiff}（escrow_ecpay=${escrowBalance} escrow_mock=${mockEscrowBalance} wallets=${walletCashSum + walletLockedSum} fees=${report.totals.platformFeeRevenue}）`
+        ? `差額 ${escrowDiff}（escrow_ecpay=${escrowBalance} escrow_mock=${mockEscrowBalance} wallets=${walletCashSum + walletLockedSum} fees=${report.totals.platformFeeRevenue} adj_net=${platformAdjNetCredit}）`
         : undefined,
     });
 

@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 import {
   useAdminUserDetail,
+  useAdminWallet,
+  useAdjustWallet,
   useMultiAccountScan,
   useSuspendUser,
   useUnsuspendUser,
@@ -50,6 +52,7 @@ const TYPE_LABELS: Record<string, string> = {
   refund: '退款',
   points_in: '積分收入',
   points_spend: '積分支出',
+  admin_adjustment: '管理員調整',
 };
 
 const TIER_LABELS: Record<AdminUserTier, string> = {
@@ -74,7 +77,10 @@ export default function AdminUserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const [suspendOpen, setSuspendOpen] = useState(false);
   const [scanEnabled, setScanEnabled] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
   const detail = useAdminUserDetail(id);
+  const walletDetail = useAdminWallet(id);
+  const adjustWallet = useAdjustWallet(id);
   const scan = useMultiAccountScan(id, scanEnabled);
   const suspend = useSuspendUser();
   const unsuspend = useUnsuspendUser();
@@ -109,6 +115,13 @@ export default function AdminUserDetailPage() {
     updateTier.mutate({ id, tier: selectedTier });
   };
 
+  const handleAdjust = (amount: number, reason: string) => {
+    adjustWallet.mutate(
+      { amount, reason },
+      { onSuccess: () => setAdjustOpen(false) },
+    );
+  };
+
   return (
     <main className="mx-auto max-w-6xl px-4 py-10">
       {user && suspendOpen && (
@@ -118,6 +131,15 @@ export default function AdminUserDetailPage() {
           onCancel={() => setSuspendOpen(false)}
           isPending={suspend.isPending}
           error={suspend.error}
+        />
+      )}
+      {adjustOpen && (
+        <AdjustWalletDialog
+          currentBalance={walletDetail.data?.wallet?.cashBalance ?? detail.data?.wallet?.cashBalance ?? 0}
+          onConfirm={handleAdjust}
+          onCancel={() => setAdjustOpen(false)}
+          isPending={adjustWallet.isPending}
+          error={adjustWallet.error}
         />
       )}
 
@@ -198,6 +220,12 @@ export default function AdminUserDetailPage() {
               </div>
             </section>
           )}
+
+          <WalletManageSection
+            userId={id}
+            walletDetail={walletDetail}
+            onAdjust={() => setAdjustOpen(true)}
+          />
 
           <section className="rounded-lg border border-border bg-card p-5">
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -441,5 +469,173 @@ function StatusBadge({ status }: { status: string }) {
     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_COLORS[status] ?? 'bg-gray-100 text-gray-600'}`}>
       {STATUS_LABELS[status] ?? status}
     </span>
+  );
+}
+
+function WalletManageSection({
+  walletDetail,
+  onAdjust,
+}: {
+  userId: string;
+  walletDetail: ReturnType<typeof useAdminWallet>;
+  onAdjust: () => void;
+}) {
+  const w = walletDetail.data?.wallet;
+  const txns = walletDetail.data?.recentTransactions ?? [];
+  return (
+    <section className="rounded-lg border border-border bg-card p-5">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-base font-semibold">錢包管理</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">查看餘額明細並手動調整現金</p>
+        </div>
+        <button
+          onClick={onAdjust}
+          className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
+        >
+          調整餘額
+        </button>
+      </div>
+
+      {walletDetail.isLoading && <p className="mt-3 text-sm text-muted-foreground">載入中…</p>}
+      {walletDetail.error && (
+        <p className="mt-3 text-sm text-destructive">{extractApiError(walletDetail.error, '錢包資料載入失敗')}</p>
+      )}
+
+      {w && (
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">現金餘額</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{money(w.cashBalance)}</p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">鎖定現金</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{money(w.lockedCash)}</p>
+          </div>
+          <div className="rounded-md bg-muted/50 p-3">
+            <p className="text-xs text-muted-foreground">積分餘額</p>
+            <p className="mt-1 text-xl font-bold tabular-nums">{w.pointsBalance.toLocaleString()}</p>
+          </div>
+        </div>
+      )}
+
+      {txns.length > 0 && (
+        <div className="mt-4 overflow-x-auto">
+          <table className="w-full min-w-[720px] text-left text-sm">
+            <thead className="border-b border-border text-xs text-muted-foreground">
+              <tr>
+                <th className="py-2 font-medium">類型</th>
+                <th className="py-2 font-medium">金額</th>
+                <th className="py-2 font-medium">狀態</th>
+                <th className="py-2 font-medium">備註</th>
+                <th className="py-2 font-medium">時間</th>
+              </tr>
+            </thead>
+            <tbody>
+              {txns.map((txn) => (
+                <tr key={txn.id} className="border-b border-border last:border-0">
+                  <td className="py-2">{TYPE_LABELS[txn.type] ?? txn.type}</td>
+                  <td className="py-2 tabular-nums">{money(txn.amount)}</td>
+                  <td className="py-2"><StatusBadge status={txn.status} /></td>
+                  <td className="max-w-xs truncate py-2 text-muted-foreground">{txn.note ?? '—'}</td>
+                  <td className="py-2 text-xs text-muted-foreground">{new Date(txn.createdAt).toLocaleString('zh-TW')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function AdjustWalletDialog({
+  currentBalance,
+  onConfirm,
+  onCancel,
+  isPending,
+  error,
+}: {
+  currentBalance: number;
+  onConfirm: (amount: number, reason: string) => void;
+  onCancel: () => void;
+  isPending: boolean;
+  error: unknown;
+}) {
+  const [raw, setRaw] = useState('');
+  const [reason, setReason] = useState('');
+  const [confirmed, setConfirmed] = useState(false);
+
+  const trimmedReason = reason.trim();
+  const parsed = parseInt(raw, 10);
+  const validAmount = raw !== '' && !isNaN(parsed) && parsed !== 0 && String(parsed) === raw;
+  const validReason = trimmedReason.length >= 1 && trimmedReason.length <= 500;
+  const canSubmit = validAmount && validReason;
+
+  const preview = validAmount ? currentBalance + parsed : currentBalance;
+  const isIncrease = validAmount && parsed > 0;
+
+  const handleSubmit = () => {
+    if (!canSubmit) return;
+    if (!confirmed) {
+      setConfirmed(true);
+      return;
+    }
+    onConfirm(parsed, trimmedReason);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-background p-6 shadow-xl">
+        <h3 className="mb-1 text-base font-semibold">調整現金餘額</h3>
+        <p className="mb-4 text-sm text-muted-foreground">目前餘額：{money(currentBalance)}</p>
+
+        <label className="mb-1 block text-sm font-medium">調整金額（正數=增加，負數=扣除，整數 NT$）</label>
+        <input
+          type="number"
+          step="1"
+          className="mb-3 w-full rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          placeholder="例：100 或 -50"
+          value={raw}
+          onChange={(e) => { setRaw(e.target.value); setConfirmed(false); }}
+        />
+
+        {validAmount && (
+          <p className={`mb-3 text-sm font-medium ${isIncrease ? 'text-green-700' : 'text-red-700'}`}>
+            調整後餘額：{money(preview)}（{isIncrease ? `+${parsed}` : parsed}）
+          </p>
+        )}
+
+        <label className="mb-1 block text-sm font-medium">調整原因（必填）</label>
+        <textarea
+          className="h-24 w-full resize-none rounded-md border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+          placeholder="請輸入調整原因（稽核用）"
+          value={reason}
+          onChange={(e) => { setReason(e.target.value); setConfirmed(false); }}
+        />
+        <p className={`mb-3 mt-1 text-xs ${validReason || trimmedReason.length === 0 ? 'text-muted-foreground' : 'text-destructive'}`}>
+          {trimmedReason.length}/500
+        </p>
+
+        {confirmed && canSubmit && (
+          <div className="mb-3 rounded-md border border-yellow-200 bg-yellow-50 px-3 py-2 text-sm text-yellow-800">
+            確認要{isIncrease ? '增加' : '扣除'} NT${Math.abs(parsed)} 嗎？此操作將產生稽核紀錄。
+          </div>
+        )}
+
+        {error ? <p className="mb-2 text-sm text-destructive">{extractApiError(error, '調整失敗')}</p> : null}
+
+        <div className="flex justify-end gap-2">
+          <button onClick={onCancel} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">取消</button>
+          <button
+            onClick={handleSubmit}
+            disabled={!canSubmit || isPending}
+            className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+          >
+            {isPending ? '處理中…' : confirmed ? '確認執行' : '下一步'}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

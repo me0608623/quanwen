@@ -274,7 +274,7 @@ describe('ReconciliationService.runDaily (integration)', () => {
       'wallets.cash 加總 = journal wallet_* 餘額',
       'wallets.locked 加總 = journal survey_escrow 餘額',
       'reward_payable 中間帳應為 0',
-      '托管帳 ≈ wallets 加總 + 累計手續費（容差 0）',
+      '托管帳 ≈ wallets 加總 + 累計手續費 + 管理員調整（容差 0）',
     ]);
   });
 

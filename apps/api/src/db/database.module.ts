@@ -338,7 +338,7 @@ export { DB_TOKEN as DB };
             CREATE TYPE transaction_type AS ENUM (
               'deposit','reward_out','reward_in','platform_fee',
               'withdraw_request','withdraw_complete','refund',
-              'points_in','points_spend'
+              'points_in','points_spend','admin_adjustment'
             );
             CREATE TYPE transaction_status AS ENUM (
               'pending','processing','success','failed','cancelled'
