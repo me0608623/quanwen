@@ -375,7 +375,7 @@ export default function SurveyDetailPage() {
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入問卷中…</div>;
   if (!survey) return <div className="p-10 text-sm text-destructive">找不到問卷。</div>;
-  if (survey.status === 'published' || survey.status === 'closed') {
+  if (survey.status === 'closed' || (survey.status === 'published' && !editInfoMode)) {
     return <div className="p-10 text-sm text-muted-foreground">正在開啟問卷分析工作台…</div>;
   }
 
