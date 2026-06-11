@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
+  DEADLINE_TIER_OPTIONS,
   type AudienceCriteria,
   type DeadlineTier,
   type SurveyQuestion,
@@ -85,6 +86,7 @@ export default function SurveyDetailPage() {
   const [lotteryDrawMode, setLotteryDrawMode] = useState<'when_full' | 'scheduled' | 'manual'>('when_full');
   const [lotteryDrawAt, setLotteryDrawAt] = useState('');
   const [lotteryTermsAccepted, setLotteryTermsAccepted] = useState(false);
+  const [feeAcknowledged, setFeeAcknowledged] = useState(false);
   const [targetCount, setTargetCount] = useState(100);
   const [deadlineTier, setDeadlineTier] = useState<DeadlineTier>('standard');
   const [scheduledPublishAt, setScheduledPublishAt] = useState('');
@@ -471,12 +473,16 @@ export default function SurveyDetailPage() {
       lotteryTermsAccepted={lotteryTermsAccepted}
       targetCount={targetCount}
       deadlineTier={deadlineTier}
+      feeAcknowledged={feeAcknowledged}
+      onFeeAcknowledgedChange={setFeeAcknowledged}
       onRewardChange={(v) => {
         setRewardPoints(v);
+        setFeeAcknowledged(false);
         markDirty();
       }}
       onTargetChange={(v) => {
         setTargetCount(v);
+        setFeeAcknowledged(false);
         markDirty();
       }}
       onRewardModeChange={(v) => {
@@ -506,6 +512,7 @@ export default function SurveyDetailPage() {
       }}
       onTierChange={(v) => {
         setDeadlineTier(v);
+        setFeeAcknowledged(false);
         markDirty();
       }}
       pricingAdvice={pricingAdvice.data}
@@ -888,11 +895,15 @@ export default function SurveyDetailPage() {
 
       {/* 發布確認 modal（含預算試算） */}
       {showPublishConfirm && (() => {
+        // 與後端 wallet.service.ts feeFor/unitCostFor 同公式（對齊 PLATFORM_FEE_RATE = 0.10）
         const PLATFORM_FEE_RATE = 0.10;
         const required = budgetCheck?.requiredAmount ?? 0;
         const noQuestions = questions.length === 0;
         const balance = budgetCheck?.walletBalance ?? 0;
         const insufficient = required > 0 && !!budgetCheck && !budgetCheck.sufficient;
+        const needsFeeAck = survey?.type !== 'mutual' && rewardMode === 'fixed' && rewardPoints > 0;
+        const effectivePerShare = Math.round(rewardPoints * (DEADLINE_TIER_OPTIONS.find((o) => o.value === deadlineTier)?.multiplier ?? 1));
+        const feePerShare = Math.ceil(effectivePerShare * PLATFORM_FEE_RATE);
         return (
           <div
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
@@ -968,22 +979,28 @@ export default function SurveyDetailPage() {
                   {rewardMode === 'fixed' && (
                     <>
                       <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">每份獎金</span>
-                        <span>NT${rewardPoints.toLocaleString()}</span>
+                        <span className="text-muted-foreground">
+                          每份獎金{deadlineTier !== 'standard' ? `（加急 ${DEADLINE_TIER_OPTIONS.find((o) => o.value === deadlineTier)?.multiplier ?? 1}x）` : ''}
+                        </span>
+                        <span>NT${effectivePerShare.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">平台手續費（10%）</span>
-                        <span>NT${Math.floor(rewardPoints * PLATFORM_FEE_RATE).toLocaleString()}</span>
+                        <span className="text-muted-foreground">每份手續費（10%）</span>
+                        <span>NT${feePerShare.toLocaleString()}</span>
                       </div>
                       <div className="flex justify-between text-xs">
-                        <span className="text-muted-foreground">目標份數</span>
-                        <span>{targetCount.toLocaleString()} 份</span>
+                        <span className="text-muted-foreground">獎金小計 × {targetCount.toLocaleString()} 份</span>
+                        <span>NT${(effectivePerShare * targetCount).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">平台手續費 × {targetCount.toLocaleString()} 份</span>
+                        <span>NT${(feePerShare * targetCount).toLocaleString()}</span>
                       </div>
                       <div className="border-t border-border" />
                     </>
                   )}
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">預估鎖定預算</span>
+                    <span className="text-muted-foreground">實際鎖定預算</span>
                     <span className="font-semibold">NT${required.toLocaleString()}</span>
                   </div>
                   <div className="flex justify-between">
@@ -1014,6 +1031,12 @@ export default function SurveyDetailPage() {
                 <p className="mt-3 text-xs text-destructive">問卷至少需要一道題目才能發布。</p>
               )}
 
+              {needsFeeAck && !feeAcknowledged && (
+                <p className="mt-3 text-xs text-amber-700">
+                  請先在「獎勵設定」側欄勾選「我已了解平台將收取 10% 手續費」再發布。
+                </p>
+              )}
+
               <div className="mt-5 flex justify-end gap-2">
                 <button
                   type="button"
@@ -1025,7 +1048,7 @@ export default function SurveyDetailPage() {
                 <button
                   type="button"
                   onClick={handlePublish}
-                  disabled={insufficient || noQuestions || publishSurvey.isPending || updateSurvey.isPending}
+                  disabled={insufficient || noQuestions || (needsFeeAck && !feeAcknowledged) || publishSurvey.isPending || updateSurvey.isPending}
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
                   {publishSurvey.isPending || updateSurvey.isPending

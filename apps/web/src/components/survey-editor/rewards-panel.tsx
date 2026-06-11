@@ -17,6 +17,8 @@ interface RewardsPanelProps {
   lotteryDrawMode?: 'when_full' | 'scheduled' | 'manual';
   lotteryDrawAt?: string;
   lotteryTermsAccepted?: boolean;
+  /** 問卷者已知曉平台 10% 手續費 */
+  feeAcknowledged?: boolean;
   onRewardChange: (v: number) => void;
   onTargetChange: (v: number) => void;
   onTierChange: (v: DeadlineTier) => void;
@@ -26,6 +28,7 @@ interface RewardsPanelProps {
   onLotteryDrawModeChange?: (v: 'when_full' | 'scheduled' | 'manual') => void;
   onLotteryDrawAtChange?: (v: string) => void;
   onLotteryTermsAcceptedChange?: (v: boolean) => void;
+  onFeeAcknowledgedChange?: (v: boolean) => void;
   /** AI 定價顧問（依題目估算建議獎勵） */
   pricingAdvice?: PricingAdvice;
   pricingLoading?: boolean;
@@ -53,6 +56,7 @@ export function RewardsPanel({
   lotteryDrawMode = 'when_full',
   lotteryDrawAt = '',
   lotteryTermsAccepted = false,
+  feeAcknowledged = false,
   onRewardChange,
   onTargetChange,
   onTierChange,
@@ -62,6 +66,7 @@ export function RewardsPanel({
   onLotteryDrawModeChange,
   onLotteryDrawAtChange,
   onLotteryTermsAcceptedChange,
+  onFeeAcknowledgedChange,
   pricingAdvice,
   pricingLoading,
   disabled,
@@ -184,7 +189,13 @@ export function RewardsPanel({
   const toggleRush = () => onTierChange(rushing ? 'standard' : 'express');
 
   const effectivePerShare = Math.round(rewardPoints * tierMultiplier(deadlineTier));
-  const totalBudget = effectivePerShare * targetCount;
+  // 與後端 wallet.service.ts feeFor/unitCostFor 同公式（對齊 PLATFORM_FEE_RATE = 0.10）
+  const PLATFORM_FEE_RATE = 0.10;
+  const feePerShare = Math.ceil(effectivePerShare * PLATFORM_FEE_RATE);
+  const unitCost = effectivePerShare + feePerShare;
+  const rewardSubtotal = effectivePerShare * targetCount;
+  const feeTotal = feePerShare * targetCount;
+  const totalLocked = unitCost * targetCount;
 
   return (
     <div className="space-y-5 p-3">
@@ -289,17 +300,53 @@ export function RewardsPanel({
         )}
       </div>
 
-      {/* 預估總預算 */}
-      <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-3">
-        <div className="flex items-baseline justify-between">
-          <span className="text-xs font-semibold text-foreground">預估總預算</span>
-          <span className="text-lg font-bold text-primary">NT${totalBudget.toLocaleString()}</span>
+      {/* 預估總預算明細 */}
+      <div className="rounded-lg border border-primary/30 bg-primary/5 px-3 py-3 space-y-2">
+        <p className="text-xs font-semibold text-foreground">預估總預算</p>
+        <div className="space-y-1 text-xs">
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">
+              每份獎金{rushing ? `（加急 ${tierMultiplier(deadlineTier)}x）` : ''}
+            </span>
+            <span>NT${effectivePerShare.toLocaleString()}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted-foreground">每份手續費（10%）</span>
+            <span>NT${feePerShare.toLocaleString()}</span>
+          </div>
+          <div className="border-t border-primary/20 pt-1.5 space-y-1">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">獎金小計 × {targetCount.toLocaleString()} 份</span>
+              <span>NT${rewardSubtotal.toLocaleString()}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">平台手續費 × {targetCount.toLocaleString()} 份</span>
+              <span>NT${feeTotal.toLocaleString()}</span>
+            </div>
+          </div>
+          <div className="border-t border-primary/40 pt-1.5 flex items-baseline justify-between">
+            <span className="font-semibold text-foreground">實際鎖定預算</span>
+            <span className="text-lg font-bold text-primary">NT${totalLocked.toLocaleString()}</span>
+          </div>
         </div>
-        <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-          每份實付 NT${effectivePerShare.toLocaleString()}
-          {rushing ? `（含加急 ${tierMultiplier(deadlineTier)}x）` : ''} × {targetCount.toLocaleString()} 份
-        </p>
+        <p className="text-[11px] text-muted-foreground">平台收取 10% 手續費，於每份獎勵發放時抽取。</p>
       </div>
+
+      {/* 手續費知曉確認勾選 */}
+      {!disabled && (
+        <label className="flex items-start gap-2 text-xs leading-relaxed cursor-pointer">
+          <input
+            type="checkbox"
+            checked={feeAcknowledged}
+            onChange={(e) => onFeeAcknowledgedChange?.(e.target.checked)}
+            className="mt-0.5 shrink-0"
+          />
+          <span>
+            我已了解平台將收取 <b>10%</b> 手續費，實際鎖定預算為{' '}
+            <b>NT${totalLocked.toLocaleString()}</b>。
+          </span>
+        </label>
+      )}
     </div>
   );
 }
