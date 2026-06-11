@@ -13,6 +13,7 @@ import {
   LogIn,
   SearchX,
 } from 'lucide-react';
+import type { SurveyModel } from 'survey-core';
 import { usePublicLinkSurvey, useSubmitPublicResponse } from '@/hooks/use-responses';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
 import { lotteryDisclosure } from '@/lib/lottery-display';
@@ -20,6 +21,7 @@ import { estimateFillMinutes } from '@/lib/fill-time';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import { getToken } from '@/lib/token';
+import { SidebarNav } from '@/components/survey-glass/sidebar-nav';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
 
@@ -27,10 +29,12 @@ function PublicSurveyShell({
   children,
   className = '',
   style,
+  wide = false,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
+  wide?: boolean;
 }) {
   return (
     <main
@@ -39,7 +43,9 @@ function PublicSurveyShell({
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_20%_20%,rgba(18,107,138,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0))]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:linear-gradient(to_bottom,black,transparent_72%)]" />
-      <div className="relative mx-auto w-full max-w-3xl">{children}</div>
+      <div className={`relative mx-auto w-full ${wide ? 'max-w-6xl' : 'max-w-3xl'}`}>{children}</div>
+      {/* Bottom padding for mobile bottom bar */}
+      {wide && <div className="h-16 md:hidden" />}
     </main>
   );
 }
@@ -82,6 +88,7 @@ export default function PublicSurveyPage() {
   const submit = useSubmitPublicResponse(id, anonToken);
 
   const [done, setDone] = useState<{ flagged: boolean } | null>(null);
+  const [surveyModel, setSurveyModel] = useState<SurveyModel | null>(null);
   // 登入偵測放 useEffect，避免 SSR/CSR 不一致造成 hydration mismatch
   const [hasToken, setHasToken] = useState(false);
   useEffect(() => setHasToken(!!getToken()), []);
@@ -268,72 +275,81 @@ export default function PublicSurveyPage() {
   };
 
   return (
-    <PublicSurveyShell>
-      <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
-        {survey.coverImageUrl && (
-          // eslint-disable-next-line @next/next/no-img-element
-          <img
-            src={resolveAssetUrl(survey.coverImageUrl)}
-            alt=""
-            className="max-h-72 w-full object-cover"
-          />
-        )}
-        <div className="p-5 sm:p-7">
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
-          <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
-          {survey.description && (
-            <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
-          )}
-          {survey.welcomeImages && survey.welcomeImages.length > 0 && (
-            <div className="mt-5 space-y-3">
-              {survey.welcomeImages.map((url, i) => (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  key={`${url}-${i}`}
-                  src={resolveAssetUrl(url)}
-                  alt={`歡迎圖 ${i + 1}`}
-                  className="w-full rounded-2xl border border-slate-100 object-contain"
-                />
-              ))}
+    <PublicSurveyShell wide>
+      <div className="flex gap-6">
+        {/* Left: survey content */}
+        <div className="min-w-0 flex-1">
+          <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
+            {survey.coverImageUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img
+                src={resolveAssetUrl(survey.coverImageUrl)}
+                alt=""
+                className="max-h-72 w-full object-cover"
+              />
+            )}
+            <div className="p-5 sm:p-7">
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
+              <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
+              {survey.description && (
+                <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
+              )}
+              {survey.welcomeImages && survey.welcomeImages.length > 0 && (
+                <div className="mt-5 space-y-3">
+                  {survey.welcomeImages.map((url, i) => (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      key={`${url}-${i}`}
+                      src={resolveAssetUrl(url)}
+                      alt={`歡迎圖 ${i + 1}`}
+                      className="w-full rounded-2xl border border-slate-100 object-contain"
+                    />
+                  ))}
+                </div>
+              )}
+              <div className="mt-6 flex flex-wrap items-center gap-2">
+                <PublicMetaPill>
+                  <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.8} />
+                  {survey.questions.length} 題
+                </PublicMetaPill>
+                {survey.questions.length > 0 && (
+                  <PublicMetaPill>
+                    <Clock3 className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    預估約 {estimateFillMinutes(survey.questions.length)} 分鐘
+                  </PublicMetaPill>
+                )}
+                {survey.rewardPoints > 0 && (
+                  <PublicMetaPill tone="accent">
+                    <Gift className="h-3.5 w-3.5" strokeWidth={1.8} />
+                    NT${survey.rewardPoints}
+                  </PublicMetaPill>
+                )}
+              </div>
             </div>
-          )}
-          <div className="mt-6 flex flex-wrap items-center gap-2">
-            <PublicMetaPill>
-              <ClipboardList className="h-3.5 w-3.5" strokeWidth={1.8} />
-              {survey.questions.length} 題
-            </PublicMetaPill>
-            {survey.questions.length > 0 && (
-              <PublicMetaPill>
-                <Clock3 className="h-3.5 w-3.5" strokeWidth={1.8} />
-                預估約 {estimateFillMinutes(survey.questions.length)} 分鐘
-              </PublicMetaPill>
-            )}
-            {survey.rewardPoints > 0 && (
-              <PublicMetaPill tone="accent">
-                <Gift className="h-3.5 w-3.5" strokeWidth={1.8} />
-                NT${survey.rewardPoints}
-              </PublicMetaPill>
-            )}
-          </div>
+          </section>
+          {submit.error && (() => {
+            const err = submit.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
+            const status = err?.response?.status;
+            const backendMsg = err?.response?.data?.message;
+            return (
+              <p className="my-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                {status === 409 ? '這份問卷你已經填過了'
+                  : status === 400 ? backendMsg ?? '送出資料有誤，請檢查後重試'
+                  : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
+              </p>
+            );
+          })()}
+          <SurveyRendererSurveyJS
+            survey={survey}
+            onSubmit={handleSubmit}
+            submitting={submit.isPending}
+            onModelReady={setSurveyModel}
+          />
         </div>
-      </section>
-      {submit.error && (() => {
-        const err = submit.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
-        const status = err?.response?.status;
-        const backendMsg = err?.response?.data?.message;
-        return (
-          <p className="my-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {status === 409 ? '這份問卷你已經填過了'
-              : status === 400 ? backendMsg ?? '送出資料有誤，請檢查後重試'
-              : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
-          </p>
-        );
-      })()}
-      <SurveyRendererSurveyJS
-        survey={survey}
-        onSubmit={handleSubmit}
-        submitting={submit.isPending}
-      />
+
+        {/* Right: sticky progress sidebar */}
+        <SidebarNav model={surveyModel} />
+      </div>
     </PublicSurveyShell>
   );
 }
