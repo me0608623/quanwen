@@ -6,11 +6,11 @@ interface Props {
   advice: PricingAdvice | undefined;
   loading: boolean;
   currentReward: number;
-  onApplyFair: (value: number) => void;
+  onApplyPrice: (value: number) => void;
 }
 
 /** 問卷建立頁的「建議單份獎勵」卡（參考用；發問卷者自訂價）。 */
-export function PricingAdviceCard({ advice, loading, currentReward, onApplyFair }: Props) {
+export function PricingAdviceCard({ advice, loading, currentReward, onApplyPrice }: Props) {
   if (loading && !advice) {
     return (
       <div className="rounded-md border border-border bg-muted/20 px-3 py-3 text-xs text-muted-foreground">
@@ -25,6 +25,12 @@ export function PricingAdviceCard({ advice, loading, currentReward, onApplyFair 
   const minutes = Math.max(0.1, Math.round((totalSeconds / 60) * 10) / 10);
   const belowFair = fair > 0 && currentReward < fair;
 
+  const options = [
+    { label: '省錢', value: suggestedRange.economical },
+    { label: '公平', value: fair },
+    { label: '快速成案', value: suggestedRange.fast },
+  ];
+
   return (
     <div className="space-y-2 rounded-md border border-border bg-muted/20 px-3 py-3">
       <div className="flex items-center gap-2 text-sm font-medium">
@@ -38,24 +44,24 @@ export function PricingAdviceCard({ advice, loading, currentReward, onApplyFair 
       </p>
 
       <div className="flex flex-wrap gap-2 text-xs">
-        <span className="rounded-full bg-background px-2.5 py-1 border border-border">
-          省錢 NT${suggestedRange.economical}
-        </span>
-        <span className="rounded-full bg-primary/10 px-2.5 py-1 border border-primary/30 font-medium">
-          公平 NT${fair}
-        </span>
-        <span className="rounded-full bg-background px-2.5 py-1 border border-border">
-          快速成案 NT${suggestedRange.fast}
-        </span>
-        {fair > 0 && (
-          <button
-            type="button"
-            onClick={() => onApplyFair(fair)}
-            className="rounded-full bg-primary px-2.5 py-1 text-primary-foreground hover:bg-primary/90"
-          >
-            套用公平價
-          </button>
-        )}
+        {options.map((opt) => {
+          const selected = currentReward === opt.value;
+          return (
+            <button
+              key={opt.label}
+              type="button"
+              onClick={() => onApplyPrice(opt.value)}
+              aria-pressed={selected}
+              className={`rounded-full px-2.5 py-1 border transition-colors ${
+                selected
+                  ? 'bg-primary text-primary-foreground border-primary'
+                  : 'bg-background border-border hover:border-primary/50 hover:bg-primary/5'
+              }`}
+            >
+              {opt.label} NT${opt.value}
+            </button>
+          );
+        })}
       </div>
 
       {belowFair && (

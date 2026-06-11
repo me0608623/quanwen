@@ -524,7 +524,7 @@ export default function NewSurveyPage() {
             advice={pricingAdvice.data}
             loading={pricingAdvice.isPending}
             currentReward={rewardPoints}
-            onApplyFair={setRewardPoints}
+            onApplyPrice={setRewardPoints}
           />
           )}
 

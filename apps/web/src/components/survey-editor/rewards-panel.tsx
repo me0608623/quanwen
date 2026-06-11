@@ -222,7 +222,7 @@ export function RewardsPanel({
             advice={pricingAdvice}
             loading={!!pricingLoading}
             currentReward={rewardPoints}
-            onApplyFair={onRewardChange}
+            onApplyPrice={onRewardChange}
           />
         </div>
       </div>
