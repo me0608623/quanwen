@@ -28,7 +28,8 @@ function getAnswerPreview(model: SurveyModel, questionName: string): string {
 export function SidebarNav({ model }: SidebarNavProps) {
   const [dots, setDots] = useState<DotData[]>([]);
   const [hovered, setHovered] = useState<number | null>(null);
-  const [currentScrollIdx, setCurrentScrollIdx] = useState<number | null>(null);
+  // Track by question name instead of DOM index to survive DOM/model order mismatch
+  const [currentScrollName, setCurrentScrollName] = useState<string | null>(null);
 
   const refresh = useCallback(() => {
     if (!model) return;
@@ -54,9 +55,8 @@ export function SidebarNav({ model }: SidebarNavProps) {
 
   // Reference-line scroll tracker: find the deepest .sd-question whose top is still
   // above 30% of the viewport height — that's the question the user is currently reading.
-  // This avoids the narrow-band IntersectionObserver failure on tall desktop questions
-  // where the IO's rootMargin window could be entirely skipped by a single tall element.
-  // MutationObserver waits for .sd-question nodes to render before attaching.
+  // Uses data-name attribute to map DOM node → question name → dots index, so DOM render
+  // order differences from model.getAllQuestions() order don't cause mis-highlighting.
   useEffect(() => {
     if (!model) return;
 
@@ -66,15 +66,16 @@ export function SidebarNav({ model }: SidebarNavProps) {
     const calcCurrent = () => {
       if (nodes.length === 0) return;
       const ref = window.innerHeight * 0.3;
-      let idx = 0;
+      let winner: Element = nodes[0];
       for (let i = 0; i < nodes.length; i++) {
         if (nodes[i].getBoundingClientRect().top <= ref) {
-          idx = i;
+          winner = nodes[i];
         } else {
           break;
         }
       }
-      setCurrentScrollIdx(idx);
+      const name = winner.getAttribute('data-name');
+      if (name) setCurrentScrollName(name);
     };
 
     const onScroll = () => {
@@ -114,8 +115,10 @@ export function SidebarNav({ model }: SidebarNavProps) {
     };
   }, [model]);
 
-  // Prefer scroll-tracked index; fall back to first unanswered
-  const currentIdx = currentScrollIdx ?? dots.findIndex((d) => !d.answered);
+  // Map tracked question name → dots index; fall back to first unanswered
+  const currentIdx = currentScrollName !== null
+    ? dots.findIndex((d) => d.name === currentScrollName)
+    : dots.findIndex((d) => !d.answered);
   const answeredCount = dots.filter((d) => d.answered).length;
   const total = dots.length;
   const pct = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
