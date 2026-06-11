@@ -53,8 +53,8 @@ export function SidebarNav({ model }: SidebarNavProps) {
   }, [model, refresh]);
 
   // IntersectionObserver: track which question is currently in the viewport.
-  // SurveyJS renders each question container with id="sq_${q.uniqueId}" (a number),
-  // NOT "sq_${q.name}", so we must look up elements using q.uniqueId.
+  // SurveyJS v2 renders questions as .sd-question nodes with data-name=<q.name>.
+  // The sq_<uniqueId> IDs used in older integration do not exist in the actual DOM.
   useEffect(() => {
     if (!model) return;
     const questions = model.getAllQuestions();
@@ -67,28 +67,33 @@ export function SidebarNav({ model }: SidebarNavProps) {
       setCurrentScrollIdx(idx >= 0 ? idx : null);
     };
 
-    const observersArr: IntersectionObserver[] = [];
+    let io: IntersectionObserver | null = null;
     const setup = () => {
-      questions.forEach((q) => {
-        const el = document.getElementById(`sq_${q.uniqueId}`);
-        if (!el) return;
-        const obs = new IntersectionObserver(
-          ([entry]) => {
-            if (entry.isIntersecting) visibleSet.add(q.name);
-            else visibleSet.delete(q.name);
-            updateCurrent();
-          },
-          { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
-        );
-        obs.observe(el);
-        observersArr.push(obs);
-      });
+      // Scope to .surveyjs-wrapper so we don't match stale nodes from other instances
+      const sdNodes = Array.from(
+        document.querySelectorAll<HTMLElement>('.surveyjs-wrapper .sd-question'),
+      );
+      if (sdNodes.length === 0) return;
+
+      io = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((entry) => {
+            const name = (entry.target as HTMLElement).dataset.name;
+            if (!name || !nameOrder.includes(name)) return;
+            if (entry.isIntersecting) visibleSet.add(name);
+            else visibleSet.delete(name);
+          });
+          updateCurrent();
+        },
+        { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
+      );
+      sdNodes.forEach((n) => io!.observe(n));
     };
 
     const timer = setTimeout(setup, 100);
     return () => {
       clearTimeout(timer);
-      observersArr.forEach((obs) => obs.disconnect());
+      io?.disconnect();
     };
   }, [model]);
 
