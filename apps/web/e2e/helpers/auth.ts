@@ -14,6 +14,8 @@ export async function login(page: Page, who: keyof typeof ACCOUNTS) {
   // 先清既有 session：否則已登入時 /auth/login 會被 middleware 重導走（拿不到表單），
   // 跨帳號切換（如先登 aa 再登 bb）就會卡住。
   await page.context().clearCookies();
+  // 在頁面載入前預先設 flag，讓歡迎 modal 不在 E2E 中出現（等同已確認的回訪用戶）。
+  await page.addInitScript(() => localStorage.setItem('quanwen_welcome_seen', '1'));
   await page.goto('/auth/login');
   await page.locator('input[type="email"], input[name="email"]').first().fill(acc.email);
   await page.locator('input[type="password"], input[name="password"]').first().fill(acc.password);
