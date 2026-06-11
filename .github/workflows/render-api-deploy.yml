@@ -80,6 +80,21 @@ jobs:
           echo "同步 Drizzle schema 到 Neon（純新增自動套用；破壞性變更會中止此步交人工審查）..."
           pnpm exec drizzle-kit push </dev/null
 
+      # drizzle-kit push 不會對既有 pgEnum 執行 ALTER TYPE ... ADD VALUE（只建新 type）。
+      # 這一步補上這個 gap：對所有 enum 值執行冪等 ALTER TYPE ... ADD VALUE IF NOT EXISTS。
+      # 根因：#103 加了 admin_adjustment 但 Neon enum 未同步 → #112 線上 500。
+      # scripts/ensure-enum-values.sql 覆蓋全部 pgEnum；新增值時同步更新該檔即可。
+      - name: Ensure enum values in Neon (idempotent ALTER TYPE)
+        timeout-minutes: 3
+        env:
+          DATABASE_URL: ${{ secrets.NEON_DATABASE_URL }}
+        run: |
+          echo "安裝 postgresql-client..."
+          sudo apt-get install -y --no-install-recommends postgresql-client 2>/dev/null
+          echo "對 Neon 執行冪等 enum 對齊（ALTER TYPE ... ADD VALUE IF NOT EXISTS）..."
+          psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f apps/api/scripts/ensure-enum-values.sql
+          echo "Enum 對齊完成。"
+
       # Render service autoDeploy=no → 必須用 API 觸發；deploy 會重新 pull latest image
       - name: Trigger Render redeploy
         run: |

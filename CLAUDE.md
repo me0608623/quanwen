@@ -89,6 +89,11 @@ Key cross-cutting modules:
 
 Forgetting either causes silent schema drift: `USE_PG_MEM=true` starts with a stale schema, and integration tests fail with "column X does not exist".
 
+**Critical for pgEnum**: When adding a **new value** to an existing `pgEnum`, drizzle-kit push does **not** run `ALTER TYPE ... ADD VALUE` (it only creates new types). You **must** also update:
+3. `apps/api/scripts/ensure-enum-values.sql` — add the corresponding `ALTER TYPE <name> ADD VALUE IF NOT EXISTS '<value>'` line. This script runs in CI after drizzle-kit push and keeps Neon in sync.
+
+Forgetting step 3 means the enum value exists in code and PGlite tests but not in Neon → inserting that value on production returns a Postgres error → 500. This was the root cause of issue #112.
+
 ### Web Architecture
 
 - Next.js App Router — all pages under `src/app/`.
@@ -174,7 +179,7 @@ Text-type answers (`text`, `matrix`) are passed through `redactPii()` before exp
 ❌ Send PII to Z.ai               ✅ De-identify before any AI call
 ❌ Platform fee = 15%（舊值）      ✅ PLATFORM_FEE_RATE = 0.10 (10%，2026-06-07 起)
 ❌ Auto-link OAuth by email       ✅ Always create new user; explicit binding via /settings/accounts
-❌ Add schema without DDL sync    ✅ Update both schema/*.ts AND database.module.ts PGlite block
+❌ Add schema without DDL sync    ✅ Update schema/*.ts + database.module.ts + pglite-ddl.ts + ensure-enum-values.sql (for new enum values)
 ❌ role guard for feature access  ✅ Check profile.isOnboardingDone; all users have both profiles
 ❌ Store PII in plaintext          ✅ Use CryptoService.encrypt for ID numbers, bank accounts, phone, real names
 ❌ Public endpoints by default     ✅ New endpoints require JWT; use @Public() decorator only for explicit public routes
