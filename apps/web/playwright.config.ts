@@ -29,6 +29,17 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 10_000,
+    // 讓所有 context 初始就帶有歡迎 modal 已讀 flag，
+    // 避免 WelcomeModal overlay 攔截任何測試的點擊事件。
+    storageState: {
+      cookies: [],
+      origins: [
+        {
+          origin: process.env.WEB_URL ?? 'http://localhost:3000',
+          localStorage: [{ name: 'quanwen_welcome_seen', value: '1' }],
+        },
+      ],
+    },
   },
   projects: [
     {
