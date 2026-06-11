@@ -357,8 +357,8 @@ function convertQuestion(q: PublicQuestion): SurveyJsQuestion {
         type: 'rating',
         rateMin: minRating,
         rateMax: maxRating,
-        minRateDescription: String(minRating),
-        maxRateDescription: String(maxRating),
+        minRateDescription: (config.minLabel as string | undefined) ?? '',
+        maxRateDescription: (config.maxLabel as string | undefined) ?? '',
       };
     }
 

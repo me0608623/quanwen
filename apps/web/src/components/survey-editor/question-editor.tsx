@@ -379,6 +379,26 @@ export function QuestionEditor({
                   className="w-16 rounded border border-input bg-background px-2 py-1 text-sm"
                 />
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">最低分標籤</span>
+                <input
+                  type="text"
+                  placeholder="非常不同意"
+                  value={(question.config?.minLabel as string | undefined) ?? ''}
+                  onChange={(e) => patchConfig({ ...(question.config ?? {}), minLabel: e.target.value })}
+                  className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">最高分標籤</span>
+                <input
+                  type="text"
+                  placeholder="非常同意"
+                  value={(question.config?.maxLabel as string | undefined) ?? ''}
+                  onChange={(e) => patchConfig({ ...(question.config ?? {}), maxLabel: e.target.value })}
+                  className="flex-1 rounded border border-input bg-background px-2 py-1 text-sm"
+                />
+              </div>
               {ratingSiblings.length > 0 && (
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">反向題</span>
