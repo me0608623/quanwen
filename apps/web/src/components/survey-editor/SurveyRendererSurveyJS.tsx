@@ -122,8 +122,8 @@ export function SurveyRendererSurveyJS({
           --sjs-corner-radius: 20px;
           --sjs-shadow-small: none;
           --sjs-shadow-inner: none;
-          --sjs-border-default: rgba(0,0,0,0.08);
-          --sjs-border-light: rgba(0,0,0,0.06);
+          --sjs-border-default: rgba(15,23,42,0.1);
+          --sjs-border-light: rgba(15,23,42,0.08);
           --sjs-questionpanel-hovercolor: #f1f5f9;
           color: #0f172a;
         }
@@ -164,15 +164,15 @@ export function SurveyRendererSurveyJS({
         }
         /* ===== Question cards — light glassmorphism ===== */
         .surveyjs-wrapper .sd-question {
-          margin-bottom: 0.9rem;
+          margin-bottom: 1.5rem;
           overflow: hidden;
-          border: 1px solid rgba(0,0,0,0.08);
+          border: 1px solid rgba(15,23,42,0.1);
           border-radius: 20px;
-          background: rgba(255,255,255,0.9);
+          background: #ffffff;
           backdrop-filter: blur(20px) saturate(180%);
           box-shadow:
-            0 4px 24px rgba(0,0,0,0.06),
-            inset 0 1px 0 rgba(255,255,255,0.8);
+            0 1px 3px rgba(15,23,42,0.08),
+            0 8px 24px rgba(15,23,42,0.06);
           transition:
             transform 300ms cubic-bezier(0.4,0,0.2,1),
             border-color 300ms ease,
@@ -182,6 +182,7 @@ export function SurveyRendererSurveyJS({
           transform: translateY(-1px);
           border-color: rgba(37,99,235,0.3);
           box-shadow:
+            inset 3px 0 0 #07183d,
             0 8px 32px rgba(37,99,235,0.1),
             inset 0 1px 0 rgba(255,255,255,0.8);
         }
@@ -196,6 +197,23 @@ export function SurveyRendererSurveyJS({
         }
         .surveyjs-wrapper .sd-question__required-text {
           color: #2563eb;
+        }
+        /* ===== Question number badge — deep blue ===== */
+        .surveyjs-wrapper .sd-question__num,
+        .surveyjs-wrapper .sd-element__num {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          min-width: 28px;
+          height: 28px;
+          padding: 0 6px;
+          border-radius: 8px;
+          background: #07183d;
+          color: #ffffff;
+          font-weight: 600;
+          font-size: 14px;
+          line-height: 1;
+          flex-shrink: 0;
         }
         .surveyjs-wrapper .sd-description {
           color: #475569;

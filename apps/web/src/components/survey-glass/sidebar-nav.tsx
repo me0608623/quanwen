@@ -70,10 +70,10 @@ export function SidebarNav({ model }: SidebarNavProps) {
       <aside
         className="hidden md:flex md:flex-col md:items-center md:rounded-[16px] md:border md:p-5"
         style={{
-          background: '#f8fafc',
+          background: '#ffffff',
           backdropFilter: 'blur(20px) saturate(180%)',
-          borderColor: 'rgba(0,0,0,0.08)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.06)',
+          borderColor: 'rgba(15,23,42,0.1)',
+          boxShadow: '0 1px 3px rgba(15,23,42,0.08), 0 8px 24px rgba(15,23,42,0.06)',
           minWidth: 140,
           maxWidth: 170,
           alignSelf: 'flex-start',
