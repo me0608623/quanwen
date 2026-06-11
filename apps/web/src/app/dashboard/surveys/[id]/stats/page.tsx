@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
-import { useSurvey, useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
+import { useSurvey, useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, usePauseSurvey, useCloseSurvey, usePublishSurvey, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
 import type { BatchAnalysisResult } from '@/hooks/use-analytics';
 import { usePointsSummary } from '@/hooks/use-wallet';
@@ -254,6 +254,42 @@ export default function SurveyStatsPage() {
   const { data: aiUsage } = useAiUsage();
   const { data: pointsSummary } = usePointsSummary();
   const [linkCopied, setLinkCopied] = useState(false);
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const pauseSurvey = usePauseSurvey();
+  const closeSurvey = useCloseSurvey();
+  const republishSurvey = usePublishSurvey();
+  const { data: survey } = useSurvey(id);
+
+  const handlePause = async () => {
+    try {
+      await pauseSurvey.mutateAsync(id);
+      setShowPauseConfirm(false);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '下架失敗，請稍後再試。');
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await closeSurvey.mutateAsync(id);
+      setShowCloseConfirm(false);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '結案失敗，請稍後再試。');
+    }
+  };
+
+  const handleRepublish = async () => {
+    try {
+      await republishSurvey.mutateAsync(id);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '重新上架失敗，請稍後再試。');
+    }
+  };
+
   const copyPublicLink = () => {
     navigator.clipboard?.writeText(`${window.location.origin}/s/${id}`).then(() => {
       setLinkCopied(true);
@@ -333,6 +369,11 @@ export default function SurveyStatsPage() {
             <p className="mt-3 max-w-2xl text-sm leading-6 text-white/75">
               集中查看回收進度、樣本品質、量化圖表與 AI 洞察，將填答資料整理成可採取行動的結論。
             </p>
+            {survey?.status === 'paused' && (
+              <div className="mt-3 inline-flex items-center gap-2 rounded-full bg-yellow-400/20 px-3 py-1 text-xs font-semibold text-yellow-200">
+                ⏸ 問卷已暫停，填答者目前無法作答
+              </div>
+            )}
             <div className="mt-4 flex flex-wrap gap-2">
               <button
                 onClick={copyPublicLink}
@@ -340,14 +381,16 @@ export default function SurveyStatsPage() {
               >
                 {linkCopied ? '已複製!' : '🔗 複製公開連結'}
               </button>
-              <a
-                href={`/s/${id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
-              >
-                開啟填答頁 ↗
-              </a>
+              {survey?.status !== 'paused' && (
+                <a
+                  href={`/s/${id}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
+                >
+                  開啟填答頁 ↗
+                </a>
+              )}
               <Link
                 href={`/dashboard/surveys/${id}?edit=1`}
                 className="rounded-md border border-white/20 bg-white/10 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/20"
@@ -355,6 +398,34 @@ export default function SurveyStatsPage() {
               >
                 ✏️ 編輯問卷資訊
               </Link>
+              {survey?.status === 'paused' && (
+                <button
+                  type="button"
+                  onClick={handleRepublish}
+                  disabled={republishSurvey.isPending}
+                  className="rounded-md border border-green-300/60 bg-green-400/20 px-3 py-1.5 text-xs font-medium text-green-100 hover:bg-green-400/30 disabled:opacity-60"
+                >
+                  {republishSurvey.isPending ? '上架中…' : '▶ 重新上架'}
+                </button>
+              )}
+              {survey?.status === 'published' && (
+                <button
+                  type="button"
+                  onClick={() => setShowPauseConfirm(true)}
+                  className="rounded-md border border-yellow-300/60 bg-yellow-400/20 px-3 py-1.5 text-xs font-medium text-yellow-100 hover:bg-yellow-400/30"
+                >
+                  ⏸ 下架/暫停
+                </button>
+              )}
+              {(survey?.status === 'published' || survey?.status === 'paused') && (
+                <button
+                  type="button"
+                  onClick={() => setShowCloseConfirm(true)}
+                  className="rounded-md border border-red-300/60 bg-red-400/20 px-3 py-1.5 text-xs font-medium text-red-100 hover:bg-red-400/30"
+                >
+                  🔒 結案
+                </button>
+              )}
             </div>
           </div>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:w-[520px]">
@@ -553,6 +624,79 @@ export default function SurveyStatsPage() {
         </section>
       ))}
       </div>
+
+      {/* 下架/暫停確認 modal */}
+      {showPauseConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowPauseConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-foreground">確認下架/暫停問卷</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              暫停後填答者<strong>無法作答</strong>，問卷從任務列表移除。預算維持鎖定，可隨時重新上架。
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPauseConfirm(false)}
+                className="rounded-md border border-input px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handlePause}
+                disabled={pauseSurvey.isPending}
+                className="rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-60"
+              >
+                {pauseSurvey.isPending ? '處理中…' : '確認下架'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 結案確認 modal */}
+      {showCloseConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowCloseConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-foreground">確認結案</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              結案後<strong>永久無法再收答</strong>，問卷將進入統計分析模式。未用預算將退回錢包（cashBalance）。
+            </p>
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+              ⚠️ 此操作<strong>不可撤銷</strong>，結案後無法重新上架。
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCloseConfirm(false)}
+                className="rounded-md border border-input px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={handleClose}
+                disabled={closeSurvey.isPending}
+                className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
+              >
+                {closeSurvey.isPending ? '結案中…' : '確認結案'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

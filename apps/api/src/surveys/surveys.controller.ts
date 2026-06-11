@@ -173,6 +173,22 @@ export class SurveysController {
     return this.surveysService.publish(id, user.id);
   }
 
+  // ─── POST /surveys/:id/pause — 下架/暫停（published → paused） ─────────────
+  @Post(':id/pause')
+  @HttpCode(HttpStatus.OK)
+  pause(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveysService.pauseSurvey(id, user.id);
+  }
+
+  // ─── POST /surveys/:id/close — 結案（published|paused → closed，退未用預算） ──
+  @Post(':id/close')
+  @HttpCode(HttpStatus.OK)
+  close(@Param('id') id: string, @Req() req: Request) {
+    const user = req.user as AuthenticatedUser;
+    return this.surveysService.closeSurvey(id, user.id);
+  }
+
   // ─── POST /surveys/:id/duplicate — 複製為新草稿 ────────────────────────────
   @Post(':id/duplicate')
   @HttpCode(HttpStatus.CREATED)

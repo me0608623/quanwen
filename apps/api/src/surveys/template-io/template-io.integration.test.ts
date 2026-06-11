@@ -61,6 +61,7 @@ describe('Template IO (integration)', () => {
       {} as never, // ZaiClient
       {} as never, // AiAuditService
       {} as never, // WalletService
+      {} as never, // NotificationsService
     );
     exporter = new SurveyExportService(surveys);
     importer = new SurveyImportService(db, surveys);
