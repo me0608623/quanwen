@@ -29,14 +29,14 @@ import { SidebarNav } from '@/components/survey-glass/sidebar-nav';
 // ─── Light Glass design primitives ──────────────────────────────────────────
 
 const GLASS_BG: CSSProperties = {
-  background: '#ffffff',
+  background: '#f1f5f9',
 };
 
 const GLASS_CARD: CSSProperties = {
-  background: 'rgba(255,255,255,0.9)',
+  background: '#ffffff',
   backdropFilter: 'blur(20px) saturate(180%)',
   boxShadow:
-    '0 12px 40px rgba(0,0,0,0.08), inset 0 1px 0 rgba(255,255,255,0.8)',
+    '0 1px 3px rgba(15,23,42,0.08), 0 8px 24px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
 };
 
 function GlassShell({ children }: { children: ReactNode }) {
@@ -77,7 +77,7 @@ function GlassCard({
   return (
     <div
       className={`rounded-[20px] border p-6 sm:p-8 ${className}`}
-      style={{ ...GLASS_CARD, borderColor: 'rgba(0,0,0,0.1)' }}
+      style={{ ...GLASS_CARD, borderColor: 'rgba(15,23,42,0.1)' }}
     >
       {children}
     </div>
@@ -219,7 +219,7 @@ export default function SurveyFillPage() {
     return (
       <GlassShell>
         <div className="mx-auto mt-24 flex w-full max-w-sm items-center justify-center rounded-[20px] border p-8 text-sm text-[#07183d]"
-          style={{ ...GLASS_CARD, borderColor: 'rgba(0,0,0,0.1)' }}
+          style={{ ...GLASS_CARD, borderColor: 'rgba(15,23,42,0.1)' }}
         >
           <span className="mr-3 h-2.5 w-2.5 animate-pulse rounded-full bg-[#07183d]" />
           載入問卷中…
