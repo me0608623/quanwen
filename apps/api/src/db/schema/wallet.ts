@@ -18,15 +18,16 @@ import { surveys } from './surveys';
 import { surveyResponses } from './responses';
 
 export const transactionTypeEnum = pgEnum('transaction_type', [
-  'deposit',          // 問券方儲值（ECPay）
-  'reward_out',       // 問券方支付獎勵
-  'reward_in',        // 受試者收到現金獎勵
-  'platform_fee',     // 平台手續費收入
-  'withdraw_request', // 受試者申請提領
-  'withdraw_complete',// 實際撥款完成
-  'refund',           // 退款給問券方
-  'points_in',        // 受試者獲得積分
-  'points_spend',     // 積分商城兌換（Phase 2）
+  'deposit',           // 問券方儲值（ECPay）
+  'reward_out',        // 問券方支付獎勵
+  'reward_in',         // 受試者收到現金獎勵
+  'platform_fee',      // 平台手續費收入
+  'withdraw_request',  // 受試者申請提領
+  'withdraw_complete', // 實際撥款完成
+  'refund',            // 退款給問券方
+  'points_in',         // 受試者獲得積分
+  'points_spend',      // 積分商城兌換（Phase 2）
+  'admin_adjustment',  // 管理員手動調整現金餘額（稽核用）
 ]);
 
 export const transactionStatusEnum = pgEnum('transaction_status', [

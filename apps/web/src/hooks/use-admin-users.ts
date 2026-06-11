@@ -187,3 +187,51 @@ export function useMultiAccountScan(id: string, enabled = false) {
     retry: 0,
   });
 }
+
+export interface AdminWalletDetail {
+  wallet: {
+    id: string;
+    cashBalance: number;
+    lockedCash: number;
+    pointsBalance: number;
+    updatedAt: string;
+  } | null;
+  recentTransactions: Array<{
+    id: string;
+    type: string;
+    amount: number;
+    status: string;
+    note: string | null;
+    metadata: Record<string, unknown> | null;
+    approvedBy: string | null;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+}
+
+export function useAdminWallet(userId: string) {
+  return useQuery<AdminWalletDetail>({
+    queryKey: ['admin', 'users', userId, 'wallet'],
+    queryFn: async () => {
+      const { data } = await api.get<AdminWalletDetail>(`/admin/users/${userId}/wallet`);
+      return data;
+    },
+    enabled: !!userId,
+    staleTime: 10_000,
+  });
+}
+
+export function useAdjustWallet(userId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ amount, reason }: { amount: number; reason: string }) => {
+      const { data } = await api.post(`/admin/users/${userId}/wallet/adjust`, { amount, reason });
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users', userId, 'wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users', userId] });
+      queryClient.invalidateQueries({ queryKey: ['admin', 'users'] });
+    },
+  });
+}
