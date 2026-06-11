@@ -481,14 +481,21 @@ export default function SurveyDetailPage() {
 
   // ─── Sidebar: Styling tab content ──────────────────────────────
   const stylingSidebar = (
-    <SurveyStylePanel
-      value={theme}
-      onChange={(next) => {
-        setTheme(next);
-        markDirty();
-      }}
-      disabled={!canEditInfo}
-    />
+    <div>
+      {dirty && canEditInfo && (
+        <div className="border-b border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+          樣式已變更，需按右上角「儲存變更」（或 Ctrl+S）才會套用到填答頁。
+        </div>
+      )}
+      <SurveyStylePanel
+        value={theme}
+        onChange={(next) => {
+          setTheme(next);
+          markDirty();
+        }}
+        disabled={!canEditInfo}
+      />
+    </div>
   );
 
   // ─── Sidebar: Rewards tab content ──────────────────────────────
