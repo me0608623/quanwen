@@ -106,8 +106,12 @@ export default function SurveyDetailPage() {
 
   useEffect(() => {
     if (!survey) return;
-    // 已發布問卷帶 ?edit=1 → 進入「資訊編輯模式」（不轉跳統計頁）
-    if (survey.status === 'closed' || (survey.status === 'published' && !editInfoMode)) {
+    // 已發布/暫停/結案問卷 → 轉跳統計頁（帶 ?edit=1 除外）
+    if (
+      survey.status === 'closed' ||
+      survey.status === 'paused' ||
+      (survey.status === 'published' && !editInfoMode)
+    ) {
       router.replace(`/dashboard/surveys/${survey.id}/stats`);
       return;
     }
@@ -375,7 +379,11 @@ export default function SurveyDetailPage() {
 
   if (isLoading) return <div className="p-10 text-sm text-muted-foreground">載入問卷中…</div>;
   if (!survey) return <div className="p-10 text-sm text-destructive">找不到問卷。</div>;
-  if (survey.status === 'closed' || (survey.status === 'published' && !editInfoMode)) {
+  if (
+    survey.status === 'closed' ||
+    survey.status === 'paused' ||
+    (survey.status === 'published' && !editInfoMode)
+  ) {
     return <div className="p-10 text-sm text-muted-foreground">正在開啟問卷分析工作台…</div>;
   }
 

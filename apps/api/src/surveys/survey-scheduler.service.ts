@@ -1,11 +1,12 @@
 import { Injectable, Inject, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
-import { eq, and, lte, isNotNull, lt, sql } from 'drizzle-orm';
+import { eq, and, lte, isNotNull, sql } from 'drizzle-orm';
 import { DB } from '../db';
 import type { AppDb } from '../db';
-import { surveys, users } from '../db/schema';
+import { surveys } from '../db/schema';
 import { NotificationsService } from '../notifications/notifications.service';
 import { WalletService } from '../wallet/wallet.service';
+import { SurveysService } from './surveys.service';
 
 /**
  * QUA-201: Scheduled publish and auto-close for surveys.
@@ -23,6 +24,7 @@ export class SurveySchedulerService {
     @Inject(DB) private readonly db: AppDb,
     private readonly notifications: NotificationsService,
     private readonly wallet: WalletService,
+    private readonly surveysService: SurveysService,
   ) {}
 
   // ─── Scheduled publish: every minute ─────────────────────────────────────
@@ -158,7 +160,7 @@ export class SurveySchedulerService {
     }
   }
 
-  // ─── Shared close + notify logic ─────────────────────────────────────────
+  // ─── Shared close + notify logic (delegated to SurveysService) ──────────
 
   private async closeSurveyAndNotify(
     surveyId: string,
@@ -166,35 +168,7 @@ export class SurveySchedulerService {
     title: string,
     reason: string,
   ): Promise<void> {
-    const now = new Date();
-
-    const closed = await this.db
-      .update(surveys)
-      .set({ status: 'closed', updatedAt: now })
-      .where(eq(surveys.id, surveyId))
-      .returning({ completedCount: surveys.completedCount });
-
-    this.logger.log(`Auto-closed survey ${surveyId} (${title}): ${reason}`);
-
-    // 退回未用預算（與 admin 強制關閉一致）；自動截止不退款會讓鎖定款永遠卡在 lockedCash。
-    this.wallet
-      .unlockSurveyBudget(surveyorId, surveyId, closed[0]?.completedCount ?? 0)
-      .catch((err) =>
-        this.logger.warn(`Auto-close 退款失敗 surveyId=${surveyId}: ${err}`),
-      );
-
-    // Notify the survey creator
-    try {
-      await this.notifications.sendSurveyAutoCloseNotification(
-        surveyorId,
-        surveyId,
-        title,
-        reason,
-      );
-    } catch (err) {
-      this.logger.warn(
-        `Failed to send auto-close notification for survey ${surveyId}: ${err}`,
-      );
-    }
+    this.logger.log(`Auto-closing survey ${surveyId} (${title}): ${reason}`);
+    await this.surveysService.executeCloseSurvey(surveyId, surveyorId, title, reason);
   }
 }

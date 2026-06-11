@@ -410,6 +410,36 @@ export function usePublishSurvey() {
   });
 }
 
+export function usePauseSurvey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/surveys/${id}/pause`);
+      return data;
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ['surveys', id] });
+      queryClient.invalidateQueries({ queryKey: ['surveys', 'mine'] });
+    },
+  });
+}
+
+export function useCloseSurvey() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { data } = await api.post(`/surveys/${id}/close`);
+      return data;
+    },
+    onSuccess: (_data, id) => {
+      queryClient.invalidateQueries({ queryKey: ['surveys', id] });
+      queryClient.invalidateQueries({ queryKey: ['surveys', 'mine'] });
+    },
+  });
+}
+
 export function useDuplicateSurvey() {
   const queryClient = useQueryClient();
 

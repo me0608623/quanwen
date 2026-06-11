@@ -7,6 +7,7 @@ import type { AppDb } from '../db';
 import type { ZaiClient } from '../ai-audit/zai.client';
 import type { AiAuditService } from '../ai-audit/ai-audit.service';
 import type { WalletService } from '../wallet/wallet.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 import { FULL_SCHEMA_DDL } from '../test-helpers/pglite-ddl';
 import { SurveysService } from './surveys.service';
 
@@ -31,6 +32,7 @@ describe('SurveysService.publish 直接上架（integration）', () => {
       {} as ZaiClient,
       { auditSurveyAsync } as unknown as AiAuditService,
       { lockSurveyBudget } as unknown as WalletService,
+      {} as NotificationsService,
     );
     await client.exec(`
       INSERT INTO users (id, email, role, display_name)

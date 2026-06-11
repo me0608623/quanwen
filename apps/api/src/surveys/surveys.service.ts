@@ -16,6 +16,7 @@ import type { LogicRuleDto } from './dto/logic-rule.dto';
 import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
+import { NotificationsService } from '../notifications/notifications.service';
 // Phase II.12/14: AI 生成問卷走 registry prompt + Zod parse + normalize
 import { SURVEY_DRAFT, SURVEY_QUESTION_REGEN, resolvePrompt } from '../ai-audit/prompts';
 import {
@@ -56,6 +57,7 @@ export class SurveysService {
     private readonly zai: ZaiClient,
     private readonly aiAudit: AiAuditService,
     private readonly wallet: WalletService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
@@ -442,6 +444,22 @@ export class SurveysService {
   }
 
   async publish(surveyId: string, surveyorId: string) {
+    // 允許 paused 問卷重新上架（預算已鎖定，直接改回 published）
+    const [existing] = await this.db
+      .select({ surveyorId: surveys.surveyorId, status: surveys.status })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!existing) throw new NotFoundException('問卷不存在');
+    if (existing.surveyorId !== surveyorId) throw new ForbiddenException('無權操作此問卷');
+    if (existing.status === 'paused') {
+      await this.db
+        .update(surveys)
+        .set({ status: 'published', updatedAt: new Date() })
+        .where(eq(surveys.id, surveyId));
+      return { message: '問卷已重新上架', surveyId };
+    }
+
     const survey = await this.assertOwnerAndDraft(surveyId, surveyorId);
     if (survey.rewardMode === 'lottery' && !survey.lotteryTermsAcceptedAt) {
       throw new BadRequestException('抽獎問卷發布前必須接受獎品履約條款');
@@ -518,6 +536,84 @@ export class SurveysService {
     );
 
     return { message: '問卷已上架，AI 品質掃描將於稍後完成', surveyId };
+  }
+
+  /**
+   * 暫停問卷（published → paused）：停止收答，預算維持鎖定，可隨時重新上架。
+   */
+  async pauseSurvey(surveyId: string, surveyorId: string) {
+    const [survey] = await this.db
+      .select({ surveyorId: surveys.surveyorId, status: surveys.status })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!survey) throw new NotFoundException('問卷不存在');
+    if (survey.surveyorId !== surveyorId) throw new ForbiddenException('無權操作此問卷');
+    if (survey.status !== 'published') {
+      throw new BadRequestException('只有已發布的問卷才能下架/暫停');
+    }
+    await this.db
+      .update(surveys)
+      .set({ status: 'paused', updatedAt: new Date() })
+      .where(eq(surveys.id, surveyId));
+    return { message: '問卷已暫停，填答者暫時無法作答', surveyId };
+  }
+
+  /**
+   * 結案（published|paused → closed）：永久結束，退回未用預算，進入統計分析。
+   * 複用 executeCloseSurvey，與排程自動截止共用同一套退款邏輯。
+   */
+  async closeSurvey(surveyId: string, surveyorId: string) {
+    const [survey] = await this.db
+      .select({ surveyorId: surveys.surveyorId, status: surveys.status, title: surveys.title })
+      .from(surveys)
+      .where(eq(surveys.id, surveyId))
+      .limit(1);
+    if (!survey) throw new NotFoundException('問卷不存在');
+    if (survey.surveyorId !== surveyorId) throw new ForbiddenException('無權操作此問卷');
+    if (!['published', 'paused'].includes(survey.status)) {
+      throw new BadRequestException('只有已發布或已暫停的問卷才能結案');
+    }
+    await this.executeCloseSurvey(surveyId, surveyorId, survey.title, '問卷者手動結案');
+    return { message: '問卷已結案，未用預算將退回錢包', surveyId };
+  }
+
+  /**
+   * 共用結案邏輯：DB 狀態更新 + 退款 + 通知。
+   * 被 closeSurvey（手動）與 SurveySchedulerService（自動截止）共用，
+   * 確保退款路徑唯一，避免 lockedCash 發散。
+   */
+  async executeCloseSurvey(
+    surveyId: string,
+    surveyorId: string,
+    title: string,
+    reason: string,
+  ): Promise<void> {
+    const closed = await this.db
+      .update(surveys)
+      .set({ status: 'closed', updatedAt: new Date() })
+      .where(eq(surveys.id, surveyId))
+      .returning({ completedCount: surveys.completedCount });
+
+    this.logger.log(`Closed survey ${surveyId} (${title}): ${reason}`);
+
+    // 退回未用預算（與自動截止一致）；失敗時 warn 不拋，避免結案成功但回傳 500
+    this.wallet
+      .unlockSurveyBudget(surveyorId, surveyId, closed[0]?.completedCount ?? 0)
+      .catch((err) =>
+        this.logger.warn(`結案退款失敗 surveyId=${surveyId}: ${err}`),
+      );
+
+    try {
+      await this.notifications.sendSurveyAutoCloseNotification(
+        surveyorId,
+        surveyId,
+        title,
+        reason,
+      );
+    } catch (err) {
+      this.logger.warn(`結案通知失敗 surveyId=${surveyId}: ${err}`);
+    }
   }
 
   async remove(surveyId: string, surveyorId: string) {

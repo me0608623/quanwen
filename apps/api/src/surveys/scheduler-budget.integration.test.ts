@@ -32,7 +32,7 @@ describe('SurveySchedulerService.publishScheduledSurveys — 預算鎖定 (integ
     lockSpy = vi.fn().mockResolvedValue(undefined);
     notifySpy = vi.fn().mockResolvedValue(undefined);
     const wallet = { lockSurveyBudget: lockSpy } as unknown as WalletService;
-    service = new SurveySchedulerService(db, { create: notifySpy } as unknown as NotificationsService, wallet);
+    service = new SurveySchedulerService(db, { create: notifySpy } as unknown as NotificationsService, wallet, {} as never);
     await client.exec(`
       INSERT INTO users (id, email, role, display_name) VALUES
         ('${SURVEYOR}', 'c@e.com', 'surveyor', 'C');

@@ -13,6 +13,7 @@ import { SurveysService } from './surveys.service';
 import type { ZaiClient } from '../ai-audit/zai.client';
 import type { AiAuditService } from '../ai-audit/ai-audit.service';
 import type { WalletService } from '../wallet/wallet.service';
+import type { NotificationsService } from '../notifications/notifications.service';
 
 const SURVEYOR = '11111111-1111-1111-1111-111111111111';
 const SRC = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
@@ -28,7 +29,7 @@ describe('SurveysService.duplicate (integration)', () => {
     client = new PGlite();
     await client.exec(FULL_SCHEMA_DDL);
     db = drizzle(client, { schema }) as unknown as AppDb;
-    service = new SurveysService(db, {} as ZaiClient, {} as AiAuditService, {} as WalletService);
+    service = new SurveysService(db, {} as ZaiClient, {} as AiAuditService, {} as WalletService, {} as NotificationsService);
 
     await client.exec(`
       INSERT INTO users (id, email, role, display_name) VALUES
