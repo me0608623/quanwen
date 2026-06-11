@@ -114,8 +114,8 @@ describe('AiController.analyzeResponses', () => {
     expect(result).toMatchObject({
       summary: STUB_INSIGHTS.summary,
       reportType: 'simple',
+      generatedAt: expect.any(String),
     });
-    expect(typeof result.generatedAt).toBe('string');
   });
 
   it('returns insights when incrementTokenUsage throws (schema drift scenario)', async () => {
