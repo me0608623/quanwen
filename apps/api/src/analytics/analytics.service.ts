@@ -62,6 +62,7 @@ export interface ScaleReliabilityResult {
   excludedIncompleteResponseCount: number;
   normalizedToCommonScale: boolean;
   cronbachAlpha: number | null;
+  mcdonaldsOmega: number | null;
   interpretation: string;
   availableItems: Array<{
     questionId: string;
@@ -132,6 +133,79 @@ export function calculateCronbachAlpha(rows: number[][]): number | null {
   if (totalVariance === 0) return null;
 
   return Math.round((itemCount / (itemCount - 1)) * (1 - itemVariance / totalVariance) * 1000) / 1000;
+}
+
+/**
+ * McDonald's ω (omega total) via single-factor model estimated with power iteration.
+ * Formula: ω = (Σλᵢ)² / ((Σλᵢ)² + Σδᵢᵢ)
+ * where λᵢ are PCA loadings from the first principal component of the correlation matrix
+ * and δᵢᵢ = 1 − λᵢ² is the unique (error) variance for each standardised item.
+ */
+export function calculateMcdonaldsOmega(rows: number[][]): number | null {
+  if (rows.length < 2 || rows[0]?.length < 2) return null;
+  const k = rows[0].length;
+  if (rows.some((row) => row.length !== k)) return null;
+
+  const n = rows.length;
+
+  // Item means and variances
+  const means = Array.from({ length: k }, (_, j) =>
+    rows.reduce((sum, row) => sum + row[j], 0) / n,
+  );
+  const variances = Array.from({ length: k }, (_, j) => {
+    const devSqSum = rows.reduce((sum, row) => sum + (row[j] - means[j]) ** 2, 0);
+    return devSqSum / (n - 1);
+  });
+
+  if (variances.some((v) => v === 0)) return null;
+  const stddevs = variances.map((v) => Math.sqrt(v));
+
+  // Correlation matrix
+  const corr: number[][] = Array.from({ length: k }, (_, i) =>
+    Array.from({ length: k }, (_, j) => {
+      if (i === j) return 1;
+      const cov = rows.reduce((sum, row) => sum + (row[i] - means[i]) * (row[j] - means[j]), 0) / (n - 1);
+      return cov / (stddevs[i] * stddevs[j]);
+    }),
+  );
+
+  // Power iteration: find the dominant eigenvector of the correlation matrix
+  let vec = Array.from<number>({ length: k }).fill(1 / Math.sqrt(k));
+  for (let iter = 0; iter < 200; iter++) {
+    const next = Array.from({ length: k }, (_, i) =>
+      corr[i].reduce((sum, cij, j) => sum + cij * vec[j], 0),
+    );
+    const norm = Math.sqrt(next.reduce((sum, v) => sum + v * v, 0));
+    if (norm === 0) return null;
+    const nextNorm = next.map((v) => v / norm);
+    const converged = nextNorm.every((v, i) => Math.abs(v - vec[i]) < 1e-10);
+    vec = nextNorm;
+    if (converged) break;
+  }
+
+  // Eigenvalue (Rayleigh quotient)
+  const eigenvalue = vec.reduce(
+    (sum, vi, i) => sum + vi * corr[i].reduce((s, cij, j) => s + cij * vec[j], 0),
+    0,
+  );
+  if (eigenvalue <= 0) return null;
+
+  // Factor loadings on the standardised (correlation matrix) scale: λᵢ = vᵢ * √eigenvalue
+  const loadings = vec.map((vi) => vi * Math.sqrt(eigenvalue));
+
+  // Unique variances: δᵢᵢ = max(0, 1 − λᵢ²)
+  const uniqueVars = loadings.map((l) => Math.max(0, 1 - l * l));
+
+  const sumLoadings = loadings.reduce((s, l) => s + l, 0);
+  const sumUnique = uniqueVars.reduce((s, u) => s + u, 0);
+
+  const denominator = sumLoadings ** 2 + sumUnique;
+  if (denominator === 0) return null;
+
+  const omega = sumLoadings ** 2 / denominator;
+  if (!isFinite(omega) || omega < 0 || omega > 1) return null;
+
+  return Math.round(omega * 1000) / 1000;
 }
 
 export function reverseScaleValue(value: number, min: number, max: number): number {
@@ -295,6 +369,7 @@ export class AnalyticsService {
         excludedIncompleteResponseCount: 0,
         normalizedToCommonScale: true,
         cronbachAlpha: null,
+        mcdonaldsOmega: null,
         interpretation: '至少需要 2 題評分量表才能計算信度',
         availableItems,
         items: items.map((item) => ({
@@ -357,6 +432,7 @@ export class AnalyticsService {
       }),
     );
     const cronbachAlpha = calculateCronbachAlpha(scoredRows);
+    const mcdonaldsOmega = calculateMcdonaldsOmega(scoredRows);
     const interpretation = cronbachAlpha === null
       ? '完整樣本不足或回答沒有變異，暫時無法計算'
       : cronbachAlpha >= 0.9
@@ -375,6 +451,7 @@ export class AnalyticsService {
       excludedIncompleteResponseCount: eligibleResponses.length - scoredRows.length,
       normalizedToCommonScale: true,
       cronbachAlpha,
+      mcdonaldsOmega,
       interpretation,
       availableItems,
       items: items.map((item, index) => {

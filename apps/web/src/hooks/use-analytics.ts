@@ -43,6 +43,7 @@ export interface ScaleReliabilityResult {
   excludedIncompleteResponseCount: number;
   normalizedToCommonScale: boolean;
   cronbachAlpha: number | null;
+  mcdonaldsOmega: number | null;
   interpretation: string;
   availableItems: Array<{
     questionId: string;

@@ -21,6 +21,7 @@ import { api } from '@/lib/api';
 import { getToken } from '@/lib/token';
 import { useSurvey, useSurveyTrend, useSavedAiInsights, useGenerateAiInsights, useQuestionSentiment, useRespondents, useAiUsage, useSurveyLottery, useDrawSurveyLottery, useFulfillSurveyLottery, useFulfillSurveyLotteryWinner, usePauseSurvey, useCloseSurvey, usePublishSurvey, type ReportType, type SurveyAiInsights } from '@/hooks/use-surveys';
 import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics';
+import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import type { BatchAnalysisResult } from '@/hooks/use-analytics';
 import { usePointsSummary } from '@/hooks/use-wallet';
 import { BatchAnalysisModal } from '@/components/stats/batch-analysis-modal';
@@ -917,20 +918,25 @@ function ScaleReliabilityPanel({ surveyId }: { surveyId: string }) {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [reverseIds, setReverseIds] = useState<string[]>([]);
   const [selectionInitialized, setSelectionInitialized] = useState(false);
+  const [showAlpha, setShowAlpha] = useState(true);
+  const [showOmega, setShowOmega] = useState(true);
+  const [showAlphaIfDeleted, setShowAlphaIfDeleted] = useState(true);
+
+  const debouncedSelectedIds = useDebouncedValue(selectedIds, 500);
+  const debouncedReverseIds = useDebouncedValue(reverseIds, 500);
+
   const { data: allData, isLoading } = useScaleReliability(surveyId);
   const saveSettings = useSaveScaleSettings(surveyId);
-  const canCalculate = selectedIds.length >= 2;
-  const availableItems = allData?.availableItems ?? allData?.items ?? [];
-  const persistedSelectedIds = availableItems.filter((item) => item.selectedForScale).map((item) => item.questionId);
-  const persistedReverseIds = availableItems.filter((item) => item.reverseScored).map((item) => item.questionId);
-  const scaleSelectionChanged = selectedIds.length !== persistedSelectedIds.length
-    || selectedIds.some((id) => !persistedSelectedIds.includes(id));
-  const reverseSelectionChanged = reverseIds.length !== persistedReverseIds.length
-    || reverseIds.some((id) => !persistedReverseIds.includes(id));
-  const useCustomCalculation = !!allData && canCalculate
-    && (scaleSelectionChanged || reverseSelectionChanged);
-  const { data: customData } = useScaleReliability(surveyId, selectedIds, reverseIds, useCustomCalculation);
-  const data = useCustomCalculation ? customData ?? allData : allData;
+  const availableItems = allData?.availableItems ?? [];
+
+  const canCalculate = debouncedSelectedIds.length >= 2;
+  const { data: liveData, isFetching } = useScaleReliability(
+    surveyId,
+    debouncedSelectedIds,
+    debouncedReverseIds,
+    canCalculate,
+  );
+  const displayData = canCalculate ? (liveData ?? allData) : allData;
 
   useEffect(() => {
     if (!allData || selectionInitialized) return;
@@ -939,104 +945,216 @@ function ScaleReliabilityPanel({ surveyId }: { surveyId: string }) {
     setSelectionInitialized(true);
   }, [allData, selectionInitialized]);
 
-  if (isLoading) return <StatsPanelSkeleton minHeight={160} label="量表信度統計" />;
+  if (isLoading) return <StatsPanelSkeleton minHeight={200} label="量表信度統計" />;
   if (!allData || availableItems.length < 2) {
     return (
       <EmptyCapabilityCard
         title="量表信度統計"
-        description="需要一個多題量表題組（至少 2 題評分題）才能計算 Cronbach's α。"
+        description="需要一個多題量表題組（至少 2 題評分題）才能計算 Cronbach's α 與 McDonald's ω。"
       />
     );
   }
-  const displayData = data ?? allData;
+
+  const poolItems = availableItems;
+  const isSelected = (id: string) => selectedIds.includes(id);
+  const isReversed = (id: string) => reverseIds.includes(id);
+
+  const toggleItem = (id: string) => {
+    if (isSelected(id)) {
+      setSelectedIds((ids) => ids.filter((i) => i !== id));
+      setReverseIds((ids) => ids.filter((i) => i !== id));
+    } else {
+      setSelectedIds((ids) => [...ids, id]);
+    }
+  };
+
+  const toggleReverse = (id: string, checked: boolean) => {
+    setReverseIds((ids) => (checked ? [...ids, id] : ids.filter((i) => i !== id)));
+  };
 
   return (
     <section className="rounded-xl border border-indigo-200 bg-indigo-50/60 p-5">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-indigo-700">量表信度統計</p>
-      <div className="mt-3 flex flex-wrap items-end gap-6">
-        <div>
-          <p className="text-3xl font-bold text-slate-900">{canCalculate ? displayData.cronbachAlpha ?? '—' : '—'}</p>
-          <p className="text-xs text-slate-500">Cronbach&apos;s alpha</p>
-        </div>
-        <p className="text-sm text-slate-700">
-          {canCalculate ? displayData.interpretation : '請選擇至少 2 題'} · {selectedIds.length} 題量表 · {canCalculate ? displayData.completeResponseCount : 0} 份完整樣本
-        </p>
-      </div>
-      {displayData.normalizedToCommonScale && (
-        <p className="mt-3 text-[11px] text-slate-500">
-          信度、題目總分相關與刪題後 alpha 會先將各題標準化至共同 0-1 尺度，避免混合量尺扭曲結果；逐題平均保留原量尺，反向題會標示換算前後分數。
-        </p>
-      )}
-      {canCalculate && displayData.excludedIncompleteResponseCount > 0 && (
-        <p className="mt-3 text-xs font-semibold text-amber-700">
-          已排除 {displayData.excludedIncompleteResponseCount} 份未完整回答本題組的樣本，避免缺題資料扭曲信度。
-        </p>
-      )}
-      <div className="mt-4 grid gap-2 sm:grid-cols-2">
-        {availableItems.map((item) => {
-          const calculatedItem = displayData.items.find((candidate) => candidate.questionId === item.questionId);
-          return (
-          <div key={item.questionId} className="rounded-lg border border-indigo-100 bg-white px-3 py-2 text-xs">
-            <label className="flex cursor-pointer gap-2">
-            <input
-              type="checkbox"
-              checked={selectedIds.includes(item.questionId)}
-              onChange={(event) => {
-                setSelectedIds((current) =>
-                  event.target.checked
-                    ? [...current, item.questionId]
-                    : current.filter((id) => id !== item.questionId),
-                );
-                if (!event.target.checked) {
-                  setReverseIds((current) => current.filter((id) => id !== item.questionId));
-                }
-              }}
-            />
-            <span>
-              <span className="block text-slate-700">{item.title}</span>
-              <span className="mt-1 block font-semibold text-indigo-700">
-                {calculatedItem?.reverseScored
-                  ? `原始平均 ${calculatedItem.rawMean ?? '—'} → 計分平均 ${calculatedItem.mean ?? '—'}`
-                  : `平均 ${calculatedItem?.mean ?? '—'}`}
-              </span>
-              {calculatedItem && (
-                <span className="mt-1 block text-[11px] text-slate-500">
-                  校正題目總分相關 {calculatedItem.correctedItemTotalCorrelation ?? '—'} · 刪除此題後 α {calculatedItem.alphaIfDeleted ?? '—'}
-                </span>
-              )}
-            </span>
-            </label>
-            <label className="mt-2 flex cursor-pointer items-center gap-2 border-t border-indigo-50 pt-2 text-[11px] text-slate-500">
-              <input
-                type="checkbox"
-                checked={reverseIds.includes(item.questionId)}
-                disabled={!selectedIds.includes(item.questionId)}
-                onChange={(event) => setReverseIds((current) =>
-                  event.target.checked
-                    ? [...current, item.questionId]
-                    : current.filter((id) => id !== item.questionId),
-                )}
-              />
-              此題為反向題，計算時反向計分
-            </label>
+      <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+
+        {/* ── 左柱：變數池 ── */}
+        <div className="rounded-xl border border-indigo-100 bg-white p-3">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">變數池</p>
+          <div className="space-y-1.5">
+            {poolItems.map((item) => (
+              <div
+                key={item.questionId}
+                className="flex items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-2"
+              >
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="shrink-0 text-sm text-slate-400" title="評分量表題">📊</span>
+                  <span className="truncate text-xs text-slate-700">{item.title}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => toggleItem(item.questionId)}
+                  className={`shrink-0 rounded px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                    isSelected(item.questionId)
+                      ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200'
+                      : 'bg-slate-200 text-slate-600 hover:bg-indigo-50 hover:text-indigo-600'
+                  }`}
+                >
+                  {isSelected(item.questionId) ? '已選' : '加入'}
+                </button>
+              </div>
+            ))}
           </div>
-          );
-        })}
+        </div>
+
+        {/* ── 中柱：分析設定 ── */}
+        <div className="flex flex-col rounded-xl border border-indigo-100 bg-white p-3">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">分析設定</p>
+
+          {/* 已選變數 */}
+          <p className="mb-1.5 text-[11px] font-medium text-slate-500">已選變數</p>
+          {selectedIds.length === 0 ? (
+            <p className="mb-3 text-xs text-slate-400">從左側點選「加入」以新增變數</p>
+          ) : (
+            <div className="mb-3 space-y-1.5">
+              {selectedIds.map((id) => {
+                const item = availableItems.find((it) => it.questionId === id);
+                if (!item) return null;
+                return (
+                  <div key={id} className="rounded-lg border border-indigo-100 bg-indigo-50/40 px-2.5 py-2">
+                    <div className="flex items-center justify-between gap-1">
+                      <span className="min-w-0 truncate text-xs text-slate-700">{item.title}</span>
+                      <button
+                        type="button"
+                        aria-label={`移除 ${item.title}`}
+                        onClick={() => toggleItem(id)}
+                        className="shrink-0 rounded p-0.5 text-slate-400 hover:text-red-500"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    <label className="mt-1.5 flex cursor-pointer items-center gap-1.5 text-[11px] text-slate-500">
+                      <input
+                        type="checkbox"
+                        checked={isReversed(id)}
+                        onChange={(e) => toggleReverse(id, e.target.checked)}
+                      />
+                      反向題
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* 顯示指標 */}
+          <div className="border-t border-indigo-100 pt-3">
+            <p className="mb-1.5 text-[11px] font-medium text-slate-500">顯示指標</p>
+            <div className="space-y-1.5 text-xs text-slate-700">
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={showAlpha} onChange={(e) => setShowAlpha(e.target.checked)} />
+                Cronbach&apos;s α
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={showOmega} onChange={(e) => setShowOmega(e.target.checked)} />
+                McDonald&apos;s ω
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input type="checkbox" checked={showAlphaIfDeleted} onChange={(e) => setShowAlphaIfDeleted(e.target.checked)} />
+                刪題後信度
+              </label>
+            </div>
+          </div>
+
+          {/* 儲存設定 */}
+          <div className="mt-auto border-t border-indigo-100 pt-3">
+            <button
+              type="button"
+              disabled={selectedIds.length < 2 || saveSettings.isPending}
+              onClick={() => saveSettings.mutate({ questionIds: selectedIds, reverseQuestionIds: reverseIds })}
+              className="w-full rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
+            >
+              {saveSettings.isPending ? '儲存中…' : '儲存量表設定'}
+            </button>
+            {saveSettings.isSuccess && <p className="mt-1.5 text-[11px] text-emerald-700">量表設定已保存。</p>}
+            {saveSettings.isError && <p className="mt-1.5 text-[11px] text-red-700">儲存失敗，請稍後再試。</p>}
+          </div>
+        </div>
+
+        {/* ── 右柱：動態報表 ── */}
+        <div className="rounded-xl border border-indigo-100 bg-white p-3">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-wide text-slate-400">動態報表</p>
+
+          {selectedIds.length < 2 ? (
+            <div className="flex h-28 items-center justify-center">
+              <p className="text-center text-xs text-slate-400">請選擇至少兩個變數</p>
+            </div>
+          ) : isFetching ? (
+            <div className="animate-pulse space-y-3">
+              <div className="h-10 rounded-lg bg-slate-200" />
+              <div className="h-10 rounded-lg bg-slate-200" />
+              <div className="h-24 rounded-lg bg-slate-200" />
+            </div>
+          ) : displayData ? (
+            <div className="space-y-4">
+              {/* α / ω metrics */}
+              <div className="flex flex-wrap gap-4">
+                {showAlpha && (
+                  <div>
+                    <p className="text-[11px] text-slate-500">Cronbach&apos;s α</p>
+                    <p className="text-2xl font-bold text-slate-900">{displayData.cronbachAlpha ?? '—'}</p>
+                  </div>
+                )}
+                {showOmega && (
+                  <div>
+                    <p className="text-[11px] text-slate-500">McDonald&apos;s ω</p>
+                    <p className="text-2xl font-bold text-slate-900">{displayData.mcdonaldsOmega ?? '—'}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Interpretation */}
+              <p className="text-xs text-slate-600">{displayData.interpretation}</p>
+              <p className="text-[11px] text-slate-400">
+                {displayData.completeResponseCount} 份完整樣本
+                {displayData.excludedIncompleteResponseCount > 0 && (
+                  <span className="text-amber-600">・已排除 {displayData.excludedIncompleteResponseCount} 份不完整</span>
+                )}
+              </p>
+
+              {/* 刪題後信度 */}
+              {showAlphaIfDeleted && displayData.items.length > 0 && (
+                <div>
+                  <p className="mb-1.5 text-[11px] font-medium text-slate-500">刪題後信度</p>
+                  <table className="w-full text-[11px]">
+                    <thead>
+                      <tr className="border-b border-slate-100">
+                        <th className="py-1 text-left font-medium text-slate-400">題目</th>
+                        <th className="py-1 text-right font-medium text-slate-400">α（刪除後）</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {displayData.items.map((item) => (
+                        <tr key={item.questionId} className="border-b border-slate-50">
+                          <td className="py-1 pr-2 text-slate-700">{item.title}</td>
+                          <td className="py-1 text-right font-mono text-slate-900">
+                            {item.alphaIfDeleted ?? '—'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          ) : null}
+        </div>
       </div>
-      <p className="mt-3 text-[11px] text-slate-500">校正題目總分相關越低，越值得檢查題意；若刪除此題後 alpha 明顯上升，可評估修改或移除。</p>
-      <div className="mt-3 flex flex-wrap items-center gap-3">
-        <button
-          type="button"
-          disabled={selectedIds.length < 2 || saveSettings.isPending}
-          onClick={() => saveSettings.mutate({ questionIds: selectedIds, reverseQuestionIds: reverseIds })}
-          className="rounded-lg bg-indigo-700 px-3 py-2 text-xs font-semibold text-white disabled:opacity-50"
-        >
-          {saveSettings.isPending ? '儲存中…' : '儲存量表題組設定'}
-        </button>
-        {saveSettings.isSuccess && <p className="text-xs font-semibold text-emerald-700">量表題組設定已保存。</p>}
-        {saveSettings.isError && <p className="text-xs font-semibold text-red-700">儲存失敗，請稍後再試。</p>}
-      </div>
-      {selectedIds.length < 2 && <p className="mt-3 text-xs font-semibold text-red-700">請至少勾選 2 題屬於同一構念的量表題。</p>}
+
+      {displayData?.normalizedToCommonScale && (
+        <p className="mt-3 text-[11px] text-slate-500">
+          信度指標均先將各題標準化至共同 0-1 尺度，避免混合量尺扭曲結果；逐題平均保留原量尺，反向題已換算。
+        </p>
+      )}
     </section>
   );
 }
