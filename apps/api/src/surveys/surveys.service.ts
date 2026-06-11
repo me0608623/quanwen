@@ -263,6 +263,38 @@ export class SurveysService {
     };
   }
 
+  /** 欄位英文 key → 使用者可懂的中文名稱（用於錯誤訊息） */
+  private static readonly FIELD_LABELS: Record<string, string> = {
+    type: '問卷類型',
+    questions: '題目',
+    logicRules: '邏輯規則',
+    aiReviewEnabled: 'AI 品質審核',
+    rewardPoints: '獎勵金額',
+    baseRewardPoints: '基礎獎勵',
+    rewardMode: '獎勵方式',
+    lotteryPrize: '抽獎獎品',
+    lotteryWinnerCount: '抽獎名額',
+    lotteryDrawMode: '開獎方式',
+    lotteryDrawAt: '開獎時間',
+    lotteryTermsAccepted: '抽獎條款同意',
+    targetCount: '目標回收份數',
+    expiresAt: '截止時間',
+    deadlineTier: '回收期限',
+    isAnonymous: '匿名作答',
+    questionShuffleMode: '題目隨機順序',
+    externalUrl: '外部連結',
+    estimatedMinutes: '預計填答時間',
+    isBrandSurvey: '品牌問卷',
+    couponBrand: '品牌名稱',
+    couponTitle: '優惠券名稱',
+    couponCode: '優惠券代碼',
+    couponExpiresAt: '優惠券到期時間',
+    minReputationScore: '最低信譽分數',
+    scheduledPublishAt: '排程發布時間',
+    autoCloseAt: '自動關閉時間',
+    autoCloseAfterN: '達標自動關閉',
+  };
+
   /** 已發布問卷可改的「資訊類」欄位白名單（不影響既有填答有效性與獎勵承諾） */
   private static readonly PUBLISHED_EDITABLE_FIELDS = [
     'title', 'description', 'category',
@@ -282,8 +314,9 @@ export class SurveysService {
       (k) => !allowed.has(k) && (dto as Record<string, unknown>)[k] !== undefined,
     );
     if (blocked.length > 0) {
+      const labels = blocked.map((k) => SurveysService.FIELD_LABELS[k] ?? k);
       throw new BadRequestException(
-        `已發布問卷僅能修改標題、說明、圖片、樣式、感謝頁與受眾條件；不可修改：${blocked.join('、')}`,
+        `已發布問卷僅能修改標題、說明、圖片、樣式、感謝頁與受眾條件；不可修改：${labels.join('、')}`,
       );
     }
 
