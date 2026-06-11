@@ -1,14 +1,25 @@
--- Idempotent enum value alignment for Neon (production Postgres).
+-- Idempotent schema alignment for Neon (production Postgres).
 --
--- drizzle-kit push creates new enum types but DOES NOT apply ALTER TYPE ... ADD VALUE
--- for values added to existing enums. This script closes that gap.
+-- Two kinds of gaps drizzle-kit push does NOT auto-apply:
+--   1. ALTER TYPE ... ADD VALUE for new enum values added to existing enums.
+--   2. ALTER TABLE ... ADD COLUMN for new columns that drizzle-kit prompts
+--      interactively before applying (CI passes </dev/null → prompt → abort).
 --
 -- Run after every drizzle-kit push in CI. All statements use IF NOT EXISTS, so
 -- re-running is safe and has no side effects.
 --
--- Maintenance: when you add a value to a pgEnum in apps/api/src/db/schema/*.ts,
--- also add the corresponding ALTER TYPE line here (plus update database.module.ts
--- and test-helpers/pglite-ddl.ts as described in CLAUDE.md).
+-- Maintenance: when you add a value to a pgEnum or a new column to an existing
+-- table in apps/api/src/db/schema/*.ts, also add the corresponding ALTER here
+-- (plus update database.module.ts and test-helpers/pglite-ddl.ts as described
+-- in CLAUDE.md).
+
+-- ── Column drift fixes ────────────────────────────────────────────────────────
+-- PR #56 (2026-06-09) added daily_tokens_used to daily_usage BEFORE the CI
+-- drizzle-kit push step existed (added in PR #78). Neon therefore never got
+-- this column, causing AiQuotaGuard.checkTokenBudget() to throw
+-- "column daily_tokens_used does not exist" → every AI endpoint returned 500
+-- ("產生洞察失敗，請稍後再試") regardless of quota (issue #118).
+ALTER TABLE daily_usage ADD COLUMN IF NOT EXISTS daily_tokens_used INTEGER NOT NULL DEFAULT 0;
 
 -- ── transaction_type ──────────────────────────────────────────────────────────
 ALTER TYPE transaction_type ADD VALUE IF NOT EXISTS 'deposit';

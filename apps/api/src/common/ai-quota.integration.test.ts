@@ -193,6 +193,20 @@ describe('AiUsageService (integration)', () => {
       expect(result.limit).toBe(-1); // -1 means unlimited
     });
 
+    it('checkTokenBudget allows vvip without querying daily_tokens_used (issue #118 regression)', async () => {
+      // Regression: if daily_tokens_used column is missing in Neon (schema drift),
+      // checkTokenBudget must still succeed for VVIP users instead of throwing.
+      // The fix: skip getTodayTokensUsed entirely for Infinity-tier users.
+      const user = await createUser('vvip');
+      // Do NOT insert any daily_usage row — simulates schema drift scenario
+      // where the column / row doesn't exist.
+      const result = await service.checkTokenBudget(user.id, 1_000_000);
+      expect(result.allowed).toBe(true);
+      expect(result.limit).toBe(-1);
+      // tokensUsed is 0 (not queried) — that is acceptable because VVIP is always allowed
+      expect(result.tokensUsed).toBe(0);
+    });
+
     it('checkTokenBudget returns a resetAt date in the future', async () => {
       const user = await createUser('free');
       const result = await service.checkTokenBudget(user.id, 100);
