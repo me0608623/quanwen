@@ -746,7 +746,7 @@ export default function SurveyDetailPage() {
           {canEdit && description.length > 1700 && (
             <p className="-mt-1 text-right text-[11px] text-muted-foreground">{description.length} / 2000</p>
           )}
-          {canEdit && (
+          {canEditInfo && (
             <ImageUploader
               value={coverImageUrl}
               onChange={(url) => {
@@ -756,7 +756,7 @@ export default function SurveyDetailPage() {
               label="封面圖片（顯示於任務卡片與問卷歡迎頁）"
             />
           )}
-          {canEdit && (
+          {canEditInfo && (
             <WelcomeImagesEditor
               value={welcomeImages}
               onChange={(next) => {
