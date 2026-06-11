@@ -437,60 +437,93 @@ export default function SurveyStatsPage() {
         </div>
       </section>
 
-      <section className="flex flex-col gap-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm lg:flex-row lg:items-center lg:justify-between">
-        <div>
+      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-3">
           <p className="text-sm font-bold text-slate-900">分析工具列</p>
-          <p className="mt-1 text-xs text-slate-500">匯出原始資料、乾淨樣本，或往下查看 AI 分析簡報。</p>
+          <p className="mt-0.5 text-xs text-slate-500">匯出原始資料、乾淨樣本，或往下查看 AI 分析簡報。</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={() => handleExportCsv(false)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-muted"
-          >
-            <Download className="h-3.5 w-3.5" /> CSV
-          </button>
-          <button
-            onClick={handleExportJson}
-            className="rounded-lg border border-border px-3 py-2 text-xs font-medium hover:bg-muted"
-            title="結構化 JSON（程式 / 資料分析用）"
-          >
-            {'{ } JSON'}
-          </button>
-          <button
-            onClick={() => handleExportXlsx(false)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
-            title="Excel：填答資料 + 摘要兩個工作表"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> Excel
-          </button>
-          <button
-            onClick={() => handleExportStatsXlsx(false)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-xs font-medium text-indigo-800 hover:bg-indigo-100"
-            title="JASP / SPSS：數值編碼、Value Labels、多選題 0/1 拆欄"
-          >
-            <FileSpreadsheet className="h-3.5 w-3.5" /> JASP/SPSS
-          </button>
-          <button
-            onClick={handleExportPdf}
-            className="rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800 hover:bg-rose-100"
-            title="PDF 統計總覽報表"
-          >
-            PDF 報表
-          </button>
-          <button
-            onClick={() => handleExportXlsx(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-[#126b8a] bg-[#126b8a] px-3 py-2 text-xs font-semibold text-white hover:bg-[#0f5d78]"
-            title="只匯出品質分數 ≥ 70 的高品質樣本（Excel）"
-          >
-            <Sparkles className="h-3.5 w-3.5" /> 乾淨 Excel
-          </button>
-          <button
-            onClick={() => handleExportStatsXlsx(true)}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-500 bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-700"
-            title="只匯出品質分數 ≥ 70 的高品質樣本（JASP / SPSS Excel）"
-          >
-            <Sparkles className="h-3.5 w-3.5" /> 乾淨 JASP/SPSS
-          </button>
+        <div className="flex flex-wrap gap-x-6 gap-y-4">
+          {/* 原始資料 */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">原始資料</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleExportCsv(false)}
+                className="flex flex-col items-start rounded-lg border border-border px-3 py-2 text-left text-xs font-medium hover:bg-muted"
+                aria-label="下載 CSV：全部填答，程式用"
+              >
+                <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> CSV</span>
+                <span className="mt-0.5 text-[10px] font-normal text-slate-400">全部填答 · 程式用</span>
+              </button>
+              <button
+                onClick={handleExportJson}
+                className="flex flex-col items-start rounded-lg border border-border px-3 py-2 text-left text-xs font-medium hover:bg-muted"
+                aria-label="下載 JSON：結構化格式，程式 / 資料分析用"
+              >
+                <span>{'{ } JSON'}</span>
+                <span className="mt-0.5 text-[10px] font-normal text-slate-400">全部填答 · 程式用</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 給人看（原始文字 Excel） */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">給人看（原始文字）</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleExportXlsx(false)}
+                className="flex flex-col items-start rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-2 text-left text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                aria-label="下載 Excel：全部填答，含填答資料與摘要兩個工作表"
+              >
+                <span className="inline-flex items-center gap-1.5"><FileSpreadsheet className="h-3.5 w-3.5" /> Excel</span>
+                <span className="mt-0.5 text-[10px] font-normal text-emerald-600/80">全部填答</span>
+              </button>
+              <button
+                onClick={() => handleExportXlsx(true)}
+                className="flex flex-col items-start rounded-lg border border-[#126b8a] bg-[#126b8a] px-3 py-2 text-left text-xs font-semibold text-white hover:bg-[#0f5d78]"
+                aria-label="下載乾淨 Excel：僅品質分數 70 分以上的高品質樣本"
+              >
+                <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> 乾淨 Excel</span>
+                <span className="mt-0.5 text-[10px] font-normal text-white/70">僅品質 ≥ 70</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 統計軟體（數值編碼） */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">統計軟體（數值編碼）</p>
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => handleExportStatsXlsx(false)}
+                className="flex flex-col items-start rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-2 text-left text-xs font-medium text-indigo-800 hover:bg-indigo-100"
+                aria-label="下載 JASP/SPSS 格式 Excel：數值編碼、Value Labels、多選題 0/1 拆欄，全部填答"
+              >
+                <span className="inline-flex items-center gap-1.5"><FileSpreadsheet className="h-3.5 w-3.5" /> JASP / SPSS</span>
+                <span className="mt-0.5 text-[10px] font-normal text-indigo-600/80">全部填答 · 0/1 拆欄</span>
+              </button>
+              <button
+                onClick={() => handleExportStatsXlsx(true)}
+                className="flex flex-col items-start rounded-lg border border-indigo-500 bg-indigo-600 px-3 py-2 text-left text-xs font-semibold text-white hover:bg-indigo-700"
+                aria-label="下載乾淨 JASP/SPSS 格式 Excel：僅品質分數 70 分以上，數值編碼、Value Labels、0/1 拆欄"
+              >
+                <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> 乾淨 JASP/SPSS</span>
+                <span className="mt-0.5 text-[10px] font-normal text-white/70">僅品質 ≥ 70</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 報表 */}
+          <div className="flex flex-col gap-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-400">報表</p>
+            <button
+              onClick={handleExportPdf}
+              className="flex flex-col items-start rounded-lg border border-rose-300 bg-rose-50 px-3 py-2 text-left text-xs font-medium text-rose-800 hover:bg-rose-100"
+              aria-label="下載 PDF 統計總覽報表，閱讀用"
+            >
+              <span>PDF 報表</span>
+              <span className="mt-0.5 text-[10px] font-normal text-rose-600/80">統計總覽（閱讀用）</span>
+            </button>
+          </div>
         </div>
       </section>
 
