@@ -52,37 +52,47 @@ export function SidebarNav({ model }: SidebarNavProps) {
     };
   }, [model, refresh]);
 
-  // IntersectionObserver: track which question is currently in the viewport.
-  // Uses DOM index (nodes.indexOf) instead of data-name comparison — data-name is a
-  // UUID in the DOM but q.name is a SurveyJS internal name, so they never match.
-  // MutationObserver waits for .sd-question nodes to appear (SurveyJS renders async).
+  // Reference-line scroll tracker: find the deepest .sd-question whose top is still
+  // above 30% of the viewport height — that's the question the user is currently reading.
+  // This avoids the narrow-band IntersectionObserver failure on tall desktop questions
+  // where the IO's rootMargin window could be entirely skipped by a single tall element.
+  // MutationObserver waits for .sd-question nodes to render before attaching.
   useEffect(() => {
     if (!model) return;
 
-    let io: IntersectionObserver | null = null;
-    const visibleSet = new Set<number>();
+    let rafId: number | null = null;
+    let nodes: Element[] = [];
+
+    const calcCurrent = () => {
+      if (nodes.length === 0) return;
+      const ref = window.innerHeight * 0.3;
+      let idx = 0;
+      for (let i = 0; i < nodes.length; i++) {
+        if (nodes[i].getBoundingClientRect().top <= ref) {
+          idx = i;
+        } else {
+          break;
+        }
+      }
+      setCurrentScrollIdx(idx);
+    };
+
+    const onScroll = () => {
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        calcCurrent();
+      });
+    };
 
     const attach = (): boolean => {
-      const nodes = Array.from(
+      const found = Array.from(
         document.querySelectorAll<Element>('.surveyjs-wrapper .sd-question'),
       );
-      if (nodes.length === 0) return false;
-
-      io = new IntersectionObserver(
-        (entries) => {
-          entries.forEach((entry) => {
-            const idx = nodes.indexOf(entry.target);
-            if (idx < 0) return;
-            if (entry.isIntersecting) visibleSet.add(idx);
-            else visibleSet.delete(idx);
-          });
-          if (visibleSet.size > 0) {
-            setCurrentScrollIdx(Math.min(...visibleSet));
-          }
-        },
-        { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
-      );
-      nodes.forEach((n) => io!.observe(n));
+      if (found.length === 0) return false;
+      nodes = found;
+      calcCurrent();
+      window.addEventListener('scroll', onScroll, { passive: true });
       return true;
     };
 
@@ -93,11 +103,15 @@ export function SidebarNav({ model }: SidebarNavProps) {
       mo.observe(document.body, { childList: true, subtree: true });
       return () => {
         mo.disconnect();
-        io?.disconnect();
+        window.removeEventListener('scroll', onScroll);
+        if (rafId !== null) cancelAnimationFrame(rafId);
       };
     }
 
-    return () => io?.disconnect();
+    return () => {
+      window.removeEventListener('scroll', onScroll);
+      if (rafId !== null) cancelAnimationFrame(rafId);
+    };
   }, [model]);
 
   // Prefer scroll-tracked index; fall back to first unanswered
