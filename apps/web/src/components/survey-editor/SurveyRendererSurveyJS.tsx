@@ -8,7 +8,7 @@ import 'survey-core/survey-core.min.css';
 import 'survey-core/i18n/traditional-chinese';
 import { quanswenToSurveyJs, extractAnswers } from '@/lib/surveyjs-adapter';
 import type { PublicSurvey, AnswerInput } from '@/hooks/use-responses';
-import { DEFAULT_ACCENT, fontFamilyClass } from './survey-style-panel';
+import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, darkenHex, fontFamilyClass } from './survey-style-panel';
 
 export interface SurveyRendererSurveyJSProps {
   survey: PublicSurvey;
@@ -18,18 +18,6 @@ export interface SurveyRendererSurveyJSProps {
   onModelReady?: (model: SurveyModel) => void;
 }
 
-// 把 hex 主色壓暗一階，給按鈕 hover / dark 變體用
-function darkenHex(hex: string, amount = 0.15): string {
-  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  let h = m[1];
-  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
-  const num = parseInt(h, 16);
-  const r = Math.max(0, Math.round(((num >> 16) & 255) * (1 - amount)));
-  const g = Math.max(0, Math.round(((num >> 8) & 255) * (1 - amount)));
-  const b = Math.max(0, Math.round((num & 255) * (1 - amount)));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-}
 
 /**
  * Production SurveyJS renderer for QuanWenSurvey v1.
@@ -48,6 +36,7 @@ export function SurveyRendererSurveyJS({
   // 套用問卷樣式主題
   const accent = survey.theme?.accentColor ?? DEFAULT_ACCENT;
   const accentDark = darkenHex(accent);
+  const bg = survey.theme?.backgroundColor ?? DEFAULT_BACKGROUND;
   const fontClass = fontFamilyClass(survey.theme?.fontFamily);
 
   // Build the SurveyJS model once from the QuanWen survey data
@@ -104,7 +93,7 @@ export function SurveyRendererSurveyJS({
   return (
     <div
       className={`surveyjs-wrapper mt-5 ${fontClass}`}
-      style={{ '--qw-accent': accent, '--qw-accent-dark': accentDark } as CSSProperties}
+      style={{ '--qw-accent': accent, '--qw-accent-dark': accentDark, '--qw-bg': bg } as CSSProperties}
     >
       <Survey model={model} />
       <style jsx global>{`
@@ -128,10 +117,10 @@ export function SurveyRendererSurveyJS({
           color: #0f172a;
         }
         .surveyjs-wrapper .sd-root-modern {
-          --sjs-primary-backcolor: #07183d;
+          --sjs-primary-backcolor: var(--qw-accent);
           --sjs-primary-forecolor: #ffffff;
-          --sjs-primary-backcolor-light: rgba(37,99,235,0.08);
-          --sjs-primary-backcolor-dark: #2563eb;
+          --sjs-primary-backcolor-light: color-mix(in srgb, var(--qw-accent) 8%, transparent);
+          --sjs-primary-backcolor-dark: var(--qw-accent-dark);
           --sjs-question-background: rgba(255,255,255,0.9);
           --sjs-questionpanel-backcolor: transparent;
           --sjs-general-backcolor: transparent;
@@ -152,8 +141,8 @@ export function SurveyRendererSurveyJS({
         }
         .surveyjs-wrapper .sd-progress__bar {
           border-radius: inherit;
-          background: linear-gradient(90deg, #07183d, #2563eb);
-          box-shadow: 0 2px 8px rgba(37,99,235,0.3);
+          background: var(--qw-accent);
+          box-shadow: 0 2px 8px color-mix(in srgb, var(--qw-accent) 30%, transparent);
           transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
         }
         .surveyjs-wrapper .sd-container-modern__title {
@@ -180,10 +169,10 @@ export function SurveyRendererSurveyJS({
         }
         .surveyjs-wrapper .sd-question:focus-within {
           transform: translateY(-1px);
-          border-color: rgba(37,99,235,0.3);
+          border-color: color-mix(in srgb, var(--qw-accent) 30%, transparent);
           box-shadow:
-            inset 3px 0 0 #07183d,
-            0 8px 32px rgba(37,99,235,0.1),
+            inset 3px 0 0 var(--qw-accent),
+            0 8px 32px color-mix(in srgb, var(--qw-accent) 10%, transparent),
             inset 0 1px 0 rgba(255,255,255,0.8);
         }
         .surveyjs-wrapper .sd-question__header {
@@ -208,7 +197,7 @@ export function SurveyRendererSurveyJS({
           height: 28px;
           padding: 0 6px;
           border-radius: 8px;
-          background: #07183d;
+          background: var(--qw-accent);
           color: #ffffff;
           font-weight: 600;
           font-size: 14px;
@@ -232,19 +221,19 @@ export function SurveyRendererSurveyJS({
         }
         .surveyjs-wrapper .sd-item:hover {
           background: #f1f5f9;
-          border-color: rgba(37,99,235,0.2);
+          border-color: color-mix(in srgb, var(--qw-accent) 20%, transparent);
           transform: translateY(-1px);
-          box-shadow: 0 8px 32px rgba(37,99,235,0.1);
+          box-shadow: 0 8px 32px color-mix(in srgb, var(--qw-accent) 10%, transparent);
         }
         .surveyjs-wrapper .sd-item--checked {
-          background: rgba(37,99,235,0.08);
-          border-color: rgba(37,99,235,0.4);
+          background: color-mix(in srgb, var(--qw-accent) 8%, transparent);
+          border-color: color-mix(in srgb, var(--qw-accent) 40%, transparent);
           box-shadow:
-            0 0 20px rgba(37,99,235,0.15),
-            inset 0 0 12px rgba(37,99,235,0.05);
+            0 0 20px color-mix(in srgb, var(--qw-accent) 15%, transparent),
+            inset 0 0 12px color-mix(in srgb, var(--qw-accent) 5%, transparent);
         }
         .surveyjs-wrapper .sd-item--checked .sd-item__control-label {
-          color: #07183d;
+          color: var(--qw-accent);
         }
         .surveyjs-wrapper .sd-item__decorator {
           border-color: rgba(0,0,0,0.2);
@@ -254,7 +243,7 @@ export function SurveyRendererSurveyJS({
         }
         /* ===== Buttons — primary dark blue ===== */
         .surveyjs-wrapper .sd-btn {
-          background: #07183d;
+          background: var(--qw-accent);
           border-color: transparent;
           border-radius: 8px;
           color: white;
@@ -266,7 +255,7 @@ export function SurveyRendererSurveyJS({
             transform 200ms cubic-bezier(0.4,0,0.2,1);
         }
         .surveyjs-wrapper .sd-btn:hover {
-          background: #2563eb;
+          background: var(--qw-accent-dark);
         }
         .surveyjs-wrapper .sd-btn:active {
           transform: scale(0.97);
@@ -275,16 +264,16 @@ export function SurveyRendererSurveyJS({
         .surveyjs-wrapper input:focus-visible,
         .surveyjs-wrapper textarea:focus-visible,
         .surveyjs-wrapper select:focus-visible {
-          outline: 2px solid rgba(7,24,61,0.3);
+          outline: 2px solid color-mix(in srgb, var(--qw-accent) 30%, transparent);
           outline-offset: 2px;
         }
         .surveyjs-wrapper .sd-navigation__complete-btn {
-          background: #07183d;
+          background: var(--qw-accent);
           border-color: transparent;
           color: white;
         }
         .surveyjs-wrapper .sd-navigation__complete-btn:hover {
-          background: #2563eb;
+          background: var(--qw-accent-dark);
         }
         /* ===== Inputs — light ===== */
         .surveyjs-wrapper .sd-input,
@@ -299,8 +288,8 @@ export function SurveyRendererSurveyJS({
         }
         .surveyjs-wrapper .sd-input:focus,
         .surveyjs-wrapper .sd-comment:focus {
-          border-color: #07183d;
-          box-shadow: 0 0 0 3px rgba(7,24,61,0.1);
+          border-color: var(--qw-accent);
+          box-shadow: 0 0 0 3px color-mix(in srgb, var(--qw-accent) 10%, transparent);
         }
         .surveyjs-wrapper .sd-input::placeholder,
         .surveyjs-wrapper .sd-comment::placeholder {
@@ -319,7 +308,7 @@ export function SurveyRendererSurveyJS({
           transform: scale(1.15);
         }
         .surveyjs-wrapper .sd-rating__item--selected {
-          color: #2563eb;
+          color: var(--qw-accent);
         }
         /* ===== Matrix ===== */
         .surveyjs-wrapper .sd-matrix__label {

@@ -7,6 +7,19 @@ import { cn } from '@/lib/utils';
 export const DEFAULT_ACCENT = '#126b8a';
 export const DEFAULT_BACKGROUND = '#ffffff';
 
+// 把 hex 主色壓暗一階，用於 hover / 深色變體
+export function darkenHex(hex: string, amount = 0.15): string {
+  const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(hex);
+  if (!m) return hex;
+  let h = m[1];
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  const num = parseInt(h, 16);
+  const r = Math.max(0, Math.round(((num >> 16) & 255) * (1 - amount)));
+  const g = Math.max(0, Math.round(((num >> 8) & 255) * (1 - amount)));
+  const b = Math.max(0, Math.round((num & 255) * (1 - amount)));
+  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
+}
+
 const ACCENT_PRESETS = ['#126b8a', '#2563eb', '#7c3aed', '#db2777', '#ea580c', '#16a34a', '#0f172a'];
 const BACKGROUND_PRESETS = ['#ffffff', '#f8fafc', '#fffbeb', '#f0fdf4', '#eff6ff', '#faf5ff'];
 

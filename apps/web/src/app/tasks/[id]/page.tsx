@@ -19,7 +19,7 @@ import type { SurveyModel } from 'survey-core';
 import { usePublicSurvey, useSubmitResponse } from '@/hooks/use-responses';
 import { BehaviorTracker, detectIntervention } from '@/lib/behavior-tracker';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
-import { DEFAULT_BACKGROUND, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
+import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, darkenHex, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import type { AnswerInput } from '@/hooks/use-responses';
 import { lotteryDisclosure } from '@/lib/lottery-display';
@@ -28,10 +28,6 @@ import { SidebarNav } from '@/components/survey-glass/sidebar-nav';
 
 // ─── Light Glass design primitives ──────────────────────────────────────────
 
-const GLASS_BG: CSSProperties = {
-  background: '#f1f5f9',
-};
-
 const GLASS_CARD: CSSProperties = {
   background: '#ffffff',
   backdropFilter: 'blur(20px) saturate(180%)',
@@ -39,9 +35,24 @@ const GLASS_CARD: CSSProperties = {
     '0 1px 3px rgba(15,23,42,0.08), 0 8px 24px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.8)',
 };
 
-function GlassShell({ children }: { children: ReactNode }) {
+function GlassShell({
+  children,
+  bgColor,
+  accentColor,
+  accentDark,
+}: {
+  children: ReactNode;
+  bgColor?: string;
+  accentColor?: string;
+  accentDark?: string;
+}) {
+  const mainStyle: CSSProperties = {
+    background: bgColor ?? '#f1f5f9',
+    ...(accentColor ? { '--qw-accent': accentColor } as CSSProperties : {}),
+    ...(accentDark ? { '--qw-accent-dark': accentDark } as CSSProperties : {}),
+  };
   return (
-    <main className="relative min-h-[100dvh] overflow-clip text-[#0f172a]" style={GLASS_BG}>
+    <main className="relative min-h-[100dvh] overflow-clip text-[#0f172a]" style={mainStyle}>
       {/* Decorative orb 1 — top-left */}
       <div
         className="pointer-events-none absolute -top-48 -left-48 h-[600px] w-[600px] rounded-full"
@@ -95,17 +106,16 @@ function GlassButton({
   variant?: 'primary' | 'ghost' | 'warm';
   className?: string;
 }) {
-  const base = 'inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#07183d]/30';
+  const base = 'inline-flex items-center justify-center gap-2 rounded-lg px-5 py-2.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2';
   const variants: Record<string, string> = {
-    primary:
-      'bg-[#07183d] text-white hover:bg-[#2563eb]',
-    ghost:
-      'border border-[rgba(0,0,0,0.12)] bg-white text-[#0f172a] hover:bg-[#f1f5f9]',
-    warm:
-      'border border-amber-400/40 bg-amber-50 text-amber-700 hover:bg-amber-100',
+    primary: 'text-white',
+    ghost: 'border border-[rgba(0,0,0,0.12)] bg-white text-[#0f172a] hover:bg-[#f1f5f9]',
+    warm: 'border border-amber-400/40 bg-amber-50 text-amber-700 hover:bg-amber-100',
   };
+  const primaryStyle: CSSProperties | undefined =
+    variant === 'primary' ? { background: 'var(--qw-accent)' } : undefined;
   return (
-    <button onClick={onClick} className={`${base} ${variants[variant]} ${className}`}>
+    <button onClick={onClick} className={`${base} ${variants[variant]} ${className}`} style={primaryStyle}>
       {children}
     </button>
   );
@@ -118,14 +128,28 @@ function GlassPill({
   children: ReactNode;
   tone?: 'neutral' | 'accent' | 'warm';
 }) {
+  const baseClass = 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium';
+  if (tone === 'accent') {
+    return (
+      <span
+        className={baseClass}
+        style={{
+          borderColor: 'color-mix(in srgb, var(--qw-accent) 20%, transparent)',
+          background: 'color-mix(in srgb, var(--qw-accent) 10%, transparent)',
+          color: 'var(--qw-accent)',
+        }}
+      >
+        {children}
+      </span>
+    );
+  }
   const tones: Record<string, string> = {
-    accent: 'border-[#2563eb]/20 bg-[#2563eb]/10 text-[#07183d]',
     warm: 'border-amber-400/30 bg-amber-50 text-amber-700',
     neutral: 'border-[rgba(0,0,0,0.08)] bg-[#f8fafc] text-[#475569]',
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${tones[tone]}`}
+      className={`${baseClass} ${tones[tone] ?? ''}`}
     >
       {children}
     </span>
@@ -133,13 +157,25 @@ function GlassPill({
 }
 
 function GlassIconCircle({ children, tone = 'blue' }: { children: ReactNode; tone?: 'blue' | 'amber' | 'gray' }) {
+  if (tone === 'blue') {
+    return (
+      <div
+        className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
+        style={{
+          background: 'color-mix(in srgb, var(--qw-accent) 10%, transparent)',
+          color: 'var(--qw-accent)',
+        }}
+      >
+        {children}
+      </div>
+    );
+  }
   const tones: Record<string, string> = {
-    blue: 'bg-[#2563eb]/10 text-[#07183d]',
     amber: 'bg-amber-50 text-amber-600',
     gray: 'bg-[#f1f5f9] text-[#475569]',
   };
   return (
-    <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${tones[tone]}`}>
+    <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${tones[tone] ?? ''}`}>
       {children}
     </div>
   );
@@ -152,6 +188,12 @@ export default function SurveyFillPage() {
   const router = useRouter();
   const { data: survey, isLoading } = usePublicSurvey(id);
   const submitResponse = useSubmitResponse(id);
+
+  // 問卷主題：建立者設定的色彩與字型
+  const accent = survey?.theme?.accentColor ?? DEFAULT_ACCENT;
+  const accentDark = darkenHex(accent);
+  const bg = survey?.theme?.backgroundColor ?? DEFAULT_BACKGROUND;
+  const themeProps = { bgColor: bg, accentColor: accent, accentDark };
 
   const startedAtRef = useRef<string>(new Date().toISOString());
   const trackerRef = useRef<BehaviorTracker | null>(null);
@@ -217,11 +259,11 @@ export default function SurveyFillPage() {
   // ── Loading ──
   if (isLoading) {
     return (
-      <GlassShell>
+      <GlassShell {...themeProps}>
         <div className="mx-auto mt-24 flex w-full max-w-sm items-center justify-center rounded-[20px] border p-8 text-sm text-[#07183d]"
           style={{ ...GLASS_CARD, borderColor: 'rgba(15,23,42,0.1)' }}
         >
-          <span className="mr-3 h-2.5 w-2.5 animate-pulse rounded-full bg-[#07183d]" />
+          <span className="mr-3 h-2.5 w-2.5 animate-pulse rounded-full" style={{ background: 'var(--qw-accent)' }} />
           載入問卷中…
         </div>
       </GlassShell>
@@ -231,7 +273,7 @@ export default function SurveyFillPage() {
   // ── Not found ──
   if (!survey) {
     return (
-      <GlassShell>
+      <GlassShell {...themeProps}>
         <GlassCard className="mx-auto mt-16 max-w-md text-center">
           <GlassIconCircle tone="gray">
             <SearchX className="h-5 w-5" strokeWidth={1.8} />
@@ -252,12 +294,12 @@ export default function SurveyFillPage() {
   // ── External survey ──
   if (survey.externalUrl) {
     return (
-      <GlassShell>
+      <GlassShell {...themeProps}>
         <GlassCard className="mx-auto mt-10 text-center">
           <GlassIconCircle tone="blue">
             <LinkIcon className="h-6 w-6" strokeWidth={1.8} />
           </GlassIconCircle>
-          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#07183d]">External survey</p>
+          <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--qw-accent)' }}>External survey</p>
           <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#0f172a]">{survey.title}</h1>
           {survey.description && (
             <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-[#475569]">{survey.description}</p>
@@ -309,7 +351,7 @@ export default function SurveyFillPage() {
   if (submitted || survey.alreadySubmitted) {
     const justSubmitted = submitted;
     return (
-      <GlassShell>
+      <GlassShell {...themeProps}>
         <GlassCard className="mx-auto mt-12 max-w-lg text-center">
           <GlassIconCircle tone={flagged ? 'amber' : justSubmitted ? 'blue' : 'gray'}>
             {flagged ? (
@@ -390,13 +432,16 @@ export default function SurveyFillPage() {
 
   // ── Active survey (main fill view) ──
   return (
-    <GlassShell>
+    <GlassShell {...themeProps}>
       <div className={fontFamilyClass(survey.theme?.fontFamily)}>
         {/* Header bar */}
         <header className="mb-6 flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-[#07183d]/10">
-              <span className="text-sm font-bold text-[#07183d]">卷</span>
+            <div
+              className="flex h-8 w-8 items-center justify-center rounded-lg"
+              style={{ background: 'color-mix(in srgb, var(--qw-accent) 10%, transparent)' }}
+            >
+              <span className="text-sm font-bold" style={{ color: 'var(--qw-accent)' }}>卷</span>
             </div>
             <span className="text-base font-semibold text-[#0f172a]">卷問</span>
           </div>
@@ -407,13 +452,13 @@ export default function SurveyFillPage() {
                 className="h-full rounded-full"
                 style={{
                   width: `${progressPct}%`,
-                  background: 'linear-gradient(90deg, #07183d, #2563eb)',
-                  boxShadow: '0 2px 8px rgba(37,99,235,0.3)',
+                  background: 'var(--qw-accent)',
+                  boxShadow: '0 2px 8px color-mix(in srgb, var(--qw-accent) 30%, transparent)',
                   transition: 'width 0.5s cubic-bezier(0.4,0,0.2,1)',
                 }}
               />
             </div>
-            <span className="shrink-0 text-xs font-medium text-[#07183d]">{progressPct}%</span>
+            <span className="shrink-0 text-xs font-medium" style={{ color: 'var(--qw-accent)' }}>{progressPct}%</span>
           </div>
           <button
             onClick={() => router.back()}
@@ -437,7 +482,7 @@ export default function SurveyFillPage() {
                   className="mb-5 max-h-72 w-full rounded-xl object-cover"
                 />
               )}
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#07183d]">QuanWen survey</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--qw-accent)' }}>QuanWen survey</p>
               <h1 className="text-3xl font-semibold tracking-[-0.035em] text-[#0f172a] sm:text-4xl">{survey.title}</h1>
               {survey.description && (
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-[#475569]">{survey.description}</p>

@@ -16,6 +16,7 @@ import {
 import type { SurveyModel } from 'survey-core';
 import { usePublicLinkSurvey, useSubmitPublicResponse } from '@/hooks/use-responses';
 import { SurveyRendererSurveyJS } from '@/components/survey-editor/SurveyRendererSurveyJS';
+import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, darkenHex, fontFamilyClass } from '@/components/survey-editor/survey-style-panel';
 import { lotteryDisclosure } from '@/lib/lottery-display';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
@@ -30,16 +31,28 @@ function PublicSurveyShell({
   className = '',
   style,
   wide = false,
+  accentColor,
+  accentDark,
+  bgColor,
 }: {
   children: ReactNode;
   className?: string;
   style?: CSSProperties;
   wide?: boolean;
+  accentColor?: string;
+  accentDark?: string;
+  bgColor?: string;
 }) {
+  const shellStyle: CSSProperties = {
+    background: bgColor ?? '#f7f8f8',
+    ...(accentColor ? { '--qw-accent': accentColor } as CSSProperties : {}),
+    ...(accentDark ? { '--qw-accent-dark': accentDark } as CSSProperties : {}),
+    ...style,
+  };
   return (
     <main
-      className={`relative min-h-[100dvh] overflow-hidden bg-[#f7f8f8] px-4 py-6 text-slate-950 sm:px-6 sm:py-10 ${className}`}
-      style={style}
+      className={`relative min-h-[100dvh] overflow-hidden px-4 py-6 text-slate-950 sm:px-6 sm:py-10 ${className}`}
+      style={shellStyle}
     >
       <div className="pointer-events-none absolute inset-x-0 top-0 h-72 bg-[radial-gradient(circle_at_20%_20%,rgba(18,107,138,0.12),transparent_34%),linear-gradient(180deg,rgba(255,255,255,0.94),rgba(255,255,255,0))]" />
       <div className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(15,23,42,0.035)_1px,transparent_1px),linear-gradient(90deg,rgba(15,23,42,0.035)_1px,transparent_1px)] bg-[size:40px_40px] [mask-image:linear-gradient(to_bottom,black,transparent_72%)]" />
@@ -57,14 +70,27 @@ function PublicMetaPill({
   children: ReactNode;
   tone?: 'neutral' | 'accent' | 'warm';
 }) {
+  const baseClass = 'inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium';
+  if (tone === 'accent') {
+    return (
+      <span
+        className={baseClass}
+        style={{
+          borderColor: 'color-mix(in srgb, var(--qw-accent) 20%, transparent)',
+          background: 'color-mix(in srgb, var(--qw-accent) 10%, transparent)',
+          color: 'var(--qw-accent)',
+        }}
+      >
+        {children}
+      </span>
+    );
+  }
   const toneClass =
-    tone === 'accent'
-      ? 'border-[#126b8a]/20 bg-[#126b8a]/10 text-[#0f5d78]'
-      : tone === 'warm'
-        ? 'border-amber-200 bg-amber-50 text-amber-800'
-        : 'border-slate-200 bg-white/70 text-slate-600';
+    tone === 'warm'
+      ? 'border-amber-200 bg-amber-50 text-amber-800'
+      : 'border-slate-200 bg-white/70 text-slate-600';
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium ${toneClass}`}>
+    <span className={`${baseClass} ${toneClass}`}>
       {children}
     </span>
   );
@@ -93,9 +119,15 @@ export default function PublicSurveyPage() {
   const [hasToken, setHasToken] = useState(false);
   useEffect(() => setHasToken(!!getToken()), []);
 
+  // 問卷主題：建立者設定的色彩與字型
+  const accent = survey?.theme?.accentColor ?? DEFAULT_ACCENT;
+  const accentDark = darkenHex(accent);
+  const bg = survey?.theme?.backgroundColor ?? DEFAULT_BACKGROUND;
+  const themeProps = { accentColor: accent, accentDark, bgColor: bg };
+
   if (isLoading) {
     return (
-      <PublicSurveyShell>
+      <PublicSurveyShell {...themeProps}>
         <div className="mx-auto mt-24 flex w-full max-w-sm items-center justify-center rounded-3xl border border-slate-200 bg-white/80 p-8 text-sm text-slate-500 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
           <LoadingSpinner />
           <span className="ml-3">載入問卷中…</span>
@@ -105,7 +137,7 @@ export default function PublicSurveyPage() {
   }
   if (!survey)
     return (
-      <PublicSurveyShell>
+      <PublicSurveyShell {...themeProps}>
         <div className="mx-auto mt-16 max-w-md rounded-[28px] border border-slate-200 bg-white/88 p-8 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
         <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
           <SearchX className="h-5 w-5" strokeWidth={1.8} />
@@ -114,7 +146,8 @@ export default function PublicSurveyPage() {
         <p className="mt-2 text-sm leading-6 text-slate-500">問卷可能已下架、截止，或連結有誤。</p>
         <Link
           href="/auth/register"
-          className="mt-6 inline-flex items-center justify-center rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#126b8a]/30"
+          className="mt-6 inline-flex items-center justify-center rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2"
+          style={{ background: 'var(--qw-accent)' }}
         >
           免費註冊券問，填問卷賺獎勵
         </Link>
@@ -123,7 +156,7 @@ export default function PublicSurveyPage() {
     );
   if (survey.rewardMode === 'lottery') {
     return (
-      <PublicSurveyShell>
+      <PublicSurveyShell {...themeProps}>
         <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
           {survey.coverImageUrl && (
             // eslint-disable-next-line @next/next/no-img-element
@@ -134,7 +167,7 @@ export default function PublicSurveyPage() {
             />
           )}
           <div className="p-5 sm:p-7">
-            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
+            <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--qw-accent)' }}>QuanWen survey</p>
             <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
             {survey.description && (
               <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
@@ -181,7 +214,8 @@ export default function PublicSurveyPage() {
           </p>
           <Link
             href={hasToken ? `/tasks/${id}` : `/auth/login?redirect=${encodeURIComponent(`/tasks/${id}`)}`}
-            className="mt-4 inline-flex items-center justify-center gap-2 rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#126b8a]/30"
+            className="mt-4 inline-flex items-center justify-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 focus-visible:outline-none focus-visible:ring-2"
+            style={{ background: 'var(--qw-accent)' }}
           >
             <LogIn className="h-4 w-4" strokeWidth={1.8} />
             {hasToken ? '前往填答參與抽獎' : '登入後參與抽獎'}
@@ -189,7 +223,7 @@ export default function PublicSurveyPage() {
           {!hasToken && (
             <p className="mt-3 text-xs text-slate-500">
               還沒有帳號？
-              <Link href="/auth/register" className="ml-1 font-medium text-[#126b8a] hover:underline">
+              <Link href="/auth/register" className="ml-1 font-medium hover:underline" style={{ color: 'var(--qw-accent)' }}>
                 免費註冊
               </Link>
             </p>
@@ -201,11 +235,15 @@ export default function PublicSurveyPage() {
 
   if (done || survey.alreadySubmitted) {
     return (
-      <PublicSurveyShell>
+      <PublicSurveyShell {...themeProps}>
         <div className="mx-auto mt-12 rounded-[32px] border border-slate-200 bg-white/88 p-6 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-8">
-        <div className={`mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl ${
-          done?.flagged ? 'bg-amber-100 text-amber-700' : 'bg-[#126b8a]/10 text-[#126b8a]'
-        }`}>
+        <div
+          className="mx-auto mb-5 flex h-14 w-14 items-center justify-center rounded-2xl"
+          style={done?.flagged
+            ? { background: 'rgb(254 243 199)', color: 'rgb(180 83 9)' }
+            : { background: 'color-mix(in srgb, var(--qw-accent) 10%, transparent)', color: 'var(--qw-accent)' }
+          }
+        >
           {done?.flagged ? (
             <AlertTriangle className="h-6 w-6" strokeWidth={1.8} />
           ) : (
@@ -242,17 +280,30 @@ export default function PublicSurveyPage() {
             href={survey.thankYouRedirectUrl}
             target="_blank"
             rel="noopener noreferrer"
-            className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#126b8a]/30 bg-white px-5 py-2.5 text-sm font-semibold text-[#126b8a] transition hover:bg-[#126b8a]/5"
+            className="mt-5 inline-flex items-center gap-2 rounded-full border bg-white px-5 py-2.5 text-sm font-semibold transition hover:opacity-80"
+            style={{
+              borderColor: 'color-mix(in srgb, var(--qw-accent) 30%, transparent)',
+              color: 'var(--qw-accent)',
+            }}
           >
             前往指定頁面
             <ExternalLink className="h-4 w-4" strokeWidth={1.8} />
           </a>
         )}
-        <div className="mt-6 rounded-2xl border border-[#126b8a]/20 bg-[#126b8a]/5 p-4">
-          <p className="text-sm font-medium text-[#126b8a]">想填更多問卷賺獎勵，或自己發問卷找受試者？</p>
+        <div
+          className="mt-6 rounded-2xl p-4"
+          style={{
+            borderWidth: 1,
+            borderStyle: 'solid',
+            borderColor: 'color-mix(in srgb, var(--qw-accent) 20%, transparent)',
+            background: 'color-mix(in srgb, var(--qw-accent) 5%, transparent)',
+          }}
+        >
+          <p className="text-sm font-medium" style={{ color: 'var(--qw-accent)' }}>想填更多問卷賺獎勵，或自己發問卷找受試者？</p>
           <Link
             href="/auth/register"
-            className="mt-3 inline-flex rounded-full bg-[#126b8a] px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5 hover:bg-[#0f5d78]"
+            className="mt-3 inline-flex rounded-full px-5 py-2.5 text-sm font-semibold text-white transition hover:-translate-y-0.5"
+            style={{ background: 'var(--qw-accent)' }}
           >
             免費註冊券問
           </Link>
@@ -275,8 +326,8 @@ export default function PublicSurveyPage() {
   };
 
   return (
-    <PublicSurveyShell wide>
-      <div className="flex gap-6">
+    <PublicSurveyShell wide {...themeProps}>
+      <div className={`flex gap-6 ${fontFamilyClass(survey.theme?.fontFamily)}`}>
         {/* Left: survey content */}
         <div className="min-w-0 flex-1">
           <section className="overflow-hidden rounded-[32px] border border-slate-200 bg-white/88 shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur">
@@ -289,7 +340,7 @@ export default function PublicSurveyPage() {
               />
             )}
             <div className="p-5 sm:p-7">
-              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em] text-[#126b8a]">QuanWen survey</p>
+              <p className="mb-3 text-xs font-semibold uppercase tracking-[0.28em]" style={{ color: 'var(--qw-accent)' }}>QuanWen survey</p>
               <h1 className="text-3xl font-semibold tracking-[-0.035em] text-slate-950 sm:text-4xl">{survey.title}</h1>
               {survey.description && (
                 <p className="mt-3 whitespace-pre-wrap text-sm leading-7 text-slate-500">{survey.description}</p>
