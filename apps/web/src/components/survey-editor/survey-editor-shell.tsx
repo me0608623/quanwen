@@ -18,6 +18,8 @@ interface SurveyEditorShellProps {
   canPublish?: boolean;
   /** Status badge label */
   statusLabel: string;
+  /** Raw survey status for conditional button rendering */
+  surveyStatus?: 'draft' | 'pending_review' | 'published' | 'paused' | 'closed' | 'rejected';
   /** Whether there are unsaved changes */
   dirty: boolean;
   /** Is save in progress? */
@@ -30,6 +32,15 @@ interface SurveyEditorShellProps {
   onPublish: () => void;
   /** Callback when user navigates back */
   onBack: () => void;
+  /** Pause/unpublish the survey (published → paused) */
+  onPause?: () => Promise<void>;
+  pausePending?: boolean;
+  /** Permanently close the survey */
+  onClose?: () => Promise<void>;
+  closePending?: boolean;
+  /** Re-publish a paused survey */
+  onRepublish?: () => Promise<void>;
+  republishPending?: boolean;
 
   /** Content for each sidebar tab */
   questionsSidebar: ReactNode;
@@ -57,12 +68,19 @@ export function SurveyEditorShell({
   canEdit,
   canPublish = canEdit,
   statusLabel,
+  surveyStatus,
   dirty,
   savePending,
   publishPending,
   onSave,
   onPublish,
   onBack,
+  onPause,
+  pausePending = false,
+  onClose,
+  closePending = false,
+  onRepublish,
+  republishPending = false,
   questionsSidebar,
   stylingSidebar,
   rewardsSidebar,
@@ -75,6 +93,8 @@ export function SurveyEditorShell({
   const [activeTab, setActiveTab] = useState<SidebarTab>('questions');
   // 手機：側欄改抽屜（固定 w-56 在小螢幕會吃掉一半寬度，壓爛中間編輯區）
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [showPauseConfirm, setShowPauseConfirm] = useState(false);
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
 
   const sidebarContent = (() => {
     switch (activeTab) {
@@ -196,6 +216,45 @@ export function SurveyEditorShell({
               {publishPending ? '發布中…' : '發布'}
             </button>
           )}
+
+          {/* 下架/暫停：published 狀態才顯示 */}
+          {surveyStatus === 'published' && onPause && (
+            <button
+              type="button"
+              onClick={() => setShowPauseConfirm(true)}
+              disabled={pausePending}
+              aria-label="下架/暫停問卷"
+              className="rounded-md border border-yellow-400 bg-yellow-50 px-3 py-1.5 text-xs font-medium text-yellow-700 hover:bg-yellow-100 disabled:opacity-60"
+            >
+              {pausePending ? '處理中…' : '⏸ 下架/暫停'}
+            </button>
+          )}
+
+          {/* 重新上架：paused 狀態才顯示 */}
+          {surveyStatus === 'paused' && onRepublish && (
+            <button
+              type="button"
+              onClick={onRepublish}
+              disabled={republishPending}
+              aria-label="重新上架問卷"
+              className="rounded-md border border-green-500 bg-green-50 px-3 py-1.5 text-xs font-medium text-green-700 hover:bg-green-100 disabled:opacity-60"
+            >
+              {republishPending ? '上架中…' : '▶ 重新上架'}
+            </button>
+          )}
+
+          {/* 結案：published 或 paused 狀態才顯示 */}
+          {(surveyStatus === 'published' || surveyStatus === 'paused') && onClose && (
+            <button
+              type="button"
+              onClick={() => setShowCloseConfirm(true)}
+              disabled={closePending}
+              aria-label="結案問卷"
+              className="rounded-md border border-destructive/40 bg-destructive/5 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10 disabled:opacity-60"
+            >
+              {closePending ? '結案中…' : '🔒 結案'}
+            </button>
+          )}
         </div>
       </header>
 
@@ -276,6 +335,85 @@ export function SurveyEditorShell({
           </aside>
         )}
       </div>
+
+      {/* 下架/暫停確認 modal */}
+      {showPauseConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowPauseConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-foreground">確認下架/暫停問卷</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              暫停後填答者<strong>無法作答</strong>，問卷從任務列表移除。預算維持鎖定，可隨時重新上架。
+            </p>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowPauseConfirm(false)}
+                className="rounded-md border border-input px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await onPause?.();
+                  setShowPauseConfirm(false);
+                }}
+                disabled={pausePending}
+                className="rounded-md bg-yellow-500 px-4 py-2 text-sm font-medium text-white hover:bg-yellow-600 disabled:opacity-60"
+              >
+                {pausePending ? '處理中…' : '確認下架'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 結案確認 modal */}
+      {showCloseConfirm && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setShowCloseConfirm(false)}
+        >
+          <div
+            className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h2 className="text-base font-semibold text-foreground">確認結案</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              結案後<strong>永久無法再收答</strong>，問卷將進入統計分析模式。未用預算將退回錢包（cashBalance）。
+            </p>
+            <div className="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-xs text-red-800">
+              ⚠️ 此操作<strong>不可撤銷</strong>，結案後無法重新上架。
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setShowCloseConfirm(false)}
+                className="rounded-md border border-input px-4 py-2 text-sm text-muted-foreground hover:bg-muted"
+              >
+                取消
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  await onClose?.();
+                  setShowCloseConfirm(false);
+                }}
+                disabled={closePending}
+                className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:bg-destructive/90 disabled:opacity-60"
+              >
+                {closePending ? '結案中…' : '確認結案'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
