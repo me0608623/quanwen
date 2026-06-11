@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { SurveyModel } from 'survey-core';
 
 interface SidebarNavProps {
@@ -30,17 +30,19 @@ export function SidebarNav({ model }: SidebarNavProps) {
   const [hovered, setHovered] = useState<number | null>(null);
   // Track by question name instead of DOM index to survive DOM/model order mismatch
   const [currentScrollName, setCurrentScrollName] = useState<string | null>(null);
+  // Keep a ref to the latest dots so the scroll closure can validate names without stale state
+  const dotsRef = useRef<DotData[]>([]);
 
   const refresh = useCallback(() => {
     if (!model) return;
     const qs = model.getAllQuestions();
-    setDots(
-      qs.map((q) => ({
-        name: q.name,
-        answered: !q.isEmpty(),
-        preview: getAnswerPreview(model, q.name),
-      })),
-    );
+    const next = qs.map((q) => ({
+      name: q.name,
+      answered: !q.isEmpty(),
+      preview: getAnswerPreview(model, q.name),
+    }));
+    dotsRef.current = next;
+    setDots(next);
   }, [model]);
 
   useEffect(() => {
@@ -75,7 +77,12 @@ export function SidebarNav({ model }: SidebarNavProps) {
         }
       }
       const name = winner.getAttribute('data-name');
-      if (name) setCurrentScrollName(name);
+      // Only update when the name resolves to a known dot; keeps the previous highlight
+      // during any transient gap between two questions where the reference line lands
+      // in whitespace and 'winner' would briefly not match dots.
+      if (name && dotsRef.current.some((d) => d.name === name)) {
+        setCurrentScrollName(name);
+      }
     };
 
     const onScroll = () => {
@@ -115,10 +122,16 @@ export function SidebarNav({ model }: SidebarNavProps) {
     };
   }, [model]);
 
-  // Map tracked question name → dots index; fall back to first unanswered
-  const currentIdx = currentScrollName !== null
+  // Map tracked question name → dots index.
+  // calcCurrent validates against dotsRef before setting currentScrollName, so findIndex
+  // should always be >= 0 once dots are loaded. The fallback guarantees we never render
+  // with currentIdx === -1, which would leave all dots unhighlighted.
+  const resolvedIdx = currentScrollName !== null
     ? dots.findIndex((d) => d.name === currentScrollName)
-    : dots.findIndex((d) => !d.answered);
+    : -1;
+  const currentIdx = resolvedIdx >= 0
+    ? resolvedIdx
+    : Math.max(0, dots.findIndex((d) => !d.answered));
   const answeredCount = dots.filter((d) => d.answered).length;
   const total = dots.length;
   const pct = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
