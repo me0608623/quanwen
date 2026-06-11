@@ -318,7 +318,7 @@ describe('MutualService (integration)', () => {
     expect(detail.unlocked!.questions[0].answer?.textAnswer).toContain('比較長');
   });
 
-  it('12. reEnqueueSurvey: cancelled 後可重新進池 (新 row, status=waiting)', async () => {
+  it('12. reEnqueueSurvey: cancelled 後可重新進池，若有對手則立即配對', async () => {
     const s1 = await createMutualSurvey(U1, 'U1 survey');
     const s2 = await createMutualSurvey(U2, 'U2 survey');
     await enqueue(U1, s1);
@@ -333,16 +333,48 @@ describe('MutualService (integration)', () => {
       service.submitMutualResponse(pair.id, U1, [{ questionId: q2Id, textAnswer: 'gg' }]),
     ).rejects.toThrow(BadRequestException);
 
-    // U1 (cheater) 重新把 s1 放回池
+    // U1 (cheater) 重新把 s1 放回池；此時 U2 的 s2 已被 reject handler 重新進池 (waiting)
+    // → on-demand match 立即配到 U2
     qualityAudit.setStatus('passed');
+    notifications.reset();
     const result = await service.reEnqueueSurvey(U1, s1);
-    expect(result.pairId).toBeTruthy();
+    expect(result.pairId).toBeTruthy(); // insert 成功（即便 b-side 被配對刪除）
 
+    // on-demand match: U2's earlier pair is "a" (survives), U1's new pair is "b" (deleted)
+    // → the surviving matched row links U1 and U2
     const all = await db.select().from(schema.mutualPairs);
-    const requeued = all.find((p) => p.id === result.pairId);
-    expect(requeued?.status).toBe('waiting');
-    expect(requeued?.aUserId).toBe(U1);
-    expect(requeued?.aSurveyId).toBe(s1);
+    const matchedPair = all.find((p) => p.status === 'matched');
+    expect(matchedPair).toBeTruthy();
+    const userIds = [matchedPair?.aUserId, matchedPair?.bUserId];
+    expect(userIds).toContain(U1);
+    expect(userIds).toContain(U2);
+    const matchNotifs = notifications.calls.filter((c) => c.title === '互惠配對成功');
+    expect(matchNotifs.length).toBe(2);
+  });
+
+  it('15. reEnqueueSurvey: 進池時池中有對手 → 立即配對 + 通知雙方', async () => {
+    const s1 = await createMutualSurvey(U1, 'U1 survey');
+    const s2 = await createMutualSurvey(U2, 'U2 survey');
+
+    // U2 先進池（用低層 enqueue helper，不走 on-demand matching）
+    await enqueue(U2, s2);
+
+    // U1 用 reEnqueueSurvey 進池 → on-demand match 應立即配到 U2
+    notifications.reset();
+    await service.reEnqueueSurvey(U1, s1);
+
+    // U2's pair is "a" (older createdAt → survives as matched), U1's pair is "b" (deleted)
+    const all = await db.select().from(schema.mutualPairs);
+    const matchedPair = all.find((p) => p.status === 'matched');
+    expect(matchedPair).toBeTruthy();
+    const userIds = [matchedPair?.aUserId, matchedPair?.bUserId];
+    expect(userIds).toContain(U1);
+    expect(userIds).toContain(U2);
+
+    const matchNotifs = notifications.calls.filter((c) => c.title === '互惠配對成功');
+    expect(matchNotifs.length).toBe(2);
+    expect(matchNotifs.some((n) => n.userId === U1)).toBe(true);
+    expect(matchNotifs.some((n) => n.userId === U2)).toBe(true);
   });
 
   it('13. reEnqueueSurvey: 已在 active 池中 → BadRequest', async () => {

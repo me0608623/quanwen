@@ -25,9 +25,10 @@ import { SurveyCakeImportService } from './template-io/surveycake-import.service
 import { AiAuditModule } from '../ai-audit/ai-audit.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { MutualModule } from '../mutual/mutual.module';
 
 @Module({
-  imports: [AiAuditModule, WalletModule, NotificationsModule],
+  imports: [AiAuditModule, WalletModule, NotificationsModule, MutualModule],
   controllers: [SurveysController],
   providers: [
     SurveysService,
