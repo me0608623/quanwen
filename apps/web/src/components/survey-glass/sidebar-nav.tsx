@@ -53,48 +53,51 @@ export function SidebarNav({ model }: SidebarNavProps) {
   }, [model, refresh]);
 
   // IntersectionObserver: track which question is currently in the viewport.
-  // SurveyJS v2 renders questions as .sd-question nodes with data-name=<q.name>.
-  // The sq_<uniqueId> IDs used in older integration do not exist in the actual DOM.
+  // Uses DOM index (nodes.indexOf) instead of data-name comparison — data-name is a
+  // UUID in the DOM but q.name is a SurveyJS internal name, so they never match.
+  // MutationObserver waits for .sd-question nodes to appear (SurveyJS renders async).
   useEffect(() => {
     if (!model) return;
-    const questions = model.getAllQuestions();
-    if (questions.length === 0) return;
-
-    const nameOrder = questions.map((q) => q.name);
-    const visibleSet = new Set<string>();
-    const updateCurrent = () => {
-      const idx = nameOrder.findIndex((n) => visibleSet.has(n));
-      setCurrentScrollIdx(idx >= 0 ? idx : null);
-    };
 
     let io: IntersectionObserver | null = null;
-    const setup = () => {
-      // Scope to .surveyjs-wrapper so we don't match stale nodes from other instances
-      const sdNodes = Array.from(
-        document.querySelectorAll<HTMLElement>('.surveyjs-wrapper .sd-question'),
+    const visibleSet = new Set<number>();
+
+    const attach = (): boolean => {
+      const nodes = Array.from(
+        document.querySelectorAll<Element>('.surveyjs-wrapper .sd-question'),
       );
-      if (sdNodes.length === 0) return;
+      if (nodes.length === 0) return false;
 
       io = new IntersectionObserver(
         (entries) => {
           entries.forEach((entry) => {
-            const name = (entry.target as HTMLElement).dataset.name;
-            if (!name || !nameOrder.includes(name)) return;
-            if (entry.isIntersecting) visibleSet.add(name);
-            else visibleSet.delete(name);
+            const idx = nodes.indexOf(entry.target);
+            if (idx < 0) return;
+            if (entry.isIntersecting) visibleSet.add(idx);
+            else visibleSet.delete(idx);
           });
-          updateCurrent();
+          if (visibleSet.size > 0) {
+            setCurrentScrollIdx(Math.min(...visibleSet));
+          }
         },
         { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
       );
-      sdNodes.forEach((n) => io!.observe(n));
+      nodes.forEach((n) => io!.observe(n));
+      return true;
     };
 
-    const timer = setTimeout(setup, 100);
-    return () => {
-      clearTimeout(timer);
-      io?.disconnect();
-    };
+    if (!attach()) {
+      const mo = new MutationObserver(() => {
+        if (attach()) mo.disconnect();
+      });
+      mo.observe(document.body, { childList: true, subtree: true });
+      return () => {
+        mo.disconnect();
+        io?.disconnect();
+      };
+    }
+
+    return () => io?.disconnect();
   }, [model]);
 
   // Prefer scroll-tracked index; fall back to first unanswered
