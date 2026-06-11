@@ -72,7 +72,7 @@ export default function SurveyDetailPage() {
   const updateSurvey = useUpdateSurvey(id);
   const publishSurvey = usePublishSurvey();
   const deleteSurvey = useDeleteSurvey();
-  const { data: budgetCheck } = useBudgetCheck(id, survey?.status === 'draft' || survey?.status === 'rejected');
+  const { data: budgetCheck, refetch: refetchBudgetCheck } = useBudgetCheck(id, survey?.status === 'draft' || survey?.status === 'rejected');
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -101,6 +101,7 @@ export default function SurveyDetailPage() {
   const [dirty, setDirty] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [showPublishConfirm, setShowPublishConfirm] = useState(false);
+  const [isPreparingPublish, setIsPreparingPublish] = useState(false);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
   const [initialized, setInitialized] = useState(false);
 
@@ -250,6 +251,20 @@ export default function SurveyDetailPage() {
     return () => window.removeEventListener('keydown', onKey);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canEditInfo, dirty, updateSurvey.isPending]);
+
+  const openPublishConfirm = async () => {
+    setIsPreparingPublish(true);
+    try {
+      if (dirty) {
+        const saved = await handleSave();
+        if (!saved) return;
+      }
+      await refetchBudgetCheck();
+      setShowPublishConfirm(true);
+    } finally {
+      setIsPreparingPublish(false);
+    }
+  };
 
   const handlePublish = async () => {
     try {
@@ -826,9 +841,9 @@ export default function SurveyDetailPage() {
         statusLabel={STATUS_LABELS[survey.status] ?? survey.status}
         dirty={dirty}
         savePending={updateSurvey.isPending}
-        publishPending={publishSurvey.isPending}
+        publishPending={publishSurvey.isPending || isPreparingPublish}
         onSave={handleSave}
-        onPublish={() => setShowPublishConfirm(true)}
+        onPublish={openPublishConfirm}
         onBack={() => {
           if (dirty && !confirm('有未儲存的變更，確定要離開嗎？')) return;
           router.push('/dashboard');
@@ -865,6 +880,7 @@ export default function SurveyDetailPage() {
 
       {/* 發布確認 modal（含預算試算） */}
       {showPublishConfirm && (() => {
+        const PLATFORM_FEE_RATE = 0.10;
         const required = budgetCheck?.requiredAmount ?? 0;
         const noQuestions = questions.length === 0;
         const balance = budgetCheck?.walletBalance ?? 0;
@@ -887,6 +903,17 @@ export default function SurveyDetailPage() {
                 <p className="mt-3 rounded-lg border border-violet-200 bg-violet-50 px-3 py-2 text-xs text-violet-700">
                   🕒 此問卷已排程於 {new Date(scheduledPublishAt).toLocaleString('zh-TW')} 自動發布。立即發布將略過排程、馬上上架。
                 </p>
+              )}
+
+              {/* 固定獎金摘要 */}
+              {survey?.type !== 'mutual' && rewardMode === 'fixed' && rewardPoints > 0 && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2.5 text-xs text-amber-900">
+                  <p className="font-bold">🎁 固定獎金問卷</p>
+                  <ul className="mt-1.5 space-y-1">
+                    <li>• 每份獎金：<b>NT${rewardPoints.toLocaleString()}</b></li>
+                    <li>• 目標份數：<b>{targetCount.toLocaleString()} 份</b></li>
+                  </ul>
+                </div>
               )}
 
               {rewardMode === 'lottery' && (
@@ -930,6 +957,23 @@ export default function SurveyDetailPage() {
 
               {required > 0 ? (
                 <div className="mt-4 space-y-2 rounded-lg border border-border bg-muted/20 p-3 text-sm">
+                  {rewardMode === 'fixed' && (
+                    <>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">每份獎金</span>
+                        <span>NT${rewardPoints.toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">平台手續費（10%）</span>
+                        <span>NT${Math.floor(rewardPoints * PLATFORM_FEE_RATE).toLocaleString()}</span>
+                      </div>
+                      <div className="flex justify-between text-xs">
+                        <span className="text-muted-foreground">目標份數</span>
+                        <span>{targetCount.toLocaleString()} 份</span>
+                      </div>
+                      <div className="border-t border-border" />
+                    </>
+                  )}
                   <div className="flex justify-between">
                     <span className="text-muted-foreground">預估鎖定預算</span>
                     <span className="font-semibold">NT${required.toLocaleString()}</span>
