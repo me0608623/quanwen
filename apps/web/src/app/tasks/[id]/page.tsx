@@ -41,7 +41,7 @@ const GLASS_CARD: CSSProperties = {
 
 function GlassShell({ children }: { children: ReactNode }) {
   return (
-    <main className="relative min-h-[100dvh] overflow-hidden text-[#0f172a]" style={GLASS_BG}>
+    <main className="relative min-h-[100dvh] overflow-clip text-[#0f172a]" style={GLASS_BG}>
       {/* Decorative orb 1 — top-left */}
       <div
         className="pointer-events-none absolute -top-48 -left-48 h-[600px] w-[600px] rounded-full"

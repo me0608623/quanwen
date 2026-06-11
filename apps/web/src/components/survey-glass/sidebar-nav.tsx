@@ -28,6 +28,7 @@ function getAnswerPreview(model: SurveyModel, questionName: string): string {
 export function SidebarNav({ model }: SidebarNavProps) {
   const [dots, setDots] = useState<DotData[]>([]);
   const [hovered, setHovered] = useState<number | null>(null);
+  const [currentScrollIdx, setCurrentScrollIdx] = useState<number | null>(null);
 
   const refresh = useCallback(() => {
     if (!model) return;
@@ -51,7 +52,45 @@ export function SidebarNav({ model }: SidebarNavProps) {
     };
   }, [model, refresh]);
 
-  const currentIdx = dots.findIndex((d) => !d.answered);
+  // IntersectionObserver: track which question is currently in the viewport
+  useEffect(() => {
+    if (!model) return;
+    const names = model.getAllQuestions().map((q) => q.name);
+    if (names.length === 0) return;
+
+    const visibleSet = new Set<string>();
+    const updateCurrent = () => {
+      const idx = names.findIndex((n) => visibleSet.has(n));
+      setCurrentScrollIdx(idx >= 0 ? idx : null);
+    };
+
+    const observersArr: IntersectionObserver[] = [];
+    const setup = () => {
+      names.forEach((name) => {
+        const el = document.getElementById(`sq_${name}`);
+        if (!el) return;
+        const obs = new IntersectionObserver(
+          ([entry]) => {
+            if (entry.isIntersecting) visibleSet.add(name);
+            else visibleSet.delete(name);
+            updateCurrent();
+          },
+          { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
+        );
+        obs.observe(el);
+        observersArr.push(obs);
+      });
+    };
+
+    const timer = setTimeout(setup, 100);
+    return () => {
+      clearTimeout(timer);
+      observersArr.forEach((obs) => obs.disconnect());
+    };
+  }, [model]);
+
+  // Prefer scroll-tracked index; fall back to first unanswered
+  const currentIdx = currentScrollIdx ?? dots.findIndex((d) => !d.answered);
   const answeredCount = dots.filter((d) => d.answered).length;
   const total = dots.length;
   const pct = total > 0 ? Math.round((answeredCount / total) * 100) : 0;
@@ -78,7 +117,9 @@ export function SidebarNav({ model }: SidebarNavProps) {
           maxWidth: 170,
           alignSelf: 'flex-start',
           position: 'sticky',
-          top: 24,
+          top: 64,
+          maxHeight: 'calc(100vh - 5rem)',
+          overflowY: 'auto',
         }}
       >
         {/* Progress header */}
