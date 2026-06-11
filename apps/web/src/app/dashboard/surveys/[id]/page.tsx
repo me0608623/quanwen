@@ -10,7 +10,9 @@ import {
   type SurveyQuestion,
   type SurveyTheme,
   useBudgetCheck,
+  useCloseSurvey,
   useDeleteSurvey,
+  usePauseSurvey,
   usePublishSurvey,
   useSurvey,
   useUpdateSurvey,
@@ -72,6 +74,8 @@ export default function SurveyDetailPage() {
   const { data: survey, isLoading } = useSurvey(id);
   const updateSurvey = useUpdateSurvey(id);
   const publishSurvey = usePublishSurvey();
+  const pauseSurvey = usePauseSurvey();
+  const closeSurvey = useCloseSurvey();
   const deleteSurvey = useDeleteSurvey();
   const { data: budgetCheck, refetch: refetchBudgetCheck } = useBudgetCheck(id, survey?.status === 'draft' || survey?.status === 'rejected');
 
@@ -285,6 +289,33 @@ export default function SurveyDetailPage() {
       // The UI updates via TanStack query invalidation (status badge changes).
     } catch (err) {
       showAxiosError(err, '發布問卷失敗，請稍後再試。');
+    }
+  };
+
+  const handlePause = async () => {
+    try {
+      await pauseSurvey.mutateAsync(id);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '下架失敗，請稍後再試。');
+    }
+  };
+
+  const handleClose = async () => {
+    try {
+      await closeSurvey.mutateAsync(id);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '結案失敗，請稍後再試。');
+    }
+  };
+
+  const handleRepublish = async () => {
+    try {
+      await publishSurvey.mutateAsync(id);
+    } catch (err) {
+      const e = err as { response?: { data?: { message?: string } } };
+      alert(e?.response?.data?.message ?? '重新上架失敗，請稍後再試。');
     }
   };
 
@@ -854,6 +885,7 @@ export default function SurveyDetailPage() {
         canEdit={canEditInfo}
         canPublish={canEdit}
         statusLabel={STATUS_LABELS[survey.status] ?? survey.status}
+        surveyStatus={survey.status}
         dirty={dirty}
         savePending={updateSurvey.isPending}
         publishPending={publishSurvey.isPending || isPreparingPublish}
@@ -863,6 +895,12 @@ export default function SurveyDetailPage() {
           if (dirty && !confirm('有未儲存的變更，確定要離開嗎？')) return;
           router.push('/dashboard');
         }}
+        onPause={handlePause}
+        pausePending={pauseSurvey.isPending}
+        onClose={handleClose}
+        closePending={closeSurvey.isPending}
+        onRepublish={handleRepublish}
+        republishPending={publishSurvey.isPending}
         questionsSidebar={questionsSidebar}
         stylingSidebar={stylingSidebar}
         rewardsSidebar={rewardsSidebar}
