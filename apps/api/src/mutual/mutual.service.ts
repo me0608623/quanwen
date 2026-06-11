@@ -548,6 +548,9 @@ export class MutualService {
       .values({ aUserId: userId, aSurveyId: surveyId, status: 'waiting' })
       .returning({ id: mutualPairs.id });
 
+    // 進池後立即嘗試一次配對，降低對 Render free cron 休眠的依賴
+    await this.tryOnDemandMatch();
+
     return { pairId: inserted[0].id };
   }
 
@@ -992,20 +995,37 @@ export class MutualService {
 
     this.logger.log(`Matched mutual pair: A=${a.aUserId.slice(0, 8)} B=${b.aUserId.slice(0, 8)}`);
 
-    await this.notifications.create({
-      userId: a.aUserId,
-      type: 'system',
-      title: '互惠配對成功',
-      body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
-      metadata: { pairId: a.id },
-    });
-    await this.notifications.create({
-      userId: b.aUserId,
-      type: 'system',
-      title: '互惠配對成功',
-      body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
-      metadata: { pairId: a.id },
-    });
+    try {
+      await this.notifications.create({
+        userId: a.aUserId,
+        type: 'system',
+        title: '互惠配對成功',
+        body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
+        metadata: { pairId: a.id },
+      });
+    } catch (err) {
+      this.logger.error(`Failed to notify A (userId=${a.aUserId}) on match`, err);
+    }
+    try {
+      await this.notifications.create({
+        userId: b.aUserId,
+        type: 'system',
+        title: '互惠配對成功',
+        body: '你的互惠問卷已配對到對手，請去填寫對方的問卷。',
+        metadata: { pairId: a.id },
+      });
+    } catch (err) {
+      this.logger.error(`Failed to notify B (userId=${b.aUserId}) on match`, err);
+    }
+  }
+
+  /** 進池時立即嘗試一次配對（on-demand）；錯誤只 log，不拋出。 */
+  async tryOnDemandMatch(): Promise<void> {
+    try {
+      await this.doMatchWaitingPairs();
+    } catch (err) {
+      this.logger.error('On-demand match failed', err);
+    }
   }
 
   // ─── 超時 cron：每分鐘清掉 expired pair ────────────────────────────────────

@@ -1,6 +1,7 @@
 import {
   Injectable,
   Inject,
+  Optional,
   Logger,
   NotFoundException,
   ForbiddenException,
@@ -17,6 +18,7 @@ import { ZaiClient } from '../ai-audit/zai.client';
 import { AiAuditService } from '../ai-audit/ai-audit.service';
 import { WalletService } from '../wallet/wallet.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { MutualService } from '../mutual/mutual.service';
 // Phase II.12/14: AI 生成問卷走 registry prompt + Zod parse + normalize
 import { SURVEY_DRAFT, SURVEY_QUESTION_REGEN, resolvePrompt } from '../ai-audit/prompts';
 import {
@@ -58,6 +60,8 @@ export class SurveysService {
     private readonly aiAudit: AiAuditService,
     private readonly wallet: WalletService,
     private readonly notifications: NotificationsService,
+    // @Optional — tests instantiate SurveysService with 5 args; mutual matching is a no-op when absent
+    @Optional() private readonly mutualService?: MutualService,
   ) {}
 
   // ─── CRUD ─────────────────────────────────────────────────────────────────
@@ -498,6 +502,9 @@ export class SurveysService {
         .insert(mutualPairs)
         .values({ aUserId: survey.surveyorId, aSurveyId: surveyId, status: 'waiting' })
         .onConflictDoNothing();
+
+      // 進池立即嘗試一次配對，降低對 Render free cron 休眠的依賴
+      await this.mutualService?.tryOnDemandMatch();
 
       return { message: '互惠問卷已上架，等待配對中', surveyId };
     }
