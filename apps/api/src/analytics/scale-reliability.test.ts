@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { calculateCronbachAlpha, calculatePearsonCorrelation, normalizeScaleValue, ratingScaleRange, reverseScaleValue, withReverseScored } from './analytics.service';
+import { calculateCronbachAlpha, calculateMcdonaldsOmega, calculatePearsonCorrelation, normalizeScaleValue, ratingScaleRange, reverseScaleValue, withReverseScored } from './analytics.service';
 
 describe('calculateCronbachAlpha', () => {
   it('returns a high alpha for internally consistent rating rows', () => {
@@ -47,6 +47,53 @@ describe('withReverseScored', () => {
       scaleStart: 0,
       reverseScored: true,
     });
+  });
+});
+
+describe('calculateMcdonaldsOmega', () => {
+  it('returns null for fewer than 2 items or single row', () => {
+    expect(calculateMcdonaldsOmega([[1], [2], [3]])).toBeNull();
+    expect(calculateMcdonaldsOmega([[1, 2]])).toBeNull();
+  });
+
+  it('returns null when all items have zero variance', () => {
+    expect(calculateMcdonaldsOmega([[3, 3, 3], [3, 3, 3], [3, 3, 3]])).toBeNull();
+  });
+
+  it('returns a value in [0, 1] for internally consistent items', () => {
+    const omega = calculateMcdonaldsOmega([
+      [1, 1, 2],
+      [2, 2, 3],
+      [3, 3, 4],
+      [4, 4, 5],
+    ]);
+    expect(omega).not.toBeNull();
+    expect(omega!).toBeGreaterThanOrEqual(0);
+    expect(omega!).toBeLessThanOrEqual(1);
+  });
+
+  it('returns 1 for perfectly correlated items (every loadings explain all variance)', () => {
+    const rows = [
+      [1, 1, 1],
+      [2, 2, 2],
+      [3, 3, 3],
+      [4, 4, 4],
+      [5, 5, 5],
+    ];
+    expect(calculateMcdonaldsOmega(rows)).toBe(1);
+  });
+
+  it('returns a value consistent with high reliability for near-perfect items', () => {
+    const omega = calculateMcdonaldsOmega([
+      [4, 4, 5],
+      [3, 3, 4],
+      [2, 2, 3],
+      [5, 5, 5],
+      [4, 5, 4],
+      [3, 4, 3],
+    ]);
+    expect(omega).not.toBeNull();
+    expect(omega!).toBeGreaterThan(0.8);
   });
 });
 
