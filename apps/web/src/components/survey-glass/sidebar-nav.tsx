@@ -52,27 +52,30 @@ export function SidebarNav({ model }: SidebarNavProps) {
     };
   }, [model, refresh]);
 
-  // IntersectionObserver: track which question is currently in the viewport
+  // IntersectionObserver: track which question is currently in the viewport.
+  // SurveyJS renders each question container with id="sq_${q.uniqueId}" (a number),
+  // NOT "sq_${q.name}", so we must look up elements using q.uniqueId.
   useEffect(() => {
     if (!model) return;
-    const names = model.getAllQuestions().map((q) => q.name);
-    if (names.length === 0) return;
+    const questions = model.getAllQuestions();
+    if (questions.length === 0) return;
 
+    const nameOrder = questions.map((q) => q.name);
     const visibleSet = new Set<string>();
     const updateCurrent = () => {
-      const idx = names.findIndex((n) => visibleSet.has(n));
+      const idx = nameOrder.findIndex((n) => visibleSet.has(n));
       setCurrentScrollIdx(idx >= 0 ? idx : null);
     };
 
     const observersArr: IntersectionObserver[] = [];
     const setup = () => {
-      names.forEach((name) => {
-        const el = document.getElementById(`sq_${name}`);
+      questions.forEach((q) => {
+        const el = document.getElementById(`sq_${q.uniqueId}`);
         if (!el) return;
         const obs = new IntersectionObserver(
           ([entry]) => {
-            if (entry.isIntersecting) visibleSet.add(name);
-            else visibleSet.delete(name);
+            if (entry.isIntersecting) visibleSet.add(q.name);
+            else visibleSet.delete(q.name);
             updateCurrent();
           },
           { rootMargin: '-20% 0px -60% 0px', threshold: 0 },
