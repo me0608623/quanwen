@@ -901,7 +901,8 @@ export default function SurveyDetailPage() {
         const noQuestions = questions.length === 0;
         const balance = budgetCheck?.walletBalance ?? 0;
         const insufficient = required > 0 && !!budgetCheck && !budgetCheck.sufficient;
-        const needsFeeAck = survey?.type !== 'mutual' && rewardMode === 'fixed' && rewardPoints > 0;
+        const hasReward = survey?.type !== 'mutual' && required > 0;
+        const needAck = hasReward && !feeAcknowledged;
         const effectivePerShare = Math.round(rewardPoints * (DEADLINE_TIER_OPTIONS.find((o) => o.value === deadlineTier)?.multiplier ?? 1));
         const feePerShare = Math.ceil(effectivePerShare * PLATFORM_FEE_RATE);
         return (
@@ -1031,9 +1032,23 @@ export default function SurveyDetailPage() {
                 <p className="mt-3 text-xs text-destructive">問卷至少需要一道題目才能發布。</p>
               )}
 
-              {needsFeeAck && !feeAcknowledged && (
-                <p className="mt-3 text-xs text-amber-700">
-                  請先在「獎勵設定」側欄勾選「我已了解平台將收取 10% 手續費」再發布。
+              {hasReward && (
+                <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={feeAcknowledged}
+                    onChange={(e) => setFeeAcknowledged(e.target.checked)}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span>
+                    我已確認每份獎勵 <b>NT${effectivePerShare.toLocaleString()}</b>、共 <b>{targetCount.toLocaleString()}</b> 份，
+                    含平台 10% 手續費，<b>實際鎖定 NT${required.toLocaleString()}</b>。
+                  </span>
+                </label>
+              )}
+              {needAck && (
+                <p className="mt-2 text-xs text-amber-600">
+                  請先勾選上方確認，才能發布。
                 </p>
               )}
 
@@ -1048,7 +1063,7 @@ export default function SurveyDetailPage() {
                 <button
                   type="button"
                   onClick={handlePublish}
-                  disabled={insufficient || noQuestions || (needsFeeAck && !feeAcknowledged) || publishSurvey.isPending || updateSurvey.isPending}
+                  disabled={insufficient || noQuestions || needAck || publishSurvey.isPending || updateSurvey.isPending}
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
                   {publishSurvey.isPending || updateSurvey.isPending
