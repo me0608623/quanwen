@@ -113,14 +113,14 @@ export default function DashboardPage() {
   };
 
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main>
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 mb-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold">我的問卷</h1>
           <p className="text-sm text-muted-foreground mt-1">管理你發布的問卷、追蹤回收進度</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {surveys.length > 0 && (
             <button
               onClick={exportCsv}
@@ -270,7 +270,7 @@ export default function DashboardPage() {
               key={survey.id}
               className="rounded-xl border border-border bg-background p-4 transition-colors hover:border-[#126b8a]/40"
             >
-              <div className="flex items-center justify-between gap-4">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                     <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${STATUS_BG[survey.status] ?? ''}`}>
@@ -315,7 +315,7 @@ export default function DashboardPage() {
                     )}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex flex-wrap items-center gap-2">
                   <Link
                     href={
                       survey.status === 'published' || survey.status === 'closed'
