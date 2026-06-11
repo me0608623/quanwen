@@ -4,6 +4,7 @@ import {
   Get,
   HttpCode,
   HttpStatus,
+  Logger,
   Post,
   Query,
   Req,
@@ -45,6 +46,8 @@ import {
 @Controller('ai')
 @UseGuards(JwtAuthGuard, AiQuotaGuard)
 export class AiController {
+  private readonly logger = new Logger(AiController.name);
+
   constructor(
     private readonly surveysService: SurveysService,
     private readonly responsesService: ResponsesService,
@@ -111,13 +114,25 @@ export class AiController {
 
     const stats = await this.responsesService.getSurveyStats(dto.surveyId, userId);
     const result = await this.aiInsightsService.analyze(stats, dto.reportType);
-    // 持久化:切換報告類型 / 重新整理 / 服務重啟後仍可讀,不再耗額度
-    const generatedAt = new Date();
-    await Promise.all([
+    // Post-generation side-effects: usage tracking + report persistence.
+    // These are value-add steps — a failure must not prevent the caller from
+    // receiving the generated insights (use allSettled so one failure doesn't
+    // cancel the others, and log each failure for observability).
+    const [usageResult, tokenResult, saveResult] = await Promise.allSettled([
       this.aiUsageService.incrementUsage(userId, 'analyze_responses'),
       this.aiUsageService.incrementTokenUsage(userId, AiUsageService.estimateTokens(JSON.stringify(dto))),
       this.aiReportStore.save(dto.surveyId, dto.reportType, result),
     ]);
+    if (usageResult.status === 'rejected') {
+      this.logger.error('incrementUsage failed (non-fatal)', usageResult.reason);
+    }
+    if (tokenResult.status === 'rejected') {
+      this.logger.error('incrementTokenUsage failed (non-fatal)', tokenResult.reason);
+    }
+    if (saveResult.status === 'rejected') {
+      this.logger.error('aiReportStore.save failed (non-fatal)', saveResult.reason);
+    }
+    const generatedAt = new Date();
     const response = { ...result, generatedAt: generatedAt.toISOString() };
     this.dedupe.set(dedupeKey, response);
     return response;

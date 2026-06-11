@@ -125,10 +125,7 @@ export class AiUsageService {
     userId: string,
     estimatedTokens: number,
   ): Promise<{ allowed: boolean; tokensUsed: number; limit: number; resetAt: Date }> {
-    const [userResult, tokensUsed] = await Promise.all([
-      this.db.select({ tier: users.tier }).from(users).where(eq(users.id, userId)).limit(1),
-      this.getTodayTokensUsed(userId),
-    ]);
+    const userResult = await this.db.select({ tier: users.tier }).from(users).where(eq(users.id, userId)).limit(1);
 
     if (!userResult.length) {
       throw new Error('User not found');
@@ -136,9 +133,18 @@ export class AiUsageService {
 
     const tier = userResult[0].tier as 'free' | 'vip' | 'vvip';
     const limit = this.TIER_TOKEN_LIMITS[tier];
-    const allowed = limit === Infinity || tokensUsed + estimatedTokens <= limit;
 
-    return { allowed, tokensUsed, limit: limit === Infinity ? -1 : limit, resetAt: AiUsageService.nextResetAt() };
+    // Unlimited tier — skip daily_tokens_used query entirely.
+    // Avoids a column-not-found error if daily_tokens_used is missing in Neon
+    // (schema drift window between PR landing and drizzle-kit push running).
+    if (limit === Infinity) {
+      return { allowed: true, tokensUsed: 0, limit: -1, resetAt: AiUsageService.nextResetAt() };
+    }
+
+    const tokensUsed = await this.getTodayTokensUsed(userId);
+    const allowed = tokensUsed + estimatedTokens <= limit;
+
+    return { allowed, tokensUsed, limit, resetAt: AiUsageService.nextResetAt() };
   }
 
   async incrementTokenUsage(userId: string, tokens: number): Promise<void> {
