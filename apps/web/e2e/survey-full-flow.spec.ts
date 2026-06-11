@@ -417,7 +417,7 @@ test.describe('QUA-250 問卷完整流程 E2E 測試', () => {
       await page.waitForLoadState('networkidle');
 
       // 尋找匯出按鈕
-      const exportBtn = page.getByRole('button', { name: /匯出|export|下載|download/i });
+      const exportBtn = page.getByRole('button', { name: /匯出|export|下載|download/i }).first();
       if (await exportBtn.isVisible({ timeout: 3000 })) {
         const downloadPromise = page.waitForEvent('download');
         await exportBtn.click();
