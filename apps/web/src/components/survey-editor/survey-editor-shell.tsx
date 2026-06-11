@@ -124,7 +124,8 @@ export function SurveyEditorShell({
   return (
     <div className="flex h-[calc(100vh-4rem)] flex-col overflow-hidden rounded-lg border border-border">
       {/* ─── Top Bar ─────────────────────────────────────────────── */}
-      <header className="flex items-center gap-3 border-b border-border bg-white px-4 py-2.5">
+      {/* On mobile: wrap to two rows (title row + scrollable action row). On md+: single row. */}
+      <header className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-border bg-white px-4 py-2 md:flex-nowrap md:py-2.5">
         {/* Back button */}
         <button
           type="button"
@@ -169,8 +170,12 @@ export function SurveyEditorShell({
           </span>
         </div>
 
-        {/* Action buttons */}
-        <div className="flex items-center gap-2 shrink-0">
+        {/* Action buttons — mobile: full-width scrollable row; md+: inline shrink-0 */}
+        <div
+          className="flex w-full items-center gap-2 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden md:w-auto md:shrink-0"
+          role="toolbar"
+          aria-label="問卷操作工具列"
+        >
           {/* 手機：開啟題目/樣式/獎勵/設定抽屜 */}
           <button
             type="button"
