@@ -34,6 +34,8 @@ RUN addgroup -g 1001 -S nodejs && adduser -S nestjs -u 1001
 COPY --from=builder --chown=nestjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/node_modules ./apps/api/node_modules
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/dist ./apps/api/dist
+# 開機 schema 對齊腳本（startup-schema-align 在 runtime 讀取，根治 Neon schema drift）
+COPY --from=builder --chown=nestjs:nodejs /app/apps/api/scripts ./apps/api/scripts
 # 中文字型（PDF 報表用，避免亂碼）
 COPY --from=builder --chown=nestjs:nodejs /app/apps/api/assets ./apps/api/assets
 COPY --from=builder --chown=nestjs:nodejs /app/packages ./packages
