@@ -21,6 +21,16 @@
 -- ("產生洞察失敗，請稍後再試") regardless of quota (issue #118).
 ALTER TABLE daily_usage ADD COLUMN IF NOT EXISTS daily_tokens_used INTEGER NOT NULL DEFAULT 0;
 
+-- PR #103 (admin manual balance adjustment) added approved_by / action_at /
+-- action_ip audit columns to transactions in schema/wallet.ts, but drizzle-kit
+-- push </dev/null aborts on the interactive ADD COLUMN prompt → Neon never got
+-- them. Every wallet read (GET /wallet/transactions, /wallet/points/transactions)
+-- and admin balance adjustment SELECTs/INSERTs these columns → "column
+-- approved_by does not exist" → 500 (issue #112, observed live 2026-06-15).
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS approved_by UUID REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS action_at TIMESTAMPTZ;
+ALTER TABLE transactions ADD COLUMN IF NOT EXISTS action_ip TEXT;
+
 -- ── transaction_type ──────────────────────────────────────────────────────────
 ALTER TYPE transaction_type ADD VALUE IF NOT EXISTS 'deposit';
 ALTER TYPE transaction_type ADD VALUE IF NOT EXISTS 'reward_out';
