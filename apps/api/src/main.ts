@@ -128,6 +128,7 @@ import { NestFactory } from '@nestjs/core';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter';
+import { runStartupSchemaAlignment } from './db/startup-schema-align';
 
 // Phase F.2: Sentry SDK skeleton（env-gated；安裝 @sentry/node 後解開 require）
 function initSentry() {
@@ -153,6 +154,10 @@ function initSentry() {
 initSentry();
 
 async function bootstrap() {
+  // Prestart: align live schema before accepting traffic (root-cause fix for
+  // recurring Neon schema drift — idempotent, best-effort, never blocks boot).
+  await runStartupSchemaAlignment();
+
   const app = await NestFactory.create(AppModule, {
     logger: ['error', 'warn', 'log'],
   });
