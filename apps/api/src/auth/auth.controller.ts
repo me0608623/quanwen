@@ -43,11 +43,38 @@ interface OAuthCallbackResult {
 
 const WEB_URL = () => process.env.WEB_URL ?? 'http://localhost:3000';
 
+/** Mobile app deep-link scheme — used when OAuth started from Capacitor app */
+const APP_SCHEME = 'quanwen';
+
+/** Cookie name for marking an OAuth flow as mobile-originated */
+const MOBILE_COOKIE = 'oauth_mobile';
+
 @Controller('auth')
 export class AuthController {
   private readonly logger = new Logger(AuthController.name);
 
   constructor(private readonly authService: AuthService) {}
+
+  // ─── Mobile OAuth helpers ──────────────────────────────────────────────────
+
+  /** Detect ?mobile=1 on OAuth entry → set a short-lived cookie so the callback knows to deep-link back */
+  private setMobileCookie(res: Response) {
+    res.cookie(MOBILE_COOKIE, '1', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 5 * 60 * 1000, // 5 min — covers OAuth round-trip
+      path: '/',
+    });
+  }
+
+  /** On callback: if mobile cookie present → redirect to deep link instead of web URL, and clear cookie */
+  private mobileRedirect(res: Response, path: string, params?: Record<string, string>) {
+    const url = new URLSearchParams(params);
+    const qs = url.toString() ? `?${url.toString()}` : '';
+    res.clearCookie(MOBILE_COOKIE, { path: '/' });
+    return res.redirect(302, `${APP_SCHEME}://${path}${qs}`);
+  }
 
   private validatePasswordPolicy(password: string, label = '密碼') {
     if (!password || password.length < 8) throw new BadRequestException(`${label}至少 8 個字元`);
@@ -220,7 +247,11 @@ export class AuthController {
 
   @Get('google')
   @UseGuards(AuthGuard('google'))
-  googleAuth() {
+  googleAuth(@Req() req: Request, @Res() res: Response) {
+    // ?mobile=1 marks this as a Capacitor app → set cookie for callback to deep-link back
+    if ((req.query as { mobile?: string }).mobile === '1') {
+      this.setMobileCookie(res);
+    }
     // Passport handles redirect to Google
   }
 
@@ -245,23 +276,37 @@ export class AuthController {
   @UseGuards(AuthGuard('google'))
   async googleCallback(@Req() req: Request, @Res() res: Response) {
     const result = req.user as OAuthCallbackResult;
+    const isMobile = !!(req as Request & { cookies?: Record<string, string> }).cookies?.[MOBILE_COOKIE];
+
     if (result.bindExpired) {
-      return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+      const url = isMobile ? `${APP_SCHEME}://settings/accounts` : `${WEB_URL()}/settings/accounts`;
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+      return res.redirect(url + '?error=bind_expired');
     }
     if (result.bindError) {
-      return res.redirect(`${WEB_URL()}/settings/accounts?error=already_bound`);
+      const url = isMobile ? `${APP_SCHEME}://settings/accounts` : `${WEB_URL()}/settings/accounts`;
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+      return res.redirect(url + '?error=already_bound');
     }
     if (result.isBind) {
-      return res.redirect(`${WEB_URL()}/settings/accounts?bound=google`);
+      const url = isMobile ? `${APP_SCHEME}://settings/accounts` : `${WEB_URL()}/settings/accounts`;
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+      return res.redirect(url + '?bound=google');
     }
-    // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
+    // Mobile → deep link back to app with token; Web → normal web callback
+    if (isMobile) {
+      return this.mobileRedirect(res, 'auth/callback', { token: result.token });
+    }
     return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
   }
 
   // ─── LINE OAuth ────────────────────────────────────────────────────────────
 
   @Get('line')
-  lineAuth(@Query('bind') bind: string | undefined, @Res() res: Response) {
+  lineAuth(@Query('bind') bind: string | undefined, @Query('mobile') mobile: string | undefined, @Res() res: Response) {
+    if (mobile === '1') {
+      this.setMobileCookie(res);
+    }
     // For non-bind flows, use a server-tracked CSRF state token (5 min TTL)
     // instead of a random token that is never validated on callback.
     const state = bind ? `bind:${bind}` : `login:${this.authService.createLoginStateToken()}`;
@@ -297,10 +342,16 @@ export class AuthController {
     @Query('code') code: string | undefined,
     @Query('state') state: string | undefined,
     @Query('error') error: string | undefined,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
+    const isMobile = !!(req as Request & { cookies?: Record<string, string> }).cookies?.[MOBILE_COOKIE];
+    const errorUrl = isMobile ? `${APP_SCHEME}://auth/login` : `${WEB_URL()}/auth/login`;
+    const settingsUrl = isMobile ? `${APP_SCHEME}://settings/accounts` : `${WEB_URL()}/settings/accounts`;
+
     if (error || !code) {
-      return res.redirect(`${WEB_URL()}/auth/login?error=cancelled`);
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+      return res.redirect(`${errorUrl}?error=cancelled`);
     }
 
     try {
@@ -311,7 +362,8 @@ export class AuthController {
       if (isBindAttempt) {
         const bindSession = this.authService.resolveBindSession(state!.slice(5));
         if (!bindSession) {
-          return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+          if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+          return res.redirect(`${settingsUrl}?error=bind_expired`);
         }
         // Re-assign for the code below (TypeScript narrowing)
         const resolvedBind = bindSession;
@@ -329,14 +381,16 @@ export class AuthController {
           avatarUrl: profile.pictureUrl,
           bindToUserId: resolvedBind.userId,
         });
-        return res.redirect(`${WEB_URL()}/settings/accounts?bound=line`);
+        if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+        return res.redirect(`${settingsUrl}?bound=line`);
       }
 
       // Validate CSRF state for normal login flow
       if (isLoginAttempt) {
         const valid = this.authService.validateAndConsumeLoginState(state!.slice(6));
         if (!valid) {
-          return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+          if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+          return res.redirect(`${errorUrl}?error=oauth_failed`);
         }
       }
       // Legacy: state from old clients without login: prefix — allow through but log
@@ -359,21 +413,28 @@ export class AuthController {
         avatarUrl: profile.pictureUrl,
       });
 
-      // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
+      // Mobile → deep link; Web → normal web callback
+      if (isMobile) {
+        return this.mobileRedirect(res, 'auth/callback', { token: result.token });
+      }
       return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
     } catch (err) {
       this.logger.error('LINE callback error', err);
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
       if (err instanceof ConflictException) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?error=already_bound`);
+        return res.redirect(`${settingsUrl}?error=already_bound`);
       }
-      return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+      return res.redirect(`${errorUrl}?error=oauth_failed`);
     }
   }
 
   // ─── Apple Sign In ─────────────────────────────────────────────────────────
 
   @Get('apple')
-  appleAuth(@Res() res: Response) {
+  appleAuth(@Query('mobile') mobile: string | undefined, @Res() res: Response) {
+    if (mobile === '1') {
+      this.setMobileCookie(res);
+    }
     // Use server-tracked state token (same CSRF pattern as LINE login)
     const state = `login:${this.authService.createLoginStateToken()}`;
     const params = new URLSearchParams({
@@ -408,10 +469,16 @@ export class AuthController {
   @HttpCode(HttpStatus.FOUND)
   async appleCallback(
     @Body() body: { code?: string; id_token?: string; state?: string; error?: string; user?: string },
+    @Req() req: Request,
     @Res() res: Response,
   ) {
+    const isMobile = !!(req as Request & { cookies?: Record<string, string> }).cookies?.[MOBILE_COOKIE];
+    const errorUrl = isMobile ? `${APP_SCHEME}://auth/login` : `${WEB_URL()}/auth/login`;
+    const settingsUrl = isMobile ? `${APP_SCHEME}://settings/accounts` : `${WEB_URL()}/settings/accounts`;
+
     if (body.error || !body.code) {
-      return res.redirect(`${WEB_URL()}/auth/login?error=cancelled`);
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+      return res.redirect(`${errorUrl}?error=cancelled`);
     }
 
     try {
@@ -423,18 +490,21 @@ export class AuthController {
         : null;
 
       if (isBindAttempt && !bindSession) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?error=bind_expired`);
+        if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+        return res.redirect(`${settingsUrl}?error=bind_expired`);
       }
 
       // Validate CSRF state for normal login flow (same pattern as LINE)
       if (isLoginAttempt) {
         const valid = this.authService.validateAndConsumeLoginState(body.state!.slice(6));
         if (!valid) {
-          return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+          if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+          return res.redirect(`${errorUrl}?error=oauth_failed`);
         }
       } else if (!isBindAttempt) {
         this.logger.warn('Apple callback: unrecognized state prefix, rejecting for security');
-        return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+        if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+        return res.redirect(`${errorUrl}?error=oauth_failed`);
       }
 
       // Exchange code for id_token (validates server-side)
@@ -467,16 +537,21 @@ export class AuthController {
       });
 
       if (bindSession) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?bound=apple`);
+        if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
+        return res.redirect(`${settingsUrl}?bound=apple`);
       }
-      // 不論新舊用戶，OAuth 成功一律走 /auth/callback 設 token + 進 /dashboard
+      // Mobile → deep link; Web → normal web callback
+      if (isMobile) {
+        return this.mobileRedirect(res, 'auth/callback', { token: result.token });
+      }
       return res.redirect(`${WEB_URL()}/auth/callback?token=${result.token}`);
     } catch (err) {
       this.logger.error('Apple callback error', err);
+      if (isMobile) res.clearCookie(MOBILE_COOKIE, { path: '/' });
       if (err instanceof ConflictException) {
-        return res.redirect(`${WEB_URL()}/settings/accounts?error=already_bound`);
+        return res.redirect(`${settingsUrl}?error=already_bound`);
       }
-      return res.redirect(`${WEB_URL()}/auth/login?error=oauth_failed`);
+      return res.redirect(`${errorUrl}?error=oauth_failed`);
     }
   }
 }

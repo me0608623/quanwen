@@ -171,6 +171,10 @@ async function bootstrap() {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   expressApp.use(require('express').urlencoded({ extended: true }));
 
+  // Cookie parsing — needed for mobile OAuth deep-link detection (oauth_mobile cookie)
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  expressApp.use(require('cookie-parser')());
+
   type RequestWithContext = Request & { requestId?: string };
 
   expressApp.use((req: RequestWithContext, res: Response, next: NextFunction) => {
