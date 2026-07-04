@@ -17,6 +17,13 @@ const ENABLED_PROVIDERS = (process.env.NEXT_PUBLIC_OAUTH_PROVIDERS ?? "google,ap
   .filter(Boolean);
 const isEnabled = (p: Provider) => ENABLED_PROVIDERS.includes(p);
 
+/** Detect if running inside Capacitor WebView (mobile app) */
+function isCapacitorApp(): boolean {
+  if (typeof window === "undefined") return false;
+  return typeof (window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === "function"
+    && (window as unknown as { Capacitor: { isNativePlatform: () => boolean } }).Capacitor.isNativePlatform();
+}
+
 interface OAuthButtonsProps {
   intent?: "login" | "register";
   role?: "respondent" | "surveyor";
@@ -37,12 +44,34 @@ export function OAuthButtons({ intent = "login", role }: OAuthButtonsProps) {
   const handleClick = (provider: Provider) => {
     if (activeProvider) return;
     setActiveProvider(provider);
-    const params = new URLSearchParams({ ...(role ? { role } : {}) });
-    const query = params.toString() ? `?${params.toString()}` : "";
 
-    // Give ripple/loading one frame before navigation.
+    const params = new URLSearchParams({ ...(role ? { role } : {}) });
+
+    // In Capacitor app: open OAuth in external browser (Chrome Custom Tab / Safari)
+    // Google/LINE/Apple block WebView User-Agent, so we must use system browser.
+    // The ?mobile=1 flag tells the API to set a cookie → callback deep-links back to quanwen://
+    if (isCapacitorApp()) {
+      params.set("mobile", "1");
+    }
+    const query = params.toString() ? `?${params.toString()}` : "";
+    const oauthUrl = `${API_URL}/auth/${provider}${query}`;
+
+    if (isCapacitorApp()) {
+      // Dynamic import avoids pulling @capacitor/browser in web build
+      import("@capacitor/browser")
+        .then(({ Browser }) => Browser.open({ url: oauthUrl, windowName: "_self" }))
+        .catch(() => {
+          // Fallback: try window.open
+          window.open(oauthUrl, "_blank");
+        });
+      // Reset loading after a delay in case user returns without completing
+      setTimeout(() => setActiveProvider(null), 5000);
+      return;
+    }
+
+    // Web: normal navigation
     requestAnimationFrame(() => {
-      window.location.href = `${API_URL}/auth/${provider}${query}`;
+      window.location.href = oauthUrl;
     });
   };
 
