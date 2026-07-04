@@ -9,6 +9,23 @@
   --font-sans-cjk: "Noto Sans TC";
 }
 
+/* 防止 Android WebView 跟隨系統字體放大，保持版面穩定 */
+html {
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  /* 阻止 WebView 自動調整字體大小 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  /* 確保 body 不被超大字體撐開 */
+  overflow-x: hidden;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
 /* ============================================================
  * Login Page (/login) — 與 10-附件與素材/登入畫面.html 視覺一致
  * 命名空間: lp- (Login Page)

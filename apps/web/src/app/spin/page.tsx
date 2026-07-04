@@ -204,7 +204,7 @@ export default function SpinPage() {
           </div>
 
           {/* 轉盤 */}
-          <div data-spin-wheel className="relative mx-auto mt-8 h-[340px] w-[340px] sm:h-[440px] sm:w-[440px]">
+          <div data-spin-wheel className="relative mx-auto mt-8 aspect-square w-[min(340px,82vw)] sm:w-[min(440px,82vw)]">
             {/* 外圈光暈 */}
             <div data-spin-glow aria-hidden className="absolute inset-0 rounded-full bg-amber-400/30 blur-2xl" />
 
@@ -288,8 +288,8 @@ export default function SpinPage() {
 
           {/* 結果 */}
           {result && (
-            <div ref={resultRef} className="mt-8 rounded-2xl border border-amber-300 bg-amber-50 p-5">
-              <p className="text-xl font-extrabold text-amber-700">
+            <div ref={resultRef} className="mt-8 rounded-2xl border border-amber-300 bg-amber-50 p-3 sm:p-5">
+              <p className="text-lg font-extrabold text-amber-700 sm:text-xl">
                 {result.points > 0 ? `🎉 恭喜！${result.label}` : `😅 ${result.label}`}
               </p>
               {result.points > 0 && (
