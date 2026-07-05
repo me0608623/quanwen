@@ -577,7 +577,7 @@ function WalletContent() {
   const [showDeposit, setShowDeposit] = useState(false);
   const [showWithdraw, setShowWithdraw] = useState(false);
   const [banner, setBanner] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState<'cash' | 'points' | 'coupons'>('cash');
+  const [activeTab, setActiveTab] = useState<'cash' | 'points' | 'coupons'>('points');
   const { data: myCoupons = [] } = useMyCoupons();
   const WALLET_TABS = ['cash', 'points', 'coupons'] as const;
   const { handleKeyDown: handleTabKeyDown, registerRef: registerTabRef } = useTabsKeyboard(WALLET_TABS, activeTab, setActiveTab);
@@ -671,20 +671,26 @@ function WalletContent() {
             )}
             <div className="mt-4 flex gap-2">
               {isSurveyor && (
-                <button onClick={() => setShowDeposit(true)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+                <button
+                  onClick={() => setShowDeposit(true)} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
                   儲值
                 </button>
               )}
               {isRespondent && (
                 <button
-                  onClick={() => setShowWithdraw(true)}
-                  disabled={(wallet?.cashBalance ?? 0) < 300}
-                  className="rounded-md border border-border px-4 py-2 text-sm font-medium hover:bg-muted disabled:opacity-50"
+                  disabled
+                  className="cursor-not-allowed rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-600"
+                  title="現金提領功能即將上線"
                 >
-                  申請提領
+                  🔒 現金提領（即將上線）
                 </button>
               )}
             </div>
+            {isRespondent && (wallet?.cashBalance ?? 0) > 0 && (
+              <p className="mt-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
+                ⓘ 您目前有待領取現金 NT${(wallet?.cashBalance ?? 0).toLocaleString()}，現金提領功能完成法規處理後即可使用。如需提前領取請聯絡客服。
+              </p>
+            )}
           </div>
 
           {/* Phase GG: 受試者收益視覺化（trend + bySurvey） */}

@@ -87,6 +87,38 @@ export function ShopCatalog({
       )}
 
       <div className={`grid gap-3 ${compact ? 'xl:grid-cols-2' : 'sm:grid-cols-2'}`}>
+        {/* 現金提領 — 即將上線卡片 */}
+        <div className="relative space-y-2 overflow-hidden rounded-lg border-2 border-dashed border-blue-300 bg-gradient-to-br from-blue-50 to-sky-50 p-4">
+          <div className="absolute right-3 top-3 rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-600">
+            即將上線
+          </div>
+          <div className="flex aspect-square w-full flex-col items-center justify-center rounded-md bg-gradient-to-br from-blue-500 to-cyan-400 text-white">
+            <span className="text-xs font-semibold uppercase tracking-wide opacity-90">現金提領</span>
+            <span className="mt-1 text-4xl font-extrabold">💵</span>
+            <span className="mt-2 text-[10px] opacity-80">法規處理中</span>
+          </div>
+          <div className="flex items-start justify-between gap-2">
+            <p className="font-semibold text-slate-900">現金提領至銀行帳戶</p>
+            <span className="rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-medium text-blue-700">
+              Cashout
+            </span>
+          </div>
+          <p className="text-xs text-slate-500">
+            將平台積分直接兌換成現金，轉帳到你的銀行帳戶。我們正在處理法規與稅務申報流程，敬請期待。
+          </p>
+          <div className="flex items-baseline gap-2 pt-1">
+            <span className="text-2xl font-bold tabular-nums text-blue-400">—</span>
+            <span className="text-xs text-slate-400">點</span>
+            <span className="ml-auto text-[10px] text-slate-400">即將公布匯率</span>
+          </div>
+          <button
+            disabled
+            className="w-full cursor-not-allowed rounded-md border border-blue-300 bg-white/60 py-2 text-sm font-semibold text-blue-400"
+          >
+            🔒 即將上線
+          </button>
+        </div>
+
         {items.map((item) => {
           const affordable = pointsBalance >= item.costPoints;
           return (

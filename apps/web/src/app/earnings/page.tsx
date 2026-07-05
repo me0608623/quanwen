@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { useEarningsSummary } from '@/hooks/use-wallet';
+import { useEarningsSummary, usePointsSummary } from '@/hooks/use-wallet';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 
 // ─── 月收益長條圖（純 CSS）────────────────────────────────────────────────────
@@ -39,6 +39,7 @@ function MonthlyChart({ data }: { data: { month: string; amount: number }[] }) {
 
 export default function EarningsPage() {
   const { data: summary, isLoading, isError, refetch } = useEarningsSummary();
+  const { data: pointsSummary } = usePointsSummary();
 
   if (isLoading) {
     return <main className="mx-auto max-w-xl px-4 py-10"><LoadingSpinner /></main>;
@@ -59,20 +60,40 @@ export default function EarningsPage() {
     <main className="mx-auto max-w-xl px-4 py-10 space-y-6">
       <h1 className="text-2xl font-bold">我的收益</h1>
 
-      {/* 總覽卡片 */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1">累計獲得</p>
-          <p className="text-xl font-bold tabular-nums">NT${summary.totalEarned.toLocaleString()}</p>
+      {/* 積分總覽 */}
+      {pointsSummary && (
+        <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <span className="text-lg">🪙</span>
+            <span className="text-sm font-semibold text-amber-800">平台積分</span>
+            <span className="ml-auto text-xs text-amber-600">1 積分 ≈ NT$0.5</span>
+          </div>
+          <p className="text-3xl font-bold tabular-nums text-amber-900">
+            {pointsSummary.balance.toLocaleString()}
+            <span className="ml-1 text-sm text-amber-600">積分</span>
+          </p>
+          <p className="mt-1 text-xs text-amber-700">
+            ≈ NT${pointsSummary.estimatedValue.toLocaleString()} 等值 · 本月獲得 {pointsSummary.thisMonth.toLocaleString()} 積分
+          </p>
+          <div className="mt-4">
+            <Link href="/shop" className="text-sm font-semibold text-amber-700 underline hover:text-amber-900">
+              前往積分商城兌換 →
+            </Link>
+          </div>
         </div>
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1">本月收益</p>
-          <p className="text-xl font-bold tabular-nums text-primary">NT${summary.thisMonth.toLocaleString()}</p>
+      )}
+
+      {/* 現金收益（保留顯示但標記即將上線） */}
+      <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-lg">💵</span>
+          <span className="text-sm font-semibold text-blue-800">現金收益</span>
+          <span className="ml-auto rounded-full bg-blue-100 px-2 py-0.5 text-[10px] font-bold text-blue-600">即將上線</span>
         </div>
-        <div className="rounded-lg border border-border bg-card p-4 text-center">
-          <p className="text-xs text-muted-foreground mb-1">待入帳</p>
-          <p className="text-xl font-bold tabular-nums text-yellow-700">NT${summary.pendingRewards.toLocaleString()}</p>
-        </div>
+        <p className="text-xs text-blue-700">
+          現金提領功能正在進行法規與稅務處理，完成後即可將收益提領至銀行帳戶。
+          目前收益將以積分形式累積，可至商城兌換超商禮券或其他商品。
+        </p>
       </div>
 
       {/* 月收益圖 */}
