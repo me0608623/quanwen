@@ -22,27 +22,7 @@ export function DeepLinkHandler() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const Capacitor = (window as unknown as {
-      Capacitor?: {
-        isNativePlatform?: () => boolean;
-        Plugins?: {
-          App?: {
-            addListener?: (ev: string, cb: (data: { url: string }) => void) => Promise<unknown>;
-          };
-        };
-      };
-    }).Capacitor;
-
-    // ── App 環境偵測 ──
-    // 暫時停用 App 環境 redirect：先確認基礎 WebView 能正常 hydrate。
-    const isNative = Capacitor?.isNativePlatform?.() ?? false;
-    const isCapacitorUA = typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("capacitor");
-    if ((isNative || isCapacitorUA) && window.location.pathname === "/") {
-      // 用 client-side navigation，不用 hard reload
-      router.replace("/client-redirect");
-      return;
-    }
-
+    const Capacitor = (window as unknown as { Capacitor?: { Plugins?: { App?: { addListener?: (ev: string, cb: (data: { url: string }) => void) => Promise<void> } } } }).Capacitor;
     if (!Capacitor?.Plugins?.App?.addListener) return;
 
     let cancelled = false;
