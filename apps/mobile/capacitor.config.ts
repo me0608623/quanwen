@@ -5,8 +5,9 @@ const config: CapacitorConfig = {
   appName: '券問 QuanWen',
   webDir: 'www',
   // SSR mode: 直接指向已部署的 web app，不打包靜態檔
+  // App 環境直接從 /client-redirect 啟動，避免在 / 先 hydrate 再 redirect 的 race condition
   server: {
-    url: 'https://quanwen.vercel.app',
+    url: 'https://quanwen.vercel.app/client-redirect',
     cleartext: true,
   },
   android: {
