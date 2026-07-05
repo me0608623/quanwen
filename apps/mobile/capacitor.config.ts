@@ -4,8 +4,11 @@ const config: CapacitorConfig = {
   appId: 'com.quanwen.app',
   appName: '券問 QuanWen',
   webDir: 'www',
-  // 不使用 server.url —— 改由 www/index.html 做 redirect
-  // 這樣 bridge.js 只注入到本地頁面，不會干擾遠端 Next.js 的 JS 環境
+  // 回到 server.url 模式——搭配 fetch restore 腳本解決 hydration crash
+  server: {
+    url: 'https://quanwen.vercel.app',
+    cleartext: true,
+  },
   android: {
     allowMixedContent: false,
     backgroundColor: '#ffffff',
