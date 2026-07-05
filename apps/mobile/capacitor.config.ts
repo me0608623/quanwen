@@ -4,11 +4,8 @@ const config: CapacitorConfig = {
   appId: 'com.quanwen.app',
   appName: '券問 QuanWen',
   webDir: 'www',
-  // 回到 server.url 模式——搭配 fetch restore 腳本解決 hydration crash
-  server: {
-    url: 'https://quanwen.vercel.app',
-    cleartext: true,
-  },
+  // 不使用 server.url —— 本地 index.html redirect 到 web app
+  // 這是唯一確認在實機上能正常運行的模式
   android: {
     allowMixedContent: false,
     backgroundColor: '#ffffff',
