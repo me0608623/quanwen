@@ -22,7 +22,25 @@ export function DeepLinkHandler() {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    const Capacitor = (window as unknown as { Capacitor?: { Plugins?: { App?: { addListener?: (ev: string, cb: (data: { url: string }) => void) => Promise<void> } } } }).Capacitor;
+    const Capacitor = (window as unknown as {
+      Capacitor?: {
+        isNativePlatform?: () => boolean;
+        Plugins?: {
+          App?: {
+            addListener?: (ev: string, cb: (data: { url: string }) => void) => Promise<unknown>;
+          };
+        };
+      };
+    }).Capacitor;
+
+    // ── App 環境偵測：如果是在 Capacitor App 內且在根路徑，自動 redirect ──
+    const isNative = Capacitor?.isNativePlatform?.() ?? false;
+    const isCapacitorUA = typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("capacitor");
+    if ((isNative || isCapacitorUA) && window.location.pathname === "/") {
+      window.location.replace("/client-redirect");
+      return;
+    }
+
     if (!Capacitor?.Plugins?.App?.addListener) return;
 
     let cancelled = false;
