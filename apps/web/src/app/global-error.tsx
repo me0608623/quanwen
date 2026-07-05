@@ -34,6 +34,27 @@ export default function GlobalError({
           <p style={{ color: '#666', fontSize: '0.875rem', marginTop: '0.5rem' }}>
             請重試，或稍後再回來。
           </p>
+          {/* Debug info — show actual error so we can diagnose */}
+          {error?.message && (
+            <pre
+              style={{
+                marginTop: '1rem',
+                padding: '0.75rem',
+                background: '#f5f5f5',
+                borderRadius: '0.5rem',
+                fontSize: '0.75rem',
+                color: '#d00',
+                maxWidth: '90vw',
+                overflow: 'auto',
+                textAlign: 'left',
+                whiteSpace: 'pre-wrap',
+                wordBreak: 'break-word',
+              }}
+            >
+              {error.message}
+              {error.digest ? `\n[digest: ${error.digest}]` : ''}
+            </pre>
+          )}
         </div>
         <button
           onClick={() => reset()}

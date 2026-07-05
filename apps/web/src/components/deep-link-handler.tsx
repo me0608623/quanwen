@@ -34,10 +34,12 @@ export function DeepLinkHandler() {
     }).Capacitor;
 
     // ── App 環境偵測：如果是在 Capacitor App 內且在根路徑，自動 redirect ──
+    // 重要：用 router.replace（client-side）而非 window.location.replace（hard reload），
+    // 避免 Capacitor WebView 重新載入時 Bridge 與 hydration 產生 race condition。
     const isNative = Capacitor?.isNativePlatform?.() ?? false;
     const isCapacitorUA = typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("capacitor");
     if ((isNative || isCapacitorUA) && window.location.pathname === "/") {
-      window.location.replace("/client-redirect");
+      router.replace("/client-redirect");
       return;
     }
 
