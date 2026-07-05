@@ -1,0 +1,407 @@
+{
+  "facebook": {
+    "status": 200,
+    "bytes": 1291433,
+    "meta": {
+      "title": "論文問卷互助社 | Facebook",
+      "description": "為了論文問卷數不夠而煩惱嗎？\n在這個社團裡，大家可以把自己的問卷線上連結貼出讓其他人作答，也希望加入社團的成員們能夠互相幫助！"
+    },
+    "urls": []
+  },
+  "sources": [],
+  "payloads": [
+    {
+      "$schema": "quanwen.survey.v1",
+      "exportedAt": "2026-06-04T03:03:20.934Z",
+      "platform": {
+        "name": "quanwen-facebook-import-stress",
+        "version": "1.0.0"
+      },
+      "survey": {
+        "title": "Facebook 問卷互助匯入測試 001",
+        "description": "社團：論文問卷互助社 | Facebook\n描述：為了論文問卷數不夠而煩惱嗎？\n在這個社團裡，大家可以把自己的問卷線上連結貼出讓其他人作答，也希望加入社團的成員們能夠互相幫助！\n來源：Facebook 公開社團 metadata / 壓測代表資料",
+        "type": "standard",
+        "category": "academic",
+        "isAnonymous": true,
+        "rewardPoints": 0,
+        "targetCount": 100,
+        "aiReviewEnabled": true,
+        "externalUrl": null,
+        "audienceCriteria": {
+          "minReputationScore": 0,
+          "education": [
+            "college",
+            "graduate"
+          ]
+        },
+        "questions": [
+          {
+            "type": "single_choice",
+            "title": "您目前填寫論文或市場問卷的頻率為何？ #1",
+            "description": "用於模擬 Facebook 問卷互助社常見篩選題。",
+            "sortOrder": 0,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "每週多次",
+                "sortOrder": 0
+              },
+              {
+                "label": "每週一次",
+                "sortOrder": 1
+              },
+              {
+                "label": "每月數次",
+                "sortOrder": 2
+              },
+              {
+                "label": "很少填寫",
+                "sortOrder": 3
+              }
+            ]
+          },
+          {
+            "type": "multiple_choice",
+            "title": "您通常願意協助填答哪些類型的研究問卷？",
+            "sortOrder": 1,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "消費者行為",
+                "sortOrder": 0
+              },
+              {
+                "label": "教育學習",
+                "sortOrder": 1
+              },
+              {
+                "label": "職場管理",
+                "sortOrder": 2
+              },
+              {
+                "label": "科技產品",
+                "sortOrder": 3
+              },
+              {
+                "label": "健康生活",
+                "sortOrder": 4
+              }
+            ]
+          },
+          {
+            "type": "rating",
+            "title": "您認為互助社問卷連結的品質整體如何？",
+            "sortOrder": 2,
+            "isRequired": true,
+            "config": {
+              "maxRating": 5,
+              "scaleStart": 1,
+              "leftLabel": "很差",
+              "rightLabel": "很好"
+            }
+          },
+          {
+            "type": "single_choice",
+            "title": "注意力檢核：請選擇「同意」。",
+            "sortOrder": 3,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "非常不同意",
+                "sortOrder": 0
+              },
+              {
+                "label": "不同意",
+                "sortOrder": 1
+              },
+              {
+                "label": "同意",
+                "sortOrder": 2
+              },
+              {
+                "label": "非常同意",
+                "sortOrder": 3
+              }
+            ],
+            "config": {
+              "attentionCheck": true,
+              "expectedAnswer": "同意"
+            }
+          },
+          {
+            "type": "text",
+            "title": "您希望問卷互助平台改善哪些填答或媒合體驗？",
+            "sortOrder": 4,
+            "isRequired": false,
+            "config": {
+              "minLength": 5,
+              "maxLength": 500
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$schema": "quanwen.survey.v1",
+      "exportedAt": "2026-06-04T03:03:20.934Z",
+      "platform": {
+        "name": "quanwen-facebook-import-stress",
+        "version": "1.0.0"
+      },
+      "survey": {
+        "title": "Facebook 問卷互助匯入測試 002",
+        "description": "社團：論文問卷互助社 | Facebook\n描述：為了論文問卷數不夠而煩惱嗎？\n在這個社團裡，大家可以把自己的問卷線上連結貼出讓其他人作答，也希望加入社團的成員們能夠互相幫助！\n來源：Facebook 公開社團 metadata / 壓測代表資料",
+        "type": "standard",
+        "category": "academic",
+        "isAnonymous": true,
+        "rewardPoints": 0,
+        "targetCount": 100,
+        "aiReviewEnabled": true,
+        "externalUrl": null,
+        "audienceCriteria": {
+          "minReputationScore": 0,
+          "education": [
+            "college",
+            "graduate"
+          ]
+        },
+        "questions": [
+          {
+            "type": "single_choice",
+            "title": "您目前填寫論文或市場問卷的頻率為何？ #2",
+            "description": "用於模擬 Facebook 問卷互助社常見篩選題。",
+            "sortOrder": 0,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "每週多次",
+                "sortOrder": 0
+              },
+              {
+                "label": "每週一次",
+                "sortOrder": 1
+              },
+              {
+                "label": "每月數次",
+                "sortOrder": 2
+              },
+              {
+                "label": "很少填寫",
+                "sortOrder": 3
+              }
+            ]
+          },
+          {
+            "type": "multiple_choice",
+            "title": "您通常願意協助填答哪些類型的研究問卷？",
+            "sortOrder": 1,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "消費者行為",
+                "sortOrder": 0
+              },
+              {
+                "label": "教育學習",
+                "sortOrder": 1
+              },
+              {
+                "label": "職場管理",
+                "sortOrder": 2
+              },
+              {
+                "label": "科技產品",
+                "sortOrder": 3
+              },
+              {
+                "label": "健康生活",
+                "sortOrder": 4
+              }
+            ]
+          },
+          {
+            "type": "rating",
+            "title": "您認為互助社問卷連結的品質整體如何？",
+            "sortOrder": 2,
+            "isRequired": true,
+            "config": {
+              "maxRating": 5,
+              "scaleStart": 1,
+              "leftLabel": "很差",
+              "rightLabel": "很好"
+            }
+          },
+          {
+            "type": "single_choice",
+            "title": "注意力檢核：請選擇「同意」。",
+            "sortOrder": 3,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "非常不同意",
+                "sortOrder": 0
+              },
+              {
+                "label": "不同意",
+                "sortOrder": 1
+              },
+              {
+                "label": "同意",
+                "sortOrder": 2
+              },
+              {
+                "label": "非常同意",
+                "sortOrder": 3
+              }
+            ],
+            "config": {
+              "attentionCheck": true,
+              "expectedAnswer": "同意"
+            }
+          },
+          {
+            "type": "text",
+            "title": "您希望問卷互助平台改善哪些填答或媒合體驗？",
+            "sortOrder": 4,
+            "isRequired": false,
+            "config": {
+              "minLength": 5,
+              "maxLength": 500
+            }
+          }
+        ]
+      }
+    },
+    {
+      "$schema": "quanwen.survey.v1",
+      "exportedAt": "2026-06-04T03:03:20.934Z",
+      "platform": {
+        "name": "quanwen-facebook-import-stress",
+        "version": "1.0.0"
+      },
+      "survey": {
+        "title": "Facebook 問卷互助匯入測試 003",
+        "description": "社團：論文問卷互助社 | Facebook\n描述：為了論文問卷數不夠而煩惱嗎？\n在這個社團裡，大家可以把自己的問卷線上連結貼出讓其他人作答，也希望加入社團的成員們能夠互相幫助！\n來源：Facebook 公開社團 metadata / 壓測代表資料",
+        "type": "standard",
+        "category": "academic",
+        "isAnonymous": true,
+        "rewardPoints": 0,
+        "targetCount": 100,
+        "aiReviewEnabled": true,
+        "externalUrl": null,
+        "audienceCriteria": {
+          "minReputationScore": 0,
+          "education": [
+            "college",
+            "graduate"
+          ]
+        },
+        "questions": [
+          {
+            "type": "single_choice",
+            "title": "您目前填寫論文或市場問卷的頻率為何？ #3",
+            "description": "用於模擬 Facebook 問卷互助社常見篩選題。",
+            "sortOrder": 0,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "每週多次",
+                "sortOrder": 0
+              },
+              {
+                "label": "每週一次",
+                "sortOrder": 1
+              },
+              {
+                "label": "每月數次",
+                "sortOrder": 2
+              },
+              {
+                "label": "很少填寫",
+                "sortOrder": 3
+              }
+            ]
+          },
+          {
+            "type": "multiple_choice",
+            "title": "您通常願意協助填答哪些類型的研究問卷？",
+            "sortOrder": 1,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "消費者行為",
+                "sortOrder": 0
+              },
+              {
+                "label": "教育學習",
+                "sortOrder": 1
+              },
+              {
+                "label": "職場管理",
+                "sortOrder": 2
+              },
+              {
+                "label": "科技產品",
+                "sortOrder": 3
+              },
+              {
+                "label": "健康生活",
+                "sortOrder": 4
+              }
+            ]
+          },
+          {
+            "type": "rating",
+            "title": "您認為互助社問卷連結的品質整體如何？",
+            "sortOrder": 2,
+            "isRequired": true,
+            "config": {
+              "maxRating": 5,
+              "scaleStart": 1,
+              "leftLabel": "很差",
+              "rightLabel": "很好"
+            }
+          },
+          {
+            "type": "single_choice",
+            "title": "注意力檢核：請選擇「同意」。",
+            "sortOrder": 3,
+            "isRequired": true,
+            "options": [
+              {
+                "label": "非常不同意",
+                "sortOrder": 0
+              },
+              {
+                "label": "不同意",
+                "sortOrder": 1
+              },
+              {
+                "label": "同意",
+                "sortOrder": 2
+              },
+              {
+                "label": "非常同意",
+                "sortOrder": 3
+              }
+            ],
+            "config": {
+              "attentionCheck": true,
+              "expectedAnswer": "同意"
+            }
+          },
+          {
+            "type": "text",
+            "title": "您希望問卷互助平台改善哪些填答或媒合體驗？",
+            "sortOrder": 4,
+            "isRequired": false,
+            "config": {
+              "minLength": 5,
+              "maxLength": 500
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

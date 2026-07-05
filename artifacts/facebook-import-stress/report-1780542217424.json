@@ -1,0 +1,513 @@
+{
+  "report": {
+    "api": "http://localhost:3001/api/v1",
+    "count": 20,
+    "concurrency": 5,
+    "elapsedMs": 75,
+    "requestsPerSecond": 266.67,
+    "summary": {
+      "count": 20,
+      "ok": 10,
+      "failed": 10,
+      "byStatus": {
+        "201": 10,
+        "429": 10
+      },
+      "byMode": {
+        "quanwen-json": 20
+      },
+      "latencyMs": {
+        "min": 2,
+        "p50": 6,
+        "p95": 39,
+        "max": 44
+      }
+    },
+    "failures": [
+      {
+        "index": 10,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "f5164220-e9e5-4fec-80b3-fff7bf6d2028",
+          "timestamp": "2026-06-04T03:03:37.415Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 11,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "e5989943-4c27-4c76-a814-84487d4ceb62",
+          "timestamp": "2026-06-04T03:03:37.419Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 12,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "da23f70e-58bc-4a99-8fce-00c97dd764ec",
+          "timestamp": "2026-06-04T03:03:37.419Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 13,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "03d4e5fe-007b-4076-a331-b2b23c22ed4a",
+          "timestamp": "2026-06-04T03:03:37.419Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 14,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "b6af9184-439e-4c65-ad7e-c8c9ddae16c1",
+          "timestamp": "2026-06-04T03:03:37.421Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 15,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "e5b652fe-d98d-476b-a6ea-0b4869f4d745",
+          "timestamp": "2026-06-04T03:03:37.421Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 16,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "fe79fe49-6098-4a67-87eb-0ad61cb27e88",
+          "timestamp": "2026-06-04T03:03:37.423Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 17,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "afd1c0fc-d986-406c-aaa6-f914fc5d7a97",
+          "timestamp": "2026-06-04T03:03:37.424Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 18,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "4215e1aa-00ab-4bca-908a-faee14ca19a8",
+          "timestamp": "2026-06-04T03:03:37.423Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      },
+      {
+        "index": 19,
+        "mode": "quanwen-json",
+        "sourceUrl": null,
+        "status": 429,
+        "body": {
+          "success": false,
+          "statusCode": 429,
+          "requestId": "d08217b7-3503-452c-a024-0ae2b5660c8e",
+          "timestamp": "2026-06-04T03:03:37.424Z",
+          "path": "/api/v1/surveys/import",
+          "message": "ThrottlerException: Too Many Requests"
+        }
+      }
+    ],
+    "successfulIds": [
+      "8e0f525e-6c4c-4732-99c8-4b0f17e3e9f7",
+      "7df2086e-b3e0-4b8a-8c13-2f5921947f21",
+      "d1159333-40b2-4802-940b-2091387d3151",
+      "deb0134b-5911-44ce-a972-e04f72e5557d",
+      "1d1f0352-9d78-4dd4-b814-c76edff5f0ca",
+      "098bc765-2b28-4b11-8247-b563383d8db6",
+      "bd0c8ec3-a99d-4937-be25-6ba097b385e8",
+      "447dfd91-0797-4d60-9e33-3436d7601be4",
+      "17c4ee33-04bc-4ecc-aa2c-5f4184297079",
+      "1d4cbd25-6fc6-4469-94b4-8e79514e388c"
+    ]
+  },
+  "results": [
+    {
+      "index": 0,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 35,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "8e0f525e-6c4c-4732-99c8-4b0f17e3e9f7",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 1,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 37,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "7df2086e-b3e0-4b8a-8c13-2f5921947f21",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 2,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 39,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "d1159333-40b2-4802-940b-2091387d3151",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 3,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 44,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "deb0134b-5911-44ce-a972-e04f72e5557d",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 4,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 35,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "1d1f0352-9d78-4dd4-b814-c76edff5f0ca",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 5,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 30,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "098bc765-2b28-4b11-8247-b563383d8db6",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 6,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 32,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "bd0c8ec3-a99d-4937-be25-6ba097b385e8",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 7,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 23,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "447dfd91-0797-4d60-9e33-3436d7601be4",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 8,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 27,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "17c4ee33-04bc-4ecc-aa2c-5f4184297079",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 9,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 28,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "1d4cbd25-6fc6-4469-94b4-8e79514e388c",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      }
+    },
+    {
+      "index": 10,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 6,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "f5164220-e9e5-4fec-80b3-fff7bf6d2028",
+        "timestamp": "2026-06-04T03:03:37.415Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 11,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 5,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "e5989943-4c27-4c76-a814-84487d4ceb62",
+        "timestamp": "2026-06-04T03:03:37.419Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 12,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 5,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "da23f70e-58bc-4a99-8fce-00c97dd764ec",
+        "timestamp": "2026-06-04T03:03:37.419Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 13,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 4,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "03d4e5fe-007b-4076-a331-b2b23c22ed4a",
+        "timestamp": "2026-06-04T03:03:37.419Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 14,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 5,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "b6af9184-439e-4c65-ad7e-c8c9ddae16c1",
+        "timestamp": "2026-06-04T03:03:37.421Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 15,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 3,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "e5b652fe-d98d-476b-a6ea-0b4869f4d745",
+        "timestamp": "2026-06-04T03:03:37.421Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 16,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 3,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "fe79fe49-6098-4a67-87eb-0ad61cb27e88",
+        "timestamp": "2026-06-04T03:03:37.423Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 17,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 3,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "afd1c0fc-d986-406c-aaa6-f914fc5d7a97",
+        "timestamp": "2026-06-04T03:03:37.424Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 18,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 2,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "4215e1aa-00ab-4bca-908a-faee14ca19a8",
+        "timestamp": "2026-06-04T03:03:37.423Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    },
+    {
+      "index": 19,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": false,
+      "status": 429,
+      "ms": 2,
+      "body": {
+        "success": false,
+        "statusCode": 429,
+        "requestId": "d08217b7-3503-452c-a024-0ae2b5660c8e",
+        "timestamp": "2026-06-04T03:03:37.424Z",
+        "path": "/api/v1/surveys/import",
+        "message": "ThrottlerException: Too Many Requests"
+      }
+    }
+  ]
+}

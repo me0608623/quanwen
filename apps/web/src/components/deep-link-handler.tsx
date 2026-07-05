@@ -33,12 +33,12 @@ export function DeepLinkHandler() {
       };
     }).Capacitor;
 
-    // ── App 環境偵測：如果是在 Capacitor App 內且在根路徑，自動 redirect ──
-    // 重要：用 router.replace（client-side）而非 window.location.replace（hard reload），
-    // 避免 Capacitor WebView 重新載入時 Bridge 與 hydration 產生 race condition。
+    // ── App 環境偵測 ──
+    // 暫時停用 App 環境 redirect：先確認基礎 WebView 能正常 hydrate。
     const isNative = Capacitor?.isNativePlatform?.() ?? false;
     const isCapacitorUA = typeof navigator !== "undefined" && navigator.userAgent.toLowerCase().includes("capacitor");
     if ((isNative || isCapacitorUA) && window.location.pathname === "/") {
+      // 用 client-side navigation，不用 hard reload
       router.replace("/client-redirect");
       return;
     }

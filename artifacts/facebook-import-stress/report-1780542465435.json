@@ -1,0 +1,273 @@
+{
+  "report": {
+    "api": "http://localhost:3001/api/v1",
+    "count": 12,
+    "concurrency": 2,
+    "delayMs": 250,
+    "retry429": 2,
+    "elapsedMs": 1321,
+    "requestsPerSecond": 9.08,
+    "summary": {
+      "count": 12,
+      "ok": 12,
+      "failed": 0,
+      "byStatus": {
+        "201": 12
+      },
+      "byMode": {
+        "quanwen-json": 12
+      },
+      "latencyMs": {
+        "min": 9,
+        "p50": 11,
+        "p95": 16,
+        "max": 16
+      }
+    },
+    "failures": [],
+    "successfulIds": [
+      "d060edb4-8555-4935-ad98-34aaac222eda",
+      "8b41e1e2-2bc7-4e37-a80d-b81e47187eff",
+      "d2fa8c36-9514-460b-a2e9-4e95696b9a62",
+      "15993038-977e-4e08-8cdc-f3af05d4b1ed",
+      "129850bf-094e-4bd5-8ef2-ef25c6fb024f",
+      "65f29628-a338-4144-8b04-4cae51c760fe",
+      "51b5a7e8-e22f-48bf-b4ed-53c42c236ff9",
+      "6ffda532-90f4-42f9-bd11-43574b7c9baf",
+      "321855b3-5347-4a6e-82bf-9737d76b0864",
+      "cd6248c8-4290-4fc4-9c61-8b479cba968c",
+      "e0230e8e-8969-4112-a284-25d669758f45",
+      "721937b6-72e2-4d03-bf7d-13f147e31479"
+    ]
+  },
+  "results": [
+    {
+      "index": 0,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 12,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "d060edb4-8555-4935-ad98-34aaac222eda",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 1,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 16,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "8b41e1e2-2bc7-4e37-a80d-b81e47187eff",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 2,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 11,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "d2fa8c36-9514-460b-a2e9-4e95696b9a62",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 3,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 11,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "15993038-977e-4e08-8cdc-f3af05d4b1ed",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 4,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 10,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "129850bf-094e-4bd5-8ef2-ef25c6fb024f",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 5,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 9,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "65f29628-a338-4144-8b04-4cae51c760fe",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 6,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 12,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "51b5a7e8-e22f-48bf-b4ed-53c42c236ff9",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 7,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 10,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "6ffda532-90f4-42f9-bd11-43574b7c9baf",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 8,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 12,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "321855b3-5347-4a6e-82bf-9737d76b0864",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 9,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 11,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "cd6248c8-4290-4fc4-9c61-8b479cba968c",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 10,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 12,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "e0230e8e-8969-4112-a284-25d669758f45",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    },
+    {
+      "index": 11,
+      "mode": "quanwen-json",
+      "sourceUrl": null,
+      "ok": true,
+      "status": 201,
+      "ms": 12,
+      "body": {
+        "success": true,
+        "data": {
+          "id": "721937b6-72e2-4d03-bf7d-13f147e31479",
+          "status": "draft",
+          "questionsCount": 5,
+          "warnings": []
+        }
+      },
+      "retryCount": 0,
+      "retryWaitMs": 0
+    }
+  ]
+}
