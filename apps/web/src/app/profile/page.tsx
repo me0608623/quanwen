@@ -81,7 +81,7 @@ export default function ProfilePage() {
         <h1 className="text-2xl font-bold">我的個人資料</h1>
         <button
           onClick={() => router.push('/profile/edit')}
-          className="text-sm text-primary hover:underline"
+          className="rounded-md px-3 py-2 text-sm text-primary hover:bg-primary/5"
         >
           編輯資料
         </button>
@@ -135,7 +135,7 @@ export default function ProfilePage() {
                 <p className="font-medium truncate">{me?.displayName}</p>
                 <button
                   onClick={() => { setNameInput(me?.displayName ?? ''); setEditingName(true); }}
-                  className="text-xs text-muted-foreground hover:text-primary shrink-0"
+                  className="rounded-md px-2 py-1.5 text-xs text-muted-foreground hover:bg-muted hover:text-primary shrink-0"
                 >
                   編輯
                 </button>
@@ -153,10 +153,10 @@ export default function ProfilePage() {
         </div>
 
         <div className="flex gap-3 pt-1">
-          <Link href="/settings/security" className="text-xs text-primary hover:underline">
+          <Link href="/settings/security" className="rounded-md px-2 py-2 text-xs text-primary hover:bg-primary/5">
             帳號安全
           </Link>
-          <Link href="/settings/accounts" className="text-xs text-primary hover:underline">
+          <Link href="/settings/accounts" className="rounded-md px-2 py-2 text-xs text-primary hover:bg-primary/5">
             帳號連結 →
           </Link>
         </div>

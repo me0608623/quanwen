@@ -147,7 +147,7 @@ export function Navbar() {
             <Link
               href="/notifications"
               aria-label={(unread?.count ?? 0) > 0 ? `通知（${unread?.count} 則未讀）` : '通知'}
-              className="relative rounded-md p-1.5 hover:bg-muted"
+              className="relative rounded-md p-3 hover:bg-muted"
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -217,7 +217,7 @@ export function Navbar() {
             {/* Mobile: hamburger */}
             <button
               onClick={() => setMobileOpen((v) => !v)}
-              className="sm:hidden rounded-md p-1.5 hover:bg-muted"
+              className="sm:hidden rounded-md p-3 hover:bg-muted"
               aria-label={mobileOpen ? '關閉選單' : '開啟選單'}
             >
               {mobileOpen ? (

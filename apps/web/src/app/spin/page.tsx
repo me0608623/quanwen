@@ -320,10 +320,10 @@ export default function SpinPage() {
                   目前沒有抽獎次數 — 完成一份問卷就能再轉！
                 </div>
                 <div className="flex justify-center gap-4 text-sm">
-                  <Link href="/tasks" className="font-semibold text-amber-600 hover:underline">
+                  <Link href="/tasks" className="inline-block rounded-md px-3 py-2 font-semibold text-amber-600 hover:bg-amber-50">
                     去填問卷賺次數 →
                   </Link>
-                  <Link href="/mutual" className="font-semibold text-amber-600 hover:underline">
+                  <Link href="/mutual" className="inline-block rounded-md px-3 py-2 font-semibold text-amber-600 hover:bg-amber-50">
                     互惠問卷 →
                   </Link>
                 </div>
