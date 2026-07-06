@@ -160,6 +160,7 @@ export default function SecurityPage() {
             onChange={(e) => setEmailInput(e.target.value)}
             placeholder={isPlaceholderEmail ? '輸入你的電子郵件' : '輸入新的電子郵件'}
             aria-label="電子郵件"
+            autoComplete="email"
             required
             className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
           />
@@ -189,6 +190,7 @@ export default function SecurityPage() {
                 required
                 placeholder="輸入目前密碼"
                 aria-label="目前密碼"
+                autoComplete="current-password"
                 className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
@@ -202,6 +204,7 @@ export default function SecurityPage() {
                 placeholder="至少 8 碼，含大寫字母及數字"
                 minLength={8}
                 aria-label="新密碼"
+                autoComplete="new-password"
                 className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {pwTooShort && <p className="mt-1 text-xs text-destructive">密碼至少 8 個字元</p>}
@@ -234,6 +237,7 @@ export default function SecurityPage() {
                 required
                 placeholder="再輸入一次"
                 aria-label="確認新密碼"
+                autoComplete="new-password"
                 className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
