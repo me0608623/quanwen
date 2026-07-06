@@ -114,7 +114,7 @@ function LoginForm() {
               type="email"
               autoComplete="username"
               placeholder="請輸入電子郵件"
-              className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/20"
+              className="h-11 rounded-[10px] border-slate-200 pl-11 text-[16px] shadow-sm transition-all focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/20"
               {...form.register("email")}
             />
           </div>

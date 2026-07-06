@@ -1,0 +1,15 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/mutual/layout,_N_T_/mutual/page,_N_T_/mutual"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/mutual/__PAGE__",
+    "/mutual",
+    "/_index",
+    "/_head"
+  ]
+}

@@ -32,15 +32,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600&family=Noto+Sans+TC:wght@400;500;700&family=Noto+Serif+TC:wght@500;700&display=swap"
         rel="stylesheet"
       />
-      {/* Capacitor bridge 會覆蓋 window.fetch，破壞 React 19 streaming hydration。
-          在 hydration 前還原原生 fetch。 */}
-      <script dangerouslySetInnerHTML={{ __html: `
-        (function() {
-          if (window.CapacitorWebFetch && window.CapacitorWebFetch !== window.fetch) {
-            window.fetch = window.CapacitorWebFetch;
-          }
-        })();
-      `}} />
+      {/* Static export + Capacitor local mode：bridge.js 在 React 之前載入，不再需要 fetch hack */}
     </head>
     <body className="font-sans" suppressHydrationWarning><Providers>
       <DeepLinkHandler />

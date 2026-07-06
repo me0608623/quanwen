@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/auth/layout,_N_T_/auth/verify-email/layout,_N_T_/auth/verify-email/page,_N_T_/auth/verify-email"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/auth/verify-email/__PAGE__",
+    "/auth/verify-email",
+    "/auth",
+    "/_index",
+    "/_head"
+  ]
+}

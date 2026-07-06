@@ -1,0 +1,16 @@
+{
+  "headers": {
+    "x-nextjs-stale-time": "300",
+    "x-nextjs-prerender": "1",
+    "x-next-cache-tags": "_N_T_/layout,_N_T_/shop/layout,_N_T_/shop/my-redemptions/layout,_N_T_/shop/my-redemptions/page,_N_T_/shop/my-redemptions"
+  },
+  "segmentPaths": [
+    "/_tree",
+    "/_full",
+    "/shop/my-redemptions/__PAGE__",
+    "/shop/my-redemptions",
+    "/shop",
+    "/_index",
+    "/_head"
+  ]
+}

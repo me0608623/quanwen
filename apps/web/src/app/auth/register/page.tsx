@@ -97,7 +97,7 @@ function RegisterForm() {
               id="displayName"
               autoComplete="nickname"
               placeholder="例如：小安"
-              className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/15"
+              className="h-11 rounded-[10px] border-slate-200 pl-11 text-[16px] focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/15"
               {...form.register("displayName")}
             />
           </div>
@@ -117,7 +117,7 @@ function RegisterForm() {
               type="email"
               autoComplete="email"
               placeholder="請輸入電子郵件"
-              className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/15"
+              className="h-11 rounded-[10px] border-slate-200 pl-11 text-[16px] focus-visible:border-[#126b8a] focus-visible:ring-2 focus-visible:ring-[#126b8a]/15"
               {...form.register("email")}
             />
           </div>

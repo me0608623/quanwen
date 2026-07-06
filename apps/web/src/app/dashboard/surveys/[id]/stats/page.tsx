@@ -1,5 +1,8 @@
 'use client';
 
+export const dynamic = 'force-static';
+export const dynamicParams = false;
+
 import { useEffect, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';

@@ -1,0 +1,6 @@
+1:"$Sreact.fragment"
+2:I[86144,["/_next/static/chunks/06pgu8own6caa.js","/_next/static/chunks/11t7h11ure54-.js","/_next/static/chunks/0uy-3_3x_riqk.js","/_next/static/chunks/0gvmhzwd44ee7.js"],""]
+3:I[97495,["/_next/static/chunks/06pgu8own6caa.js","/_next/static/chunks/11t7h11ure54-.js","/_next/static/chunks/0uy-3_3x_riqk.js","/_next/static/chunks/0gvmhzwd44ee7.js"],"OutletBoundary"]
+4:"$Sreact.suspense"
+0:{"rsc":["$","$1","c",{"children":[["$","main",null,{"className":"flex min-h-screen flex-col items-center justify-center gap-6 px-4 text-center","children":[["$","div",null,{"children":[["$","p",null,{"className":"text-6xl font-bold text-primary","children":"404"}],["$","h1",null,{"className":"mt-3 text-xl font-semibold","children":"找不到此頁面"}],["$","p",null,{"className":"mt-2 text-sm text-muted-foreground","children":"你要找的頁面不存在，或已被移動。"}]]}],["$","$L2",null,{"href":"/","className":"rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90","children":"回到首頁"}]]}],null,["$","$L3",null,{"children":["$","$4",null,{"name":"Next.MetadataOutlet","children":"$@5"}]}]]}],"isPartial":false,"staleTime":300,"varyParams":null,"buildId":"2FbU5b4C5lH5WWOMxjDFv"}
+5:null

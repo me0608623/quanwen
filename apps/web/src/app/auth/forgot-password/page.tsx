@@ -88,7 +88,7 @@ export default function ForgotPasswordPage() {
               autoComplete="email"
               placeholder="請輸入電子郵件"
               autoFocus
-              className="h-11 rounded-[10px] border-slate-200 pl-11 text-sm focus-visible:border-[#1F6FEB] focus-visible:ring-2 focus-visible:ring-[#1F6FEB]/15"
+              className="h-11 rounded-[10px] border-slate-200 pl-11 text-[16px] focus-visible:border-[#1F6FEB] focus-visible:ring-2 focus-visible:ring-[#1F6FEB]/15"
               {...form.register("email")}
             />
           </div>

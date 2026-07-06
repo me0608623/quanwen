@@ -161,7 +161,7 @@ export default function SecurityPage() {
             placeholder={isPlaceholderEmail ? '輸入你的電子郵件' : '輸入新的電子郵件'}
             aria-label="電子郵件"
             required
-            className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+            className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
           />
           <button
             type="submit"
@@ -189,7 +189,7 @@ export default function SecurityPage() {
                 required
                 placeholder="輸入目前密碼"
                 aria-label="目前密碼"
-                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <div>
@@ -202,7 +202,7 @@ export default function SecurityPage() {
                 placeholder="至少 8 碼，含大寫字母及數字"
                 minLength={8}
                 aria-label="新密碼"
-                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
               {pwTooShort && <p className="mt-1 text-xs text-destructive">密碼至少 8 個字元</p>}
               {!pwTooShort && pwNoUppercase && <p className="mt-1 text-xs text-destructive">需包含至少一個大寫字母</p>}
@@ -234,7 +234,7 @@ export default function SecurityPage() {
                 required
                 placeholder="再輸入一次"
                 aria-label="確認新密碼"
-                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring"
               />
             </div>
             <button
@@ -274,7 +274,7 @@ export default function SecurityPage() {
                 minLength={8}
                 disabled={isPlaceholderEmail || setPassword.isPending}
                 aria-label="新密碼"
-                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
               {pwTooShort && <p className="mt-1 text-xs text-destructive">密碼至少 8 個字元</p>}
               {!pwTooShort && pwNoUppercase && <p className="mt-1 text-xs text-destructive">需包含至少一個大寫字母</p>}
@@ -307,7 +307,7 @@ export default function SecurityPage() {
                 placeholder="再輸入一次"
                 disabled={isPlaceholderEmail || setPassword.isPending}
                 aria-label="確認密碼"
-                className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
+                className="w-full rounded-md border px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-50"
               />
             </div>
             <button

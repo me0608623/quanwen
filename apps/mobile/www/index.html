@@ -1,46 +1,16 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <title>券問 QuanWen</title>
-  <style>
-    body {
-      margin: 0;
-      padding: 0;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #ffffff;
-      font-family: -apple-system, system-ui, sans-serif;
-    }
-    .loader {
-      text-align: center;
-      color: #126b8a;
-    }
-    .spinner {
-      width: 40px;
-      height: 40px;
-      border: 3px solid #e0e0e0;
-      border-top-color: #126b8a;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin: 0 auto 1rem;
-    }
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  </style>
 </head>
 <body>
-  <div class="loader">
-    <div class="spinner"></div>
-    <p>載入券問…</p>
-  </div>
   <script>
-    // Redirect to the deployed web app
-    window.location.replace('https://quanwen.vercel.app');
+    // 本地靜態模式：直接載入首頁 HTML
+    window.location.href = '/index.html';
   </script>
 </body>
 </html>

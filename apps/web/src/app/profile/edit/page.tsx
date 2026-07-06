@@ -170,7 +170,7 @@ export default function ProfileEditPage() {
               maxLength={50}
               aria-label="行業（其他）"
               placeholder="請填寫你的行業（最多 50 字）"
-              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+              className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-[16px] focus:outline-none focus:ring-2 focus:ring-primary"
             />
           )}
         </div>
