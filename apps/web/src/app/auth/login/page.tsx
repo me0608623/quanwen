@@ -142,7 +142,7 @@ function LoginForm() {
 
         <div className="flex items-center justify-between pt-1 animate-[fadeIn_0.95s_ease-out]">
           <label className="flex cursor-pointer items-center gap-2 text-sm text-slate-500">
-            <Checkbox id="remember" {...form.register("remember")} />
+            <Checkbox id="remember" aria-label="記住我" {...form.register("remember")} />
             記住我
           </label>
           <Link href="/auth/forgot-password" className="text-sm font-semibold text-[#126b8a] hover:underline">

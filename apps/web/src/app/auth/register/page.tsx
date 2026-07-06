@@ -165,6 +165,7 @@ function RegisterForm() {
             render={({ field }) => (
               <Checkbox
                 id="terms"
+                aria-label="同意服務條款與隱私政策"
                 className="mt-0.5"
                 checked={field.value}
                 onCheckedChange={(checked) => field.onChange(checked === true)}
