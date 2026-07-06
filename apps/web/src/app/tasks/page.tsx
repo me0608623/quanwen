@@ -183,8 +183,13 @@ export default function TasksPage() {
         />
       </div>
 
-      {/* Tabs */}
-      <div role="tablist" aria-label="任務頁籤" className="flex border-b border-border mb-6">
+      {/* Tabs — horizontally scrollable on mobile to prevent overflow */}
+      <div
+        role="tablist"
+        aria-label="任務頁籤"
+        className="flex gap-0 border-b border-border mb-6 overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
         {(Object.entries(TAB) as [TabKey, string][]).map(([key, label]) => (
           <button
             key={key}
@@ -197,7 +202,7 @@ export default function TasksPage() {
             onClick={() => setTab(key)}
             onKeyDown={handleTabKeyDown}
             className={[
-              'px-4 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2',
+              'shrink-0 px-4 py-2.5 text-sm font-medium transition-colors -mb-px border-b-2 whitespace-nowrap',
               key === 'brand'
                 ? tab === key
                   ? 'border-[#C9A227] text-[#A07D14] bg-gradient-to-b from-[#FBF3DC]/80 to-transparent rounded-t-md'
