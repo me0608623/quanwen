@@ -66,8 +66,12 @@ export default function ProfilePage() {
   const repScore = rp?.reputationScore ?? 60;
   const repLevel = getReputationLevel(repScore);
   const totalCompleted = rp?.totalCompleted ?? 0;
-  const completionRateRaw = parseFloat(String(rp?.completionRate ?? '100'));
-  const completionRate = Number.isFinite(completionRateRaw) ? completionRateRaw : 100;
+  const completionRateRaw = parseFloat(String(rp?.completionRate ?? '0'));
+  // When user has completed zero surveys, completion rate is meaningless — show 0%
+  // instead of a misleading 100%.
+  const completionRate = totalCompleted > 0
+    ? (Number.isFinite(completionRateRaw) ? completionRateRaw : 0)
+    : 0;
 
   const rewardedCount = history.filter((r) => r.status === 'rewarded').length;
 
