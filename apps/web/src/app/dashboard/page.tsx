@@ -223,7 +223,7 @@ export default function DashboardPage() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="搜尋問卷標題…"
             aria-label="搜尋問卷標題"
-            className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-sm"
+            className="w-full max-w-xs rounded-md border border-input bg-background px-3 py-2 text-[16px]"
           />
           <select
             value={statusFilter}
