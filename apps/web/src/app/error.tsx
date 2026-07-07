@@ -30,13 +30,13 @@ export default function Error({
       <div className="flex items-center gap-3">
         <button
           onClick={() => reset()}
-          className="rounded-md bg-primary px-5 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+          className="inline-flex min-h-[44px] items-center rounded-md bg-primary px-5 py-2.5 text-sm font-medium text-primary-foreground hover:opacity-90"
         >
           重試
         </button>
         <Link
           href="/"
-          className="rounded-md border border-input px-5 py-2 text-sm font-medium hover:bg-muted"
+          className="inline-flex min-h-[44px] items-center rounded-md border border-input px-5 py-2.5 text-sm font-medium hover:bg-muted"
         >
           回到首頁
         </Link>

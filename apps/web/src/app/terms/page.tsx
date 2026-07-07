@@ -11,7 +11,7 @@ export default function TermsPage() {
     <div className="mx-auto max-w-3xl px-6 py-12">
       <Link
         href="/"
-        className="mb-8 inline-flex items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900"
+        className="mb-8 inline-flex min-h-[44px] items-center gap-1.5 text-sm text-slate-500 hover:text-slate-900"
       >
         <ArrowLeft className="h-4 w-4" /> 返回首頁
       </Link>

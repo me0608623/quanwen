@@ -74,7 +74,7 @@ export default function IntroPage() {
             localStorage.setItem('quanwen_intro_seen', 'true');
             router.push('/tasks');
           }}
-          className="text-sm text-slate-400 hover:text-slate-600"
+          className="flex min-h-[44px] items-center px-3 text-sm text-slate-400 hover:text-slate-600"
         >
           跳過
         </button>
