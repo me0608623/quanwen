@@ -553,7 +553,7 @@ function SurveySheet({ className, withFold = false }: { className?: string; with
               <span
                 className={`h-2.5 w-2.5 rounded-full border ${idx === 3 ? "border-cyan-500 bg-cyan-500/20" : "border-slate-300 bg-white"}`}
               />
-              <span className="text-[7px] text-slate-400">{label}</span>
+              <span className="text-[9px] text-slate-400">{label}</span>
             </div>
           ))}
         </div>
