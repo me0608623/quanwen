@@ -224,7 +224,7 @@ export default function ProfilePage() {
             <p className="text-sm font-semibold text-muted-foreground uppercase tracking-wide">基本資料</p>
             <button
               onClick={() => router.push('/profile/edit')}
-              className="text-xs text-primary hover:underline"
+              className="inline-flex min-h-[44px] items-center rounded-md px-2 py-1.5 text-xs text-primary hover:bg-primary/5"
             >
               編輯
             </button>
