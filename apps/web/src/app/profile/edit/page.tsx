@@ -129,7 +129,7 @@ export default function ProfileEditPage() {
             if (dirty && !confirm('有未儲存的變更，確定要離開嗎？')) return;
             router.back();
           }}
-          className="rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-primary"
+          className="inline-flex min-h-[44px] items-center rounded-md px-2 py-2 text-sm text-muted-foreground hover:bg-muted hover:text-primary"
         >
           ← 返回
         </button>
@@ -149,7 +149,7 @@ export default function ProfileEditPage() {
             value={form.region}
             onChange={set('region')}
             aria-label="居住縣市"
-            className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+            className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
           >
             <option value="">請選擇</option>
             {TW_REGIONS.map((r) => (
@@ -228,7 +228,7 @@ function SelectField({
         value={value}
         onChange={onChange}
         aria-label={label}
-        className="w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+        className="w-full min-h-[44px] rounded-md border border-input bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
       >
         <option value="">請選擇</option>
         {options.map((o) => (
