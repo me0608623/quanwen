@@ -80,7 +80,7 @@ export default function ContactPage() {
             type="button"
             disabled={!canSend}
             onClick={handleSend}
-            className="rounded-md bg-[var(--q-primary)] px-6 py-2.5 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)] disabled:opacity-50"
+            className="inline-flex min-h-[44px] items-center rounded-md bg-[var(--q-primary)] px-6 py-2.5 text-sm font-semibold text-[var(--q-on-primary)] transition hover:bg-[var(--q-primary-active)] disabled:opacity-50"
           >
             送出
           </button>
