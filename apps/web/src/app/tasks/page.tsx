@@ -235,8 +235,8 @@ export default function TasksPage() {
 
       {/* 個資完整度提示（available tab、未完善、未關閉時） */}
       {tab === 'available' && respondentProfile && !nudgeDismissed && profileCompleteness(respondentProfile).percent < 100 && (
-        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-[#126b8a]/30 bg-[#126b8a]/5 px-4 py-2.5">
-          <p className="text-xs text-[#126b8a]">
+        <div className="mb-3 flex items-center justify-between gap-2 rounded-lg border border-[#126b8a]/30 bg-[#126b8a]/5 px-4 py-2.5">
+          <p className="min-w-0 flex-1 text-xs leading-relaxed text-[#126b8a]">
             完善個人資料（目前 {profileCompleteness(respondentProfile).percent}%）可被媒合到更多問卷。
             <Link href="/profile/edit" className="ml-1 font-semibold underline">去完善 →</Link>
           </p>
