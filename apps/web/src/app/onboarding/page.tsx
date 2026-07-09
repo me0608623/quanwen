@@ -93,13 +93,13 @@ export default function OnboardingPage() {
   };
 
   return (
-    <main className="mx-auto max-w-md px-6 py-10">
-      <h1 className="mb-3 text-xl font-bold leading-tight">完善你的資料</h1>
-      <p className="mb-6 text-xs text-muted-foreground leading-relaxed">
+    <main className="mx-auto max-w-md px-4 py-6">
+      <h1 className="mb-2 text-lg font-bold leading-snug">完善你的資料</h1>
+      <p className="mb-5 text-xs text-muted-foreground leading-6">
         填寫基本資料有助於收到更符合你的問卷，所有欄位皆可稍後修改。
       </p>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
+      <form onSubmit={handleSubmit} className="space-y-5">
         <SelectField label="年齡層" value={form.ageRange} onChange={set('ageRange')} options={AGE_RANGE_OPTIONS} />
         <SelectField label="性別" value={form.gender} onChange={set('gender')} options={GENDER_OPTIONS} />
 
@@ -137,7 +137,7 @@ export default function OnboardingPage() {
 
         <SelectField label="學歷" value={form.education} onChange={set('education')} options={EDUCATION_OPTIONS} />
 
-        <div>
+        <div className="px-1">
           <label className="mb-2 block text-sm font-medium">興趣標籤（最多 10 個）</label>
           {tagsLoading ? (
             <p className="text-sm text-muted-foreground">載入標籤中…</p>
