@@ -55,9 +55,9 @@ describe('CryptoService', () => {
     });
 
     it('throws on null/undefined input', () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       expect(() => svc.encrypt(null as any)).toThrow();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       expect(() => svc.encrypt(undefined as any)).toThrow();
     });
 
@@ -122,7 +122,7 @@ describe('CryptoService', () => {
 
     it('handles empty / undefined input', () => {
       expect(svc.redactPii('')).toBe('');
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       expect(svc.redactPii(null as any)).toBe(null);
     });
 

@@ -137,7 +137,7 @@ function initSentry() {
   try {
     // 套件需要 pnpm install @sentry/node @sentry/profiling-node 才會解析；
     // 用 dynamic require 避開靜態 import 解析錯誤
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+     
     const Sentry = require('@sentry/node');
     Sentry.init({
       dsn,
@@ -166,13 +166,13 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   // Enable URL-encoded body parsing (needed for Apple Sign In form_post callback)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const expressApp = app.getHttpAdapter().getInstance() as { use: (...args: unknown[]) => void };
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   expressApp.use(require('express').urlencoded({ extended: true }));
 
   // Cookie parsing — needed for mobile OAuth deep-link detection (oauth_mobile cookie)
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   expressApp.use(require('cookie-parser')());
 
   type RequestWithContext = Request & { requestId?: string };
@@ -208,7 +208,7 @@ async function bootstrap() {
 
   // Phase K.1: Helmet 安全 headers（X-Frame-Options/HSTS/X-Content-Type-Options 等）
   // contentSecurityPolicy 在 dev 關掉以免擋 Swagger/Next.js dev assets；prod 開啟
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const helmet = require('helmet');
   expressApp.use(helmet({
     contentSecurityPolicy: process.env.NODE_ENV === 'production' ? undefined : false,
@@ -217,7 +217,7 @@ async function bootstrap() {
 
   // 上傳檔案靜態服務:UploadService 落地在 <cwd>/uploads,對外以 /uploads/* 取用
   // CORP 設 cross-origin,讓前端(不同 origin)能以 <img> 載入;否則被 helmet 的 same-origin 擋下
-  // eslint-disable-next-line @typescript-eslint/no-var-requires
+   
   const expressStatic = require('express').static;
   expressApp.use(
     '/uploads',

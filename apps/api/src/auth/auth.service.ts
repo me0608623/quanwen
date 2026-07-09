@@ -624,7 +624,7 @@ export class AuthService {
       return null;
     }
     try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
+       
       const jose = require('jose');
       const JWKS = jose.createRemoteJWKSet(new URL('https://appleid.apple.com/auth/keys'));
       const { payload } = await jose.jwtVerify(idToken, JWKS, {

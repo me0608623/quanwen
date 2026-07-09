@@ -21,7 +21,7 @@ describe('ZaiClient', () => {
     process.env.ZAI_MAX_RETRIES = '2';
     client = new ZaiClient();
     // 重要：cast 到 any 因為 fetch 的 spy 型別 narrow 在 TS strict 下複雜
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     fetchSpy = vi.spyOn(global, 'fetch') as any;
   });
 
