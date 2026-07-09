@@ -186,7 +186,7 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
 
   return (
     <div ref={rootRef} className={cn('space-y-8', className)}>
-      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 px-6 py-8 text-white shadow-xl shadow-slate-950/10 md:px-8 md:py-10">
+      <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 px-8 py-10 text-white shadow-xl shadow-slate-950/10 md:px-8 md:py-10">
         <GoldWave className="pointer-events-none absolute inset-0 z-0 h-full w-full opacity-80" />
         <div data-shop-orb aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl" />
         <div aria-hidden className="pointer-events-none absolute -bottom-32 left-1/4 h-64 w-64 rounded-full bg-blue-500/20 blur-3xl" />
