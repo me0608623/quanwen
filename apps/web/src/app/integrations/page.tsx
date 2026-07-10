@@ -4,7 +4,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 
 export const metadata: Metadata = {
-  title: "整合 — 券問 QuanWen",
+  title: "整合",
   description: "券問整合：原生整合台灣在地服務，OAuth 多方登入、綠界 ECPay 金流、超商禮券通路。",
 };
 

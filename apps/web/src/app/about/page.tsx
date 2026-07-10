@@ -4,7 +4,7 @@ import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
 
 export const metadata: Metadata = {
-  title: "關於我們 — 券問 QuanWen",
+  title: "關於我們",
   description: "券問 QuanWen 是台灣的「AI 把關 + 雙邊自助」問卷媒合平台。品質優先、雙邊自助、透明合規、在地友善。",
 };
 
