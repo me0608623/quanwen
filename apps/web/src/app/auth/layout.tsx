@@ -1,10 +1,7 @@
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: {
-    template: "%s · 券問 QuanWen",
-    default: "登入",
-  },
+  title: "登入",
   description: "券問是一個媒合「想發問卷的人」與「願意填問卷的人」的雙邊平台。",
 };
 
