@@ -1,6 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "解決方案 — 券問 QuanWen",
+  description: "券問解決方案：為問卷方與填答者打造雙邊閉環，問卷方精準取樣、填答方公平賺取回報。",
+};
 
 export default function SolutionsPage() {
   return (

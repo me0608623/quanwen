@@ -1,6 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "產品優勢 — 券問 QuanWen",
+  description: "券問產品優勢：三層 AI 品質審核、AI 數據分析、互惠問卷同步解鎖、信譽積分系統、綠界金流託管、端到端個資加密",
+};
 
 const featureCards = [
   {

@@ -1,6 +1,12 @@
 import Link from "next/link";
+import type { Metadata } from "next";
 import { MarketingFooter } from "@/components/marketing/marketing-footer";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+
+export const metadata: Metadata = {
+  title: "整合 — 券問 QuanWen",
+  description: "券問整合：原生整合台灣在地服務，OAuth 多方登入、綠界 ECPay 金流、超商禮券通路。",
+};
 
 const connectors = [
   {
