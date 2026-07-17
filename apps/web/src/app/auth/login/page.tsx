@@ -165,7 +165,7 @@ function LoginForm() {
         </Button>
       </form>
 
-      <p className="mt-8 text-center text-[11px] leading-relaxed text-slate-400 animate-[fadeIn_1.15s_ease-out]">
+      <p className="mt-6 text-center text-[10px] leading-tight text-slate-400 animate-[fadeIn_1.15s_ease-out]">
         登入即代表你同意
         <Link href="/terms" className="mx-1 text-slate-500 underline">
           服務條款
