@@ -142,8 +142,8 @@ export default function IntroPage() {
       </div>
 
       {/* 底部裝飾 */}
-      <div className="absolute bottom-4 left-0 right-0 text-center">
-        <p className="text-xs text-slate-300">
+      <div className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] left-0 right-0 text-center">
+        <p className="text-xs text-slate-400">
           券問 QuanWen · 讓問卷更有價值
         </p>
       </div>

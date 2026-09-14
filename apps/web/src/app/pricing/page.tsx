@@ -8,7 +8,7 @@ export default function PricingPage() {
       <MarketingNav />
 
       <section className="mx-auto max-w-6xl px-4 pb-16 pt-16 sm:px-6 lg:px-8 lg:pt-24">
-        <h1 className="max-w-4xl font-serif text-4xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl">
+        <h1 className="max-w-4xl text-balance font-serif text-3xl leading-tight tracking-[-0.02em] text-[var(--q-ink)] sm:text-5xl">
           透明價格，沒有隱藏費用
         </h1>
         <p className="mt-6 max-w-3xl text-lg leading-relaxed text-[var(--q-body-strong)]">
