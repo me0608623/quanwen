@@ -10,6 +10,8 @@ const STEPS = [
     desc: '填寫精準媒合的問卷，賺取現金、超商禮券與積分',
     bgGradient: 'from-blue-500 to-cyan-500',
     textColor: 'text-blue-600',
+    shadowSoft: 'shadow-blue-500/20',
+    shadowStrong: 'shadow-blue-500/30',
   },
   {
     icon: '💰',
@@ -17,6 +19,8 @@ const STEPS = [
     desc: '設定受眾與獎勵，系統自動媒合適合的填答者',
     bgGradient: 'from-amber-500 to-orange-500',
     textColor: 'text-amber-600',
+    shadowSoft: 'shadow-amber-500/20',
+    shadowStrong: 'shadow-amber-500/30',
   },
   {
     icon: '📊',
@@ -24,6 +28,8 @@ const STEPS = [
     desc: '即時統計與圖表，讓你快速掌握問卷結果',
     bgGradient: 'from-emerald-500 to-green-500',
     textColor: 'text-emerald-600',
+    shadowSoft: 'shadow-emerald-500/20',
+    shadowStrong: 'shadow-emerald-500/30',
   },
   {
     icon: '🎡',
@@ -31,6 +37,8 @@ const STEPS = [
     desc: '完成問卷獲得抽獎機會，最高可得 200 積分',
     bgGradient: 'from-rose-500 to-pink-500',
     textColor: 'text-rose-600',
+    shadowSoft: 'shadow-rose-500/20',
+    shadowStrong: 'shadow-rose-500/30',
   },
 ];
 
@@ -98,7 +106,7 @@ export default function IntroPage() {
         {/* 圖示 */}
         <div className="mb-8 flex justify-center">
           <div
-            className={`relative flex h-32 w-32 items-center justify-center rounded-3xl bg-gradient-to-br ${current.bgGradient} shadow-2xl shadow-${current.textColor}/20`}
+            className={`relative flex h-32 w-32 items-center justify-center rounded-3xl bg-gradient-to-br ${current.bgGradient} shadow-2xl ${current.shadowSoft}`}
           >
             <span className="text-7xl">{current.icon}</span>
             {/* 裝飾光暈 */}
@@ -129,7 +137,7 @@ export default function IntroPage() {
 
           <button
             onClick={next}
-            className={`flex-1 rounded-2xl bg-gradient-to-r ${current.bgGradient} py-4 text-lg font-bold text-white shadow-lg shadow-${current.textColor}/30 hover:scale-[1.02] active:scale-95 transition-all`}
+            className={`flex-1 rounded-2xl bg-gradient-to-r ${current.bgGradient} py-4 text-lg font-bold text-white shadow-lg ${current.shadowStrong} hover:scale-[1.02] active:scale-95 transition-all`}
           >
             {step === STEPS.length - 1 ? '開始使用' : '下一步'}
           </button>
