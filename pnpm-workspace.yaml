@@ -34,3 +34,13 @@ overrides:
   vite: '>=6.4.2'
   postcss: '>=8.5.10'
   uuid: '>=11.1.1'
+
+# Expo / browserslist packages publish often; shared root lockfile is verified
+# even for `pnpm install --filter web` in Docker, so exempt them from the
+# default 24h minimumReleaseAge gate (pnpm 11+) until web installs are isolated.
+minimumReleaseAgeExclude:
+  - expo
+  - '@expo/*'
+  - babel-preset-expo
+  - baseline-browser-mapping
+  - electron-to-chromium

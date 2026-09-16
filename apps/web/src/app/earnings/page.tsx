@@ -60,6 +60,22 @@ export default function EarningsPage() {
     <main className="mx-auto max-w-xl px-4 py-10 space-y-6">
       <h1 className="text-2xl font-bold">我的收益</h1>
 
+      {/* 現金收益摘要（E2E / 帳本對帳用） */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="rounded-lg border border-border bg-card p-3 text-center">
+          <p className="text-[11px] text-muted-foreground">累計獲得</p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-foreground">NT${summary.totalEarned.toLocaleString()}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3 text-center">
+          <p className="text-[11px] text-muted-foreground">本月收益</p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-foreground">NT${summary.thisMonth.toLocaleString()}</p>
+        </div>
+        <div className="rounded-lg border border-border bg-card p-3 text-center">
+          <p className="text-[11px] text-muted-foreground">待入帳</p>
+          <p className="mt-1 text-lg font-bold tabular-nums text-amber-700">NT${summary.pendingRewards.toLocaleString()}</p>
+        </div>
+      </div>
+
       {/* 積分總覽 */}
       {pointsSummary && (
         <div className="rounded-xl border border-amber-200 bg-gradient-to-br from-amber-50 to-orange-50 p-5">
