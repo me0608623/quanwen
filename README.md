@@ -723,3 +723,16 @@ pnpm db:studio             # 開啟 Drizzle Studio GUI
 | 2026-05-18 | v0.9 | Sprint 7 完成（金流帳務：錢包 + 複式記帳 + 自動獎勵 + 提領申請） |
 | 2026-05-18 | v1.0 | Sprint 8 完成（預算鎖定/退款 + 管理員提領審核 + 發布預算警告） |
 | 2026-05-18 | v1.1 | Sprint 9 完成（分析報表：趨勢圖 + CSV 匯出 + 收益摘要 + 平台收入） |
+
+---
+
+## Mobile（Expo / React Native）
+
+受試者 Android 客戶端位於 `apps/mobile`（Expo）。詳見 [`apps/mobile/README.md`](apps/mobile/README.md)。
+
+```bash
+# 指向本機 API（模擬器）
+# apps/mobile/.env → EXPO_PUBLIC_API_URL=http://10.0.2.2:3001/api/v1
+pnpm --filter mobile start
+pnpm --filter mobile build:apk   # 需 JDK + Android SDK
+```
