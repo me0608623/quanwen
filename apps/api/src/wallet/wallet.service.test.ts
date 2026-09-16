@@ -716,6 +716,39 @@ describe('WalletService', () => {
       expect(summary.totalEarned).toBe(0);
       expect(summary.pendingRewards).toBe(0);
     });
+
+    it('buckets monthly keys by Asia/Taipei, not UTC', async () => {
+      const mockSelect = {
+        from: vi.fn().mockReturnThis(),
+        where: vi.fn().mockReturnThis(),
+        orderBy: vi.fn().mockReturnThis(),
+      };
+      mockDb.select.mockReturnValueOnce(mockSelect);
+      // 2026-08-31 17:00 UTC = 2026-09-01 01:00 Taipei → month 2026-09
+      mockSelect.orderBy.mockResolvedValueOnce([
+        {
+          amount: 80,
+          status: 'success',
+          relatedSurveyId: null,
+          completedAt: new Date('2026-08-31T17:00:00.000Z'),
+          createdAt: new Date('2026-08-31T17:00:00.000Z'),
+        },
+        {
+          amount: 20,
+          status: 'success',
+          relatedSurveyId: null,
+          completedAt: new Date('2026-08-31T15:00:00.000Z'), // still Aug 31 23:00 Taipei
+          createdAt: new Date('2026-08-31T15:00:00.000Z'),
+        },
+      ]);
+
+      const summary = await service.getEarningsSummary('u1');
+      const byMonth = Object.fromEntries(summary.monthly.map((m) => [m.month, m.amount]));
+      expect(byMonth['2026-09']).toBe(80);
+      expect(byMonth['2026-08']).toBe(20);
+      // UTC slice would wrongly put the first reward in 2026-08
+      expect(new Date('2026-08-31T17:00:00.000Z').toISOString().slice(0, 7)).toBe('2026-08');
+    });
   });
 
   describe('grantPoints', () => {

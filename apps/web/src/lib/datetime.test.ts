@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatDateTime, formatDate, formatShortDate, taipeiDateKey } from './datetime';
+import { formatDateTime, formatDate, formatShortDate, taipeiDateKey, taipeiMonthKey } from './datetime';
 
 describe('datetime (Asia/Taipei)', () => {
   it('formats UTC midnight as Taipei morning', () => {
@@ -29,5 +29,9 @@ describe('datetime (Asia/Taipei)', () => {
   it('formatShortDate returns zh-TW month/day', () => {
     const s = formatShortDate('2026-09-16T00:00:00.000Z');
     expect(s.length).toBeGreaterThan(2);
+  });
+
+  it('taipeiMonthKey buckets near UTC month boundary', () => {
+    expect(taipeiMonthKey('2026-08-31T17:00:00.000Z')).toBe('2026-09');
   });
 });

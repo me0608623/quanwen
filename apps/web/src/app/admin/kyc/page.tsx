@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useAdminKycList, useApproveKyc, useRejectKyc, AdminKycRow } from '@/hooks/use-admin';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 export default function AdminKycPage() {
   const { data: list = [], isLoading } = useAdminKycList();
@@ -9,28 +11,32 @@ export default function AdminKycPage() {
   const reject = useRejectKyc();
   const [target, setTarget] = useState<{ row: AdminKycRow; action: 'approve' | 'reject' } | null>(null);
   const [note, setNote] = useState('');
+  const { showToast, toastNode } = useAppToast();
 
   const submit = async () => {
     if (!target) return;
     try {
       if (target.action === 'approve') {
         await approve.mutateAsync({ id: target.row.id, adminNote: note.trim() || undefined });
+        showToast('已通過 KYC', 'success');
       } else {
         if (note.trim().length < 5) {
-          alert('駁回需附說明（至少 5 字）');
+          showToast('駁回需附說明（至少 5 字）', 'error');
           return;
         }
         await reject.mutateAsync({ id: target.row.id, adminNote: note.trim() });
+        showToast('已駁回 KYC', 'success');
       }
       setTarget(null);
       setNote('');
-    } catch (err: any) {
-      alert(err?.response?.data?.message ?? '處理失敗');
+    } catch (err) {
+      showToast(extractApiError(err, '處理失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 space-y-6">
+      {toastNode}
       <div>
         <h1 className="text-2xl font-bold">KYC 身份驗證審核</h1>
         <p className="text-xs text-muted-foreground mt-1">

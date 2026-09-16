@@ -7,6 +7,8 @@ import {
   useDismissAppeal,
   AdminAppealRow,
 } from '@/hooks/use-admin';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 type StatusFilter = 'pending' | 'approved' | 'dismissed';
 
@@ -17,28 +19,32 @@ export default function AdminAppealsPage() {
   const dismiss = useDismissAppeal();
   const [target, setTarget] = useState<{ row: AdminAppealRow; action: 'approve' | 'dismiss' } | null>(null);
   const [note, setNote] = useState('');
+  const { showToast, toastNode } = useAppToast();
 
   const handleSubmit = async () => {
     if (!target) return;
     try {
       if (target.action === 'approve') {
         await approve.mutateAsync({ id: target.row.id, adminNote: note.trim() || undefined });
+        showToast('已通過申訴', 'success');
       } else {
         if (note.trim().length < 5) {
-          alert('駁回需附說明（至少 5 字）');
+          showToast('駁回需附說明（至少 5 字）', 'error');
           return;
         }
         await dismiss.mutateAsync({ id: target.row.id, adminNote: note.trim() });
+        showToast('已駁回申訴', 'success');
       }
       setTarget(null);
       setNote('');
-    } catch (err: any) {
-      alert(err?.response?.data?.message ?? '處理失敗');
+    } catch (err) {
+      showToast(extractApiError(err, '處理失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-10 space-y-6">
+      {toastNode}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">申訴管理</h1>
         <div className="flex gap-1 rounded-lg border border-border bg-card p-1">

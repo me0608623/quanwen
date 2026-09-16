@@ -9,13 +9,21 @@ import Link from 'next/link';
 import { useMutualPair, useMutualPoolStats, useSubmitMutualResponse, useReEnqueueMutual, useSubmitMutualProof, useRateMutual, type MutualQuestion, type MutualUnlocked, type MutualPairDetail } from '@/hooks/use-mutual';
 import { useMe } from '@/hooks/use-auth';
 import { RatingScale, RatingScaleConfig } from '@/components/survey-editor/rating-scale';
+import { MatrixAnswerTable } from '@/components/survey/matrix-answer-table';
 import { extractApiError } from '@/lib/extract-error';
 import { useAppToast } from '@/components/ui/app-toast';
+import {
+  isMatrixAnswerComplete,
+  matrixConfigParts,
+  serializeMatrixAnswer,
+  type MatrixValue,
+} from '@/lib/matrix-answer';
 
 type AnswerState = {
   textAnswer?: string;
   selectedOptionIds?: string[];
   ratingValue?: number;
+  matrixAnswer?: MatrixValue;
 };
 
 export default function MutualFillPage() {
@@ -174,9 +182,17 @@ export default function MutualFillPage() {
     const payload = survey.questions
       .map((q) => {
         const a = answers[q.id] ?? {};
+        let textAnswer = a.textAnswer;
+        if (q.type === 'matrix') {
+          const { multiple } = matrixConfigParts(q.config);
+          const mv = a.matrixAnswer ?? {};
+          if (Object.keys(mv).length > 0) {
+            textAnswer = serializeMatrixAnswer(mv, multiple);
+          }
+        }
         return {
           questionId: q.id,
-          textAnswer: a.textAnswer,
+          textAnswer,
           selectedOptionIds: a.selectedOptionIds,
           ratingValue: a.ratingValue,
         };
@@ -191,6 +207,10 @@ export default function MutualFillPage() {
       if (q.type === 'text') return !a.textAnswer?.trim();
       if (q.type === 'single_choice' || q.type === 'multiple_choice') return !a.selectedOptionIds?.length;
       if (q.type === 'rating') return a.ratingValue === undefined;
+      if (q.type === 'matrix') {
+        const { rows, multiple } = matrixConfigParts(q.config);
+        return !isMatrixAnswerComplete(a.matrixAnswer ?? {}, rows, multiple);
+      }
       return false;
     });
     if (missing.length > 0) {
@@ -454,7 +474,13 @@ function QuestionBlock({
       )}
 
       {q.type === 'matrix' && (
-        <p className="text-xs italic text-muted-foreground">（矩陣題尚不支援，請略過或改用其他題型）</p>
+        <MatrixAnswerTable
+          config={q.config}
+          value={value.matrixAnswer ?? {}}
+          editable
+          namePrefix={`mutual-${q.id}`}
+          onChange={(matrixAnswer) => onChange({ matrixAnswer })}
+        />
       )}
     </div>
   );
@@ -558,7 +584,16 @@ function AnswerDisplay({ q }: { q: MutualUnlocked['questions'][number] }) {
     );
   }
 
-  return <p className="text-sm italic text-muted-foreground">（矩陣題顯示尚未支援）</p>;
+  if (q.type === 'matrix') {
+    return (
+      <MatrixAnswerTable
+        config={q.config}
+        textAnswer={q.answer?.textAnswer}
+      />
+    );
+  }
+
+  return <p className="text-sm italic text-muted-foreground">（此題型顯示尚未支援）</p>;
 }
 
 // ─── 外部連結互惠視圖（截圖證明 + 互評）────────────────────────────────────────

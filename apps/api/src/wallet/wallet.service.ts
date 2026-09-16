@@ -20,6 +20,7 @@ import { EcpayService } from './ecpay.service';
 import { CryptoService } from '../common/crypto.service';
 import { KycService } from '../kyc/kyc.service';
 import { SystemConfigService } from '../system-config/system-config.service';
+import { startOfTaipeiMonth, taipeiMonthKey } from '../common/timezone';
 
 @Injectable()
 export class WalletService {
@@ -594,8 +595,7 @@ export class WalletService {
       .where(and(eq(transactions.userId, userId), eq(transactions.type, 'reward_in')))
       .orderBy(desc(transactions.createdAt));
 
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfMonth = startOfTaipeiMonth();
 
     let totalEarned = 0;
     let pendingRewards = 0;
@@ -644,7 +644,8 @@ export class WalletService {
       if (r.status !== 'success') continue;
       const d = r.completedAt ?? r.createdAt;
       if (!d) continue;
-      const monthKey = new Date(d).toISOString().slice(0, 7); // YYYY-MM
+      const monthKey = taipeiMonthKey(d); // YYYY-MM in Asia/Taipei
+      if (!monthKey) continue;
       monthlyMap.set(monthKey, (monthlyMap.get(monthKey) ?? 0) + r.amount);
     }
     const monthly = [...monthlyMap.entries()]
@@ -837,8 +838,7 @@ export class WalletService {
         ),
       );
 
-    const now = new Date();
-    const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const firstDayOfMonth = startOfTaipeiMonth();
     let totalEarned = 0;
     let totalSpent = 0;
     let thisMonth = 0;

@@ -4,6 +4,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useTabsKeyboard } from '@/hooks/use-tabs-keyboard';
 import { useRouter } from 'next/navigation';
 import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 import { useSubmitImportAppeal } from '@/hooks/use-import-appeals';
 import {
   useImportJson,
@@ -174,6 +175,7 @@ function ImportAppealSection({ highlight }: { highlight: boolean }) {
   const [note, setNote] = useState('');
   const [done, setDone] = useState(false);
   const submit = useSubmitImportAppeal();
+  const { showToast, toastNode } = useAppToast();
 
   if (done) {
     return (
@@ -186,6 +188,7 @@ function ImportAppealSection({ highlight }: { highlight: boolean }) {
 
   return (
     <div className={`rounded-lg border p-4 ${highlight ? 'border-amber-300 bg-amber-50' : 'border-border bg-muted/30'}`}>
+      {toastNode}
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-sm font-semibold">匯入失敗了？讓我們幫你匯入</p>
@@ -245,7 +248,7 @@ function ImportAppealSection({ highlight }: { highlight: boolean }) {
                   await submit.mutateAsync({ surveyUrl: surveyUrl.trim(), title: title.trim() || undefined, note: note.trim() || undefined });
                   setDone(true);
                 } catch (err) {
-                  alert(extractApiError(err, '送出失敗，請稍後再試'));
+                  showToast(extractApiError(err, '送出失敗，請稍後再試'), 'error');
                 }
               }}
               className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
