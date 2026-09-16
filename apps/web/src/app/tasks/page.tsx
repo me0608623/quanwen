@@ -48,7 +48,7 @@ export default function TasksPage() {
   const respondentProfile = isRespondentProfile(myProfile) ? myProfile : null;
   const { data: surveys = [], isLoading: surveysLoading, isError: surveysError, refetch: refetchSurveys } = useAvailableSurveys(category || undefined);
   const { data: catCounts = {} } = useTaskCategoryCounts();
-  const { data: history = [], isLoading: historyLoading, isError: historyError } = useMyResponses();
+  const { data: history = [], isLoading: historyLoading, isError: historyError, refetch: refetchHistory } = useMyResponses();
   const { data: lotteryResults = [], isLoading: lotteryResultsLoading } = useLotteryResults();
   const { data: myAppeals = [] } = useMyAppeals();
   const createAppeal = useCreateAppeal();
@@ -350,7 +350,7 @@ export default function TasksPage() {
 
           {surveysError && (
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
-              <p className="text-sm text-destructive">載入失敗。</p>
+              <p className="text-sm text-destructive">可填問卷載入失敗。</p>
               <button
                 onClick={() => refetchSurveys()}
                 className="mt-2 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
@@ -578,7 +578,16 @@ export default function TasksPage() {
           )}
 
           {historyError && (
-            <p className="text-sm text-destructive">載入失敗，請重新整理頁面。</p>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-4 text-center">
+              <p className="text-sm text-destructive">填答紀錄載入失敗。</p>
+              <button
+                type="button"
+                onClick={() => refetchHistory()}
+                className="mt-2 rounded-md border border-destructive/40 px-3 py-1.5 text-xs font-medium text-destructive hover:bg-destructive/10"
+              >
+                重試
+              </button>
+            </div>
           )}
 
           {!historyLoading && !historyError && history.length === 0 && (

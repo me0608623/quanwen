@@ -12,6 +12,7 @@ import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, darkenHex, fontFamilyClass } from '
 
 export interface SurveyRendererSurveyJSProps {
   survey: PublicSurvey;
+  /** Resolve on success; reject (or throw) on failure so the form stays editable. */
   onSubmit: (answers: AnswerInput[]) => Promise<void>;
   submitting?: boolean;
   /** Called once after the SurveyJS model is created; parent can use it for sidebar integration. */
@@ -32,6 +33,12 @@ export function SurveyRendererSurveyJS({
   const modelRef = useRef<SurveyModel | null>(null);
   const submittingRef = useRef(submitting);
   submittingRef.current = submitting;
+  const onSubmitRef = useRef(onSubmit);
+  onSubmitRef.current = onSubmit;
+  const questionsRef = useRef(survey.questions);
+  questionsRef.current = survey.questions;
+  /** True only while we intentionally finish after a successful API submit. */
+  const allowFinishRef = useRef(false);
 
   // 套用問卷樣式主題
   const accent = survey.theme?.accentColor ?? DEFAULT_ACCENT;
@@ -56,8 +63,8 @@ export function SurveyRendererSurveyJS({
     model.progressBarType = 'questions';
     // QUA-141: use Traditional Chinese for all built-in SurveyJS strings
     model.locale = 'zh-tw';
+    model.completeText = '送出填答';
 
-    // We'll handle completion via onComplete callback
     modelRef.current = model;
   }
 
@@ -71,29 +78,51 @@ export function SurveyRendererSurveyJS({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleComplete = useCallback(
-    async (sender: SurveyModel) => {
-      if (submittingRef.current) return; // prevent double submit
+  // Submit loading: disable editing + update complete button label
+  useEffect(() => {
+    model.readOnly = submitting;
+    model.completeText = submitting ? '送出中…' : '送出填答';
+  }, [model, submitting]);
 
-      const data = sender.data;
-      const answers = extractAnswers(data, survey.questions);
-      await onSubmit(answers);
+  const handleCompleting = useCallback(
+    (sender: SurveyModel, options: { allowComplete?: boolean }) => {
+      // After a successful submit we call doComplete(); let that finish through.
+      if (allowFinishRef.current) {
+        allowFinishRef.current = false;
+        return;
+      }
+      // Block SurveyJS from marking complete until the API accepts the answers.
+      options.allowComplete = false;
+      if (submittingRef.current) return;
+
+      const answers = extractAnswers(sender.data, questionsRef.current);
+      void (async () => {
+        try {
+          await onSubmitRef.current(answers);
+          allowFinishRef.current = true;
+          sender.doComplete();
+        } catch {
+          // Parent surfaces the API / anti-cheat message; keep the form editable.
+          allowFinishRef.current = false;
+        }
+      })();
     },
-    [survey.questions, onSubmit],
+    [],
   );
 
   useEffect(() => {
-    model.onComplete.add(handleComplete);
+    model.onCompleting.add(handleCompleting);
     return () => {
-      model.onComplete.remove(handleComplete);
+      model.onCompleting.remove(handleCompleting);
     };
-  }, [model, handleComplete]);
+  }, [model, handleCompleting]);
 
   // Apply custom styling — accent 由問卷主題注入（CSS 變數），可被發問卷方覆寫
   return (
     <div
       className={`surveyjs-wrapper mt-5 ${fontClass}`}
       style={{ '--qw-accent': accent, '--qw-accent-dark': accentDark, '--qw-bg': bg } as CSSProperties}
+      aria-busy={submitting || undefined}
     >
       <Survey model={model} />
       <style jsx global>{`

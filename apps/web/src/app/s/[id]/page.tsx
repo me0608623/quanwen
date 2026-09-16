@@ -25,6 +25,7 @@ import { estimateFillMinutes } from '@/lib/fill-time';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import { getToken } from '@/lib/token';
+import { extractSubmitError } from '@/lib/extract-error';
 import { SidebarNav } from '@/components/survey-glass/sidebar-nav';
 
 const ANON_KEY = 'quanwen_anon_token_v1';
@@ -323,8 +324,14 @@ export default function PublicSurveyPage() {
         startedAt: startedAtRef.current,
       });
       setDone({ flagged: result.flagged });
-    } catch {
-      // 錯誤透過 submit.error 顯示於下方，避免未處理的 rejection 卡住表單
+    } catch (err: unknown) {
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        setDone({ flagged: false });
+        return;
+      }
+      // Re-throw so SurveyRenderer keeps the form editable; error banner uses submit.error
+      throw err;
     }
   };
 
@@ -381,18 +388,11 @@ export default function PublicSurveyPage() {
               </div>
             </div>
           </section>
-          {submit.error && (() => {
-            const err = submit.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
-            const status = err?.response?.status;
-            const backendMsg = err?.response?.data?.message;
-            return (
-              <p className="my-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-                {status === 409 ? '這份問卷你已經填過了'
-                  : status === 400 ? backendMsg ?? '送出資料有誤，請檢查後重試'
-                  : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
-              </p>
-            );
-          })()}
+          {submit.error && (
+            <p className="my-5 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700" role="alert">
+              {extractSubmitError(submit.error)}
+            </p>
+          )}
           <SurveyRendererSurveyJS
             survey={survey}
             onSubmit={handleSubmit}
