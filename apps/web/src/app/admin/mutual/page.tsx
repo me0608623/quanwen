@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import { useAdminMutualPairs, useForceCancelMutualPair, useAdminMatchMutualNow, type AdminMutualPair } from '@/hooks/use-admin';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 const STATUS_FILTERS: Array<{ value: string; label: string }> = [
   { value: '',          label: '全部' },
@@ -29,20 +31,22 @@ export default function AdminMutualPage() {
   const { data, isLoading } = useAdminMutualPairs(status || undefined);
   const cancel = useForceCancelMutualPair();
   const matchNow = useAdminMatchMutualNow();
+  const { showToast, toastNode } = useAppToast();
 
   const handleCancel = async (pair: AdminMutualPair) => {
     const reason = window.prompt(`取消這個配對的理由？\n\n${pair.a.displayName} ↔ ${pair.b?.displayName ?? '(無對手)'}`, '管理員介入');
     if (!reason || reason.trim().length === 0) return;
     try {
       await cancel.mutateAsync({ id: pair.id, reason: reason.trim() });
+      showToast('已強制取消配對', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '取消失敗');
+      showToast(extractApiError(err, '取消失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-8 space-y-6">
+      {toastNode}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">互惠配對管理</h1>

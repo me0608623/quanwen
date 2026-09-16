@@ -55,7 +55,7 @@ export function EarningsChart({ summary }: { summary: EarningsSummary }) {
   const monthly = useMemo(
     () =>
       summary.monthly.slice(-6).map((m) => ({
-        month: m.month.slice(5), // "2026-05" → "05"
+        month: m.month.slice(5), // "2026-05" → "05"（API 鍵為 Asia/Taipei 月）
         fullMonth: m.month,
         amount: m.amount,
       })),

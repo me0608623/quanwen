@@ -9,6 +9,7 @@ import {
   useSuspiciousResponses,
 } from '@/hooks/use-admin';
 import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 import {
   AdminPageHeader,
   CountBadge,
@@ -54,36 +55,38 @@ export default function AdminResponsesPage() {
   const rejectResponse = useRejectResponse();
   const approveResponse = useApproveResponse();
   const reAuditResponse = useReAuditResponse();
+  const { showToast, toastNode } = useAppToast();
 
   const handleReject = async (id: string) => {
     try {
       await rejectResponse.mutateAsync(id);
-      alert('已標記為無效填答');
+      showToast('已標記為無效填答', 'success');
     } catch (err) {
-      alert(extractApiError(err, '標記無效失敗'));
+      showToast(extractApiError(err, '標記無效失敗'), 'error');
     }
   };
 
   const handleApprove = async (id: string) => {
     try {
       await approveResponse.mutateAsync(id);
-      alert('已核准為有效填答');
+      showToast('已核准為有效填答', 'success');
     } catch (err) {
-      alert(extractApiError(err, '核准失敗'));
+      showToast(extractApiError(err, '核准失敗'), 'error');
     }
   };
 
   const handleReAudit = async (id: string) => {
     try {
       await reAuditResponse.mutateAsync(id);
-      alert('重新審核完成');
+      showToast('重新審核完成', 'success');
     } catch (err) {
-      alert(extractApiError(err, '重新審核失敗'));
+      showToast(extractApiError(err, '重新審核失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-8">
+      {toastNode}
       <AdminPageHeader
         title="可疑填答"
         subtitle="反作弊分數 ≥ 60 的填答紀錄，可請 AI 解讀"

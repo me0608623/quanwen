@@ -66,3 +66,9 @@ export function taipeiDateKey(input: string | number | Date = new Date()): strin
     day: '2-digit',
   }).format(d);
 }
+
+/** YYYY-MM in Asia/Taipei (monthly chart keys from API use this calendar). */
+export function taipeiMonthKey(input: string | number | Date = new Date()): string {
+  const day = taipeiDateKey(input);
+  return day ? day.slice(0, 7) : '';
+}
