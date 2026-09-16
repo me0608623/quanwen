@@ -54,3 +54,10 @@ quanwen/.obsidian/cache
 
 .ao/
 .claude/
+
+# Expo generated native projects + local mobile APKs
+apps/mobile/android/
+apps/mobile/ios/
+artifacts/mobile/
+*.apk
+*.aab
