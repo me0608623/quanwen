@@ -4,12 +4,16 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMyRedemptions, useMarkRedemptionUsed, CATEGORY_LABEL, CATEGORY_BADGE } from '@/hooks/use-shop';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
+import { formatDate } from '@/lib/datetime';
 
 export default function MyRedemptionsPage() {
   const { data: redemptions = [], isLoading } = useMyRedemptions();
   const markUsed = useMarkRedemptionUsed();
   const [revealed, setRevealed] = useState<Set<string>>(new Set());
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const { showToast, toastNode } = useAppToast();
 
   const copyPin = (id: string, pin: string) => {
     navigator.clipboard?.writeText(pin).then(() => {
@@ -31,14 +35,15 @@ export default function MyRedemptionsPage() {
     if (!confirm('標記為已使用？此動作無法復原。')) return;
     try {
       await markUsed.mutateAsync(id);
+      showToast('已標記為使用完畢', 'success');
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '處理失敗');
+      showToast(extractApiError(err, '處理失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+      {toastNode}
       <div className="flex items-center justify-between gap-3">
         <h1 className="text-2xl font-bold">🎁 我的兌換</h1>
         <Link href="/shop" className="text-sm text-primary hover:underline">← 回商城</Link>
@@ -67,7 +72,7 @@ export default function MyRedemptionsPage() {
                       {CATEGORY_LABEL[r.itemCategory]}
                     </span>
                     <span className="text-[10px] text-slate-500">
-                      兌換於 {new Date(r.createdAt).toLocaleDateString('zh-TW')}
+                      兌換於 {formatDate(r.createdAt)}
                     </span>
                   </div>
                 </div>

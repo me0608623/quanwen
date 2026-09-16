@@ -9,6 +9,8 @@ import Link from 'next/link';
 import { useMutualPair, useMutualPoolStats, useSubmitMutualResponse, useReEnqueueMutual, useSubmitMutualProof, useRateMutual, type MutualQuestion, type MutualUnlocked, type MutualPairDetail } from '@/hooks/use-mutual';
 import { useMe } from '@/hooks/use-auth';
 import { RatingScale, RatingScaleConfig } from '@/components/survey-editor/rating-scale';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 type AnswerState = {
   textAnswer?: string;
@@ -25,12 +27,14 @@ export default function MutualFillPage() {
   const { data: me } = useMe();
   const submit = useSubmitMutualResponse();
   const reEnqueue = useReEnqueueMutual();
+  const { showToast, toastNode } = useAppToast();
 
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
 
   if (isLoading) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10 space-y-4" aria-busy="true" aria-label="載入中">
+      {toastNode}
         {failureCount > 0 && (
           <div
             role="status"
@@ -52,6 +56,7 @@ export default function MutualFillPage() {
   if (error || !data) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10">
+      {toastNode}
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           {error ? (
             <>
@@ -93,6 +98,7 @@ export default function MutualFillPage() {
   if (pair.status === 'expired') {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10 space-y-4">
+      {toastNode}
         <h1 className="text-2xl font-bold">⌛ 配對超時</h1>
         <p className="text-sm text-muted-foreground">
           這次配對超過 72 小時未完成，已自動失效。你的問卷沒有送出去，可以回列表重新發佈一份。
@@ -118,13 +124,13 @@ export default function MutualFillPage() {
         await reEnqueue.mutateAsync(mySurveyId);
         router.push('/mutual');
       } catch (err) {
-        const e = err as { response?: { data?: { message?: string } } };
-        alert(e?.response?.data?.message ?? '重新進池失敗');
+        showToast(extractApiError(err, '重新進池失敗'), 'error');
       }
     };
 
     return (
       <main className="mx-auto max-w-3xl px-4 py-10 space-y-4">
+      {toastNode}
         <h1 className="text-2xl font-bold">🚫 配對已取消</h1>
         <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
           <p className="font-semibold mb-1">原因：填答品質未通過 AI 審核</p>
@@ -154,6 +160,7 @@ export default function MutualFillPage() {
   if (!survey) {
     return (
       <main className="mx-auto max-w-3xl px-4 py-10 text-muted-foreground">
+      {toastNode}
         對方問卷尚未準備好，請稍後再試。
       </main>
     );
@@ -187,7 +194,7 @@ export default function MutualFillPage() {
       return false;
     });
     if (missing.length > 0) {
-      alert(`還有 ${missing.length} 題必填未答`);
+      showToast(`還有 ${missing.length} 題必填未答`, 'error');
       return;
     }
 
@@ -195,13 +202,13 @@ export default function MutualFillPage() {
       await submit.mutateAsync({ pairId, answers: payload });
       router.push('/mutual');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '提交失敗，請稍後再試');
+      showToast(extractApiError(err, '提交失敗，請稍後再試'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+      {toastNode}
       <div>
         <Link href="/mutual" className="text-sm text-muted-foreground hover:underline">
           ← 回互惠列表
@@ -562,6 +569,7 @@ function ExternalMutualView({ data, myUserId }: { data: MutualPairDetail; myUser
   const rate = useRateMutual();
   const [proofUrl, setProofUrl] = useState('');
   const [rating, setRating] = useState(0);
+  const { showToast, toastNode } = useAppToast();
 
   const iAmA = myUserId && myUserId === pair.aUserId;
   const myProof = iAmA ? pair.aProofUrl : pair.bProofUrl;
@@ -575,9 +583,9 @@ function ExternalMutualView({ data, myUserId }: { data: MutualPairDetail; myUser
     try {
       await proof.mutateAsync({ pairId: pair.id, proofUrl: proofUrl.trim() });
       setProofUrl('');
+      showToast('證明已送出', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '上傳失敗');
+      showToast(extractApiError(err, '上傳失敗'), 'error');
     }
   };
 
@@ -585,14 +593,15 @@ function ExternalMutualView({ data, myUserId }: { data: MutualPairDetail; myUser
     if (rating < 1) return;
     try {
       await rate.mutateAsync({ pairId: pair.id, rating });
+      showToast('評分已送出', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '評分失敗');
+      showToast(extractApiError(err, '評分失敗'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8 space-y-6">
+      {toastNode}
       <div>
         <Link href="/mutual" className="text-sm text-muted-foreground hover:underline">← 回互惠列表</Link>
         <h1 className="mt-2 text-2xl font-bold">{survey?.title}</h1>

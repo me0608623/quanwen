@@ -27,6 +27,9 @@ import { useSaveScaleSettings, useScaleReliability } from '@/hooks/use-analytics
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import type { BatchAnalysisResult } from '@/hooks/use-analytics';
 import { usePointsSummary } from '@/hooks/use-wallet';
+import { extractApiError } from '@/lib/extract-error';
+import { formatDateTime } from '@/lib/datetime';
+import { useAppToast } from '@/components/ui/app-toast';
 import { BatchAnalysisModal } from '@/components/stats/batch-analysis-modal';
 import { OptionBarChart, QualityDonut, RatingDistribution } from '@/components/stats/charts';
 import { TrendLineChart } from '@/components/stats/trend-chart';
@@ -93,13 +96,13 @@ function TrendChart({ surveyId }: { surveyId: string }) {
   const { data: trend = [], isLoading } = useSurveyTrend(surveyId);
 
   if (isLoading) {
-    return <StatsPanelSkeleton minHeight={172} label="近 14 天填答趨勢" />;
+    return <StatsPanelSkeleton minHeight={172} label="近 30 天填答趨勢" />;
   }
 
   return (
     <section className="rounded-lg border border-border p-5">
       <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">
-        近 14 天填答趨勢
+        近 30 天填答趨勢
       </h2>
       <TrendLineChart data={trend} />
     </section>
@@ -111,7 +114,7 @@ function TrendChart({ surveyId }: { surveyId: string }) {
 function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; totalResponses: number }) {
   const [page, setPage] = useState(1);
   const pageSize = 10;
-  const { data, isLoading } = useRespondents(surveyId, page, pageSize);
+  const { data, isLoading, isError, refetch } = useRespondents(surveyId, page, pageSize);
 
   const totalPages = data ? Math.ceil(data.total / data.pageSize) : 0;
 
@@ -135,6 +138,13 @@ function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; tota
       </h2>
 
       {isLoading && <PanelSkeletonContent rows={3} />}
+
+      {isError && !isLoading && (
+        <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+          受訪者清單載入失敗。
+          <button type="button" onClick={() => refetch()} className="ml-2 underline">重試</button>
+        </div>
+      )}
 
       {data && data.respondents.length === 0 && (
         <p className="text-sm text-muted-foreground">尚無受訪者資料</p>
@@ -164,7 +174,7 @@ function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; tota
                       </span>
                     </td>
                     <td className="py-2 text-muted-foreground text-xs">
-                      {r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}
+                      {r.submittedAt ? formatDateTime(r.submittedAt) : '—'}
                     </td>
                     <td className="py-2 text-right text-muted-foreground text-xs">
                       {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
@@ -195,7 +205,7 @@ function RespondentsPanel({ surveyId, totalResponses }: { surveyId: string; tota
                   </span>
                 </div>
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{r.submittedAt ? new Date(r.submittedAt).toLocaleString('zh-TW') : '—'}</span>
+                  <span>{r.submittedAt ? formatDateTime(r.submittedAt) : '—'}</span>
                   <span>
                     {r.fillDurationSeconds != null ? `${Math.round(r.fillDurationSeconds)}s` : '—'}
                     {r.qualityScore != null && (
@@ -247,8 +257,10 @@ const QUESTION_TYPE_LABELS: Record<string, string> = {
   text: '問答',
   rating: '評分',
   numeric: '數字',
+  number: '數字',
   yes_no: '是/否',
   dropdown: '下拉選單',
+  matrix: '矩陣',
 };
 
 export default function SurveyStatsPage() {
@@ -264,14 +276,15 @@ export default function SurveyStatsPage() {
   const closeSurvey = useCloseSurvey();
   const republishSurvey = usePublishSurvey();
   const { data: survey } = useSurvey(id);
+  const { showToast, toastNode } = useAppToast();
 
   const handlePause = async () => {
     try {
       await pauseSurvey.mutateAsync(id);
       setShowPauseConfirm(false);
+      showToast('問卷已下架／暫停', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '下架失敗，請稍後再試。');
+      showToast(extractApiError(err, '下架失敗，請稍後再試。'), 'error');
     }
   };
 
@@ -279,18 +292,18 @@ export default function SurveyStatsPage() {
     try {
       await closeSurvey.mutateAsync(id);
       setShowCloseConfirm(false);
+      showToast('問卷已結案', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '結案失敗，請稍後再試。');
+      showToast(extractApiError(err, '結案失敗，請稍後再試。'), 'error');
     }
   };
 
   const handleRepublish = async () => {
     try {
       await republishSurvey.mutateAsync(id);
+      showToast('問卷已重新上架', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '重新上架失敗，請稍後再試。');
+      showToast(extractApiError(err, '重新上架失敗，請稍後再試。'), 'error');
     }
   };
 
@@ -301,14 +314,21 @@ export default function SurveyStatsPage() {
     }).catch(() => {});
   };
   const router = useRouter();
-  const { data: stats, isLoading } = useSurveyStats(id);
+  const { data: stats, isLoading, isError, refetch, error: statsError } = useSurveyStats(id);
 
   const downloadBinary = (path: string, filename: string) => {
     const token = getToken() ?? '';
     const url = `${process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api/v1'}${path}`;
     fetch(url, { headers: { Authorization: `Bearer ${token}` } })
-      .then((res) => {
-        if (!res.ok) throw new Error(`Export 失敗：${res.status}`);
+      .then(async (res) => {
+        if (!res.ok) {
+          let msg = `匯出失敗（${res.status}）`;
+          try {
+            const body = await res.json();
+            if (typeof body?.message === 'string' && body.message) msg = body.message;
+          } catch { /* ignore non-json */ }
+          throw new Error(msg);
+        }
         return res.blob();
       })
       .then((blob) => {
@@ -318,8 +338,9 @@ export default function SurveyStatsPage() {
         a.href = blobUrl;
         a.click();
         URL.revokeObjectURL(blobUrl);
+        showToast('開始下載', 'success');
       })
-      .catch((err: Error) => alert(err.message));
+      .catch((err: Error) => showToast(err.message || '匯出失敗，請稍後再試', 'error'));
   };
 
   const handleExportCsv = (cleanOnly = false) =>
@@ -347,7 +368,30 @@ export default function SurveyStatsPage() {
     downloadBinary(`/surveys/${id}/export.json`, `survey_${id}_responses.json`);
 
   if (isLoading) return <StatsPageSkeleton />;
-  if (!stats) return <div className="p-10 text-sm text-destructive">無法取得統計資料</div>;
+  if (isError || !stats) {
+    const status = (statsError as { response?: { status?: number } } | undefined)?.response?.status;
+    const msg = status === 403
+      ? '您沒有權限查看此問卷統計。'
+      : status === 404
+        ? '找不到此問卷或統計資料。'
+        : extractApiError(statsError, '無法取得統計資料，請稍後再試。');
+    return (
+      <main className="mx-auto max-w-lg px-4 py-16 text-center">
+        <p className="text-sm text-destructive">{msg}</p>
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-3 rounded-md border border-destructive/40 px-4 py-1.5 text-sm font-medium text-destructive hover:bg-destructive/10"
+        >
+          重試
+        </button>
+        <div className="mt-4">
+          <Link href="/dashboard" className="text-sm text-primary hover:underline">← 返回我的問卷</Link>
+        </div>
+        {toastNode}
+      </main>
+    );
+  }
 
   const qualityScore = stats.qualityDistribution?.avgScore;
   const auditedResponses = stats.qualityDistribution
@@ -359,6 +403,7 @@ export default function SurveyStatsPage() {
 
   return (
     <main className="mx-auto max-w-6xl space-y-6 pb-12">
+      {toastNode}
       {/* Header */}
       <section className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#0F2A5C] via-[#126b8a] to-[#8B5CF6] p-6 text-white shadow-lg md:p-8">
         <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
@@ -458,6 +503,14 @@ export default function SurveyStatsPage() {
               >
                 <span className="inline-flex items-center gap-1.5"><Download className="h-3.5 w-3.5" /> CSV</span>
                 <span className="mt-0.5 text-[10px] font-normal text-slate-400">全部填答 · 程式用</span>
+              </button>
+              <button
+                onClick={() => handleExportCsv(true)}
+                className="flex flex-col items-start rounded-lg border border-[#126b8a]/40 bg-[#126b8a]/5 px-3 py-2 text-left text-xs font-medium text-[#126b8a] hover:bg-[#126b8a]/10"
+                aria-label="下載乾淨 CSV：僅品質分數 70 分以上"
+              >
+                <span className="inline-flex items-center gap-1.5"><Sparkles className="h-3.5 w-3.5" /> 乾淨 CSV</span>
+                <span className="mt-0.5 text-[10px] font-normal text-[#126b8a]/70">僅品質 ≥ 70</span>
               </button>
               <button
                 onClick={handleExportJson}
@@ -619,6 +672,11 @@ export default function SurveyStatsPage() {
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#126b8a]">逐題量化圖表</p>
         <h2 className="mt-1 text-xl font-bold text-slate-900">每一題的回答分布</h2>
       </div>
+      {stats.questionStats.length === 0 && (
+        <div className="rounded-lg border-2 border-dashed border-border p-8 text-center">
+          <p className="text-sm text-muted-foreground">尚無題目可統計。請先在問卷中加入題目並收集填答。</p>
+        </div>
+      )}
       {stats.questionStats.map((q, i) => (
         <section key={q.questionId} className="rounded-lg border border-border p-5 space-y-3">
           <div>
@@ -626,6 +684,10 @@ export default function SurveyStatsPage() {
             <p className="font-medium mt-0.5">{q.title}</p>
             <p className="text-xs text-muted-foreground">{q.totalAnswers} 人回答</p>
           </div>
+
+          {q.totalAnswers === 0 && (
+            <p className="text-sm italic text-muted-foreground">尚無回答資料</p>
+          )}
 
           {/* 單選 / 多選 — Phase V: recharts BarChart */}
           {q.optionCounts && q.optionCounts.length > 0 && (
@@ -645,17 +707,19 @@ export default function SurveyStatsPage() {
             <RatingDistribution buckets={q.ratingBuckets} />
           )}
 
-          {/* 文字回答 */}
-          {q.type === 'text' && q.sampleTexts && q.sampleTexts.length > 0 && (
+          {/* 文字／開放式回答（API 對非選擇／評分題回傳 sampleTexts） */}
+          {q.sampleTexts && q.sampleTexts.length > 0 && (
             <>
               <ul className="space-y-1.5 max-h-48 overflow-y-auto">
-                {q.sampleTexts.map((t, j) => (
+                {q.sampleTexts.map((sample, j) => (
                   <li key={j} className="text-sm text-muted-foreground border-l-2 border-muted pl-3">
-                    {t}
+                    {sample}
                   </li>
                 ))}
               </ul>
-              <SentimentPanel surveyId={id} questionId={q.questionId} />
+              {(q.type === 'text' || q.type === 'number' || q.type === 'numeric') && (
+                <SentimentPanel surveyId={id} questionId={q.questionId} />
+              )}
             </>
           )}
         </section>
@@ -748,7 +812,7 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
   const drawnAt = data?.drawnAt ?? stats.lotteryDrawnAt;
   const canDraw = stats.lotteryDrawMode === 'manual' && stats.totalResponses >= stats.targetCount && !drawnAt;
   const drawModeLabel = stats.lotteryDrawMode === 'scheduled'
-    ? `指定日期：${stats.lotteryDrawAt ? new Date(stats.lotteryDrawAt).toLocaleString('zh-TW') : '尚未設定'}`
+    ? `指定日期：${stats.lotteryDrawAt ? formatDateTime(stats.lotteryDrawAt) : '尚未設定'}`
     : stats.lotteryDrawMode === 'manual'
       ? '收滿後由建立者手動開獎'
       : '收滿後自動開獎';
@@ -766,13 +830,13 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
           </p>
           <p className="mt-2 text-xs text-slate-500">
             {drawnAt
-              ? `已於 ${new Date(drawnAt).toLocaleString('zh-TW')} 完成開獎。結果通知已送達 ${data?.notifiedParticipantCount ?? 0} / ${data?.participantCount ?? stats.totalResponses} 位有效填答者。`
+              ? `已於 ${formatDateTime(drawnAt)} 完成開獎。結果通知已送達 ${data?.notifiedParticipantCount ?? 0} / ${data?.participantCount ?? stats.totalResponses} 位有效填答者。`
               : `目前收集 ${stats.totalResponses} / ${stats.targetCount} 份，開獎後系統會通知所有有效填答者結果。`}
           </p>
           {drawnAt && (
             <p className="mt-2 text-xs font-medium text-amber-800">
               建立者有義務完成獎品交付。平台保留通知與核驗紀錄，履約期限：
-              {data?.fulfillmentDueAt ? new Date(data.fulfillmentDueAt).toLocaleString('zh-TW') : '開獎後七日內'}。
+              {data?.fulfillmentDueAt ? formatDateTime(data.fulfillmentDueAt) : '開獎後七日內'}。
               義務通知：{data?.creatorObligationNotifiedAt ? '已送達' : '等待系統補送'}。
             </p>
           )}
@@ -875,7 +939,7 @@ function LotteryPanel({ surveyId, stats }: { surveyId: string; stats: SurveyStat
                         {entry.note}
                         <span className="ml-1 text-sky-600">
                           · {entry.reason === 'fulfillment_overdue' ? '逾期主動介入' : '問題回報介入'}
-                          {entry.intervenedAt ? ` · ${new Date(entry.intervenedAt).toLocaleString('zh-TW')}` : ''}
+                          {entry.intervenedAt ? ` · ${formatDateTime(entry.intervenedAt)}` : ''}
                         </span>
                       </p>
                     ))}
@@ -1360,7 +1424,7 @@ function AiInsightsPanel({
           {Number.isFinite(usage.remaining.analyzeResponses) ? usage.remaining.analyzeResponses : '∞'}/
           {Number.isFinite(usage.limits.analyzeResponses) ? usage.limits.analyzeResponses : '∞'} 次
           {generatedAt && (
-            <> · 本報告生成於 {new Date(generatedAt).toLocaleString('zh-TW', { hour12: false })}（已自動保存）</>
+            <> · 本報告生成於 {formatDateTime(generatedAt)}（已自動保存）</>
           )}
         </p>
       )}
@@ -1497,7 +1561,7 @@ function AiInsightsPanel({
 
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#126b8a]/15 pt-3">
             <p className="text-[10px] text-slate-400">
-              {data.reportType === 'detailed' ? '詳細報告' : '簡單報告'} · 樣本 {data.sampleSize} 份 · 生成於 {new Date(data.generatedAt).toLocaleString('zh-TW')}
+              {data.reportType === 'detailed' ? '詳細報告' : '簡單報告'} · 樣本 {data.sampleSize} 份 · 生成於 {formatDateTime(data.generatedAt)}
             </p>
             <div className="flex flex-wrap gap-2">
               <AiReportExport insights={data} surveyTitle={surveyTitle} />
@@ -1539,7 +1603,7 @@ function AiPresentation({
       eyebrow: 'AI EXECUTIVE SUMMARY',
       title: surveyTitle,
       body: insights.summary,
-      items: [`有效樣本 ${insights.sampleSize} 份`, `生成時間 ${new Date(insights.generatedAt).toLocaleString('zh-TW')}`],
+      items: [`有效樣本 ${insights.sampleSize} 份`, `生成時間 ${formatDateTime(insights.generatedAt)}`],
     },
     {
       eyebrow: 'KEY FINDINGS',

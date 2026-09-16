@@ -25,6 +25,8 @@ import {
   type SubscriptionPlan,
 } from '@/hooks/use-pricing';
 import { cn } from '@/lib/utils';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 const PLAN_ACCENT: Record<SubscriptionPlan, string> = {
   free: 'border-slate-200 bg-white',
@@ -98,6 +100,7 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
   const { data, isLoading, error } = useSubscription();
   const subscribe = useSubscribePlan();
   const redeem = useRedeemSubscription();
+  const { showToast, toastNode } = useAppToast();
 
   const currentPlan = data?.currentPlan ?? 'free';
   const usageText = useMemo(() => data?.usage.display ?? '0/3', [data?.usage.display]);
@@ -109,19 +112,18 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
   const handleSubscribe = async (plan: Exclude<SubscriptionPlan, 'free'>) => {
     try {
       await subscribe.mutateAsync(plan);
+      showToast('付款單已建立', 'success');
     } catch (err) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      alert(message ?? '建立付款單失敗');
+      showToast(extractApiError(err, '建立付款單失敗'), 'error');
     }
   };
 
   const handleRedeem = async () => {
     try {
       const result = await redeem.mutateAsync();
-      alert(result.message);
+      showToast(result.message || '兌換成功', 'success');
     } catch (err) {
-      const message = (err as { response?: { data?: { message?: string } } })?.response?.data?.message;
-      alert(message ?? '兌換失敗');
+      showToast(extractApiError(err, '兌換失敗'), 'error');
     }
   };
 
@@ -186,6 +188,7 @@ export function SubscriptionShop({ className }: SubscriptionShopProps) {
 
   return (
     <div ref={rootRef} className={cn('space-y-8', className)}>
+      {toastNode}
       <section className="relative isolate overflow-hidden rounded-3xl border border-slate-800 bg-slate-950 px-8 py-10 text-white shadow-xl shadow-slate-950/10 md:px-8 md:py-10">
         <GoldWave className="pointer-events-none absolute inset-0 z-0 h-full w-full opacity-80" />
         <div data-shop-orb aria-hidden className="pointer-events-none absolute -right-20 -top-24 h-72 w-72 rounded-full bg-violet-500/25 blur-3xl" />

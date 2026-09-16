@@ -5,6 +5,8 @@ import Link from 'next/link';
 import gsap from 'gsap';
 import { useSpinStatus, useSpin, type SpinSegment } from '@/hooks/use-spin';
 import { LoadingSpinner } from '@/components/ui/loading-spinner';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 // 邊緣 LED 金點位置（不旋轉的裝飾層）
 const LED_DOTS = Array.from({ length: 24 }, (_, i) => {
@@ -17,6 +19,7 @@ export default function SpinPage() {
   const spin = useSpin();
   const [spinning, setSpinning] = useState(false);
   const [result, setResult] = useState<{ label: string; points: number } | null>(null);
+  const { showToast, toastNode } = useAppToast();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const wheelRef = useRef<SVGSVGElement>(null);
@@ -161,8 +164,7 @@ export default function SpinPage() {
         finish();
       }
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '轉盤失敗');
+      showToast(extractApiError(err, '轉盤失敗'), 'error');
       setSpinning(false);
     }
   };
@@ -173,6 +175,7 @@ export default function SpinPage() {
 
   return (
     <main ref={rootRef} className="mx-auto max-w-2xl px-4 py-10">
+      {toastNode}
       <div className="relative overflow-hidden rounded-[2rem] border border-amber-200/70 bg-gradient-to-b from-amber-50 via-white to-rose-50/50 px-6 py-10 text-center shadow-xl shadow-amber-200/40 sm:px-10">
         {/* 暖金氛圍光 */}
         <div

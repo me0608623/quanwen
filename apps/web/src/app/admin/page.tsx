@@ -100,7 +100,7 @@ const TOOLS = [
 ];
 
 export default function AdminOverviewPage() {
-  const { data: stats, isLoading, isError } = usePlatformStats();
+  const { data: stats, isLoading, isError, refetch } = usePlatformStats();
 
   if (isLoading) {
     return (
@@ -120,7 +120,12 @@ export default function AdminOverviewPage() {
     return (
       <main className="mx-auto max-w-6xl space-y-6 px-4 py-10">
         <h1 className="text-2xl font-bold tracking-tight">平台總覽</h1>
-        {isError && <p className="text-sm text-destructive">統計資料載入失敗。可以先用下方入口繼續操作。</p>}
+        {isError && (
+          <div className="rounded-md border border-destructive/30 bg-destructive/5 p-3 text-sm text-destructive">
+            統計資料載入失敗。可以先用下方入口繼續操作。
+            <button type="button" onClick={() => refetch()} className="ml-2 underline">重試</button>
+          </div>
+        )}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {QUEUE.map((q) => <QueueTile key={q.href} href={q.href} label={q.label} />)}
         </div>

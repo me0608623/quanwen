@@ -4,6 +4,8 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useRedeem, useShopItems, CATEGORY_BADGE, CATEGORY_LABEL, type ShopItem } from '@/hooks/use-shop';
 import { useWallet } from '@/hooks/use-wallet';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 interface ShopCatalogProps {
   compact?: boolean;
@@ -40,6 +42,7 @@ export function ShopCatalog({
   const { data: wallet } = useWallet();
   const redeem = useRedeem();
   const [confirming, setConfirming] = useState<ShopItem | null>(null);
+  const { showToast, toastNode } = useAppToast();
 
   const pointsBalance = wallet?.pointsBalance ?? 0;
 
@@ -47,15 +50,15 @@ export function ShopCatalog({
     try {
       await redeem.mutateAsync(item.id);
       setConfirming(null);
-      alert('✅ 兌換成功！PIN 序號已寄到通知中心，可在「我的兌換」查看。');
+      showToast('兌換成功！PIN 序號已寄到通知中心，可在「我的兌換」查看。', 'success');
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '兌換失敗');
+      showToast(extractApiError(err, '兌換失敗'), 'error');
     }
   };
 
   return (
     <section className={compact ? 'space-y-4' : 'space-y-6'}>
+      {toastNode}
       {showHeader && (
         <div className="flex items-center justify-between gap-3">
           <div>

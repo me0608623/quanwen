@@ -12,6 +12,8 @@ import {
   type MutualPair,
   type MutualPoolItem,
 } from '@/hooks/use-mutual';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 
 const ACTION_LABEL: Record<MutualPair['nextAction'], { label: string; tone: string }> = {
   wait_match:      { label: '配對中', tone: 'bg-amber-100 text-amber-800 border-amber-200' },
@@ -48,6 +50,7 @@ function formatRelative(at: string | null | undefined): string {
 }
 
 export default function MutualPage() {
+  const { showToast, toastNode } = useAppToast();
   const router = useRouter();
   const [showRules, setShowRules] = useState(false);
   const [matchCode, setMatchCode] = useState('');
@@ -60,6 +63,7 @@ export default function MutualPage() {
   if (isLoading) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
+      {toastNode}
         {failureCount > 0 && (
           <div
             role="status"
@@ -84,6 +88,7 @@ export default function MutualPage() {
   if (error && !pairs) {
     return (
       <main className="mx-auto max-w-4xl px-4 py-10">
+      {toastNode}
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
           <p>連線失敗，3 次重試後仍無法載入。</p>
           <button
@@ -112,13 +117,13 @@ export default function MutualPage() {
       const result = await matchByCode.mutateAsync(trimmed);
       router.push(`/mutual/${result.pairId}`);
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '配對失敗，請確認編號是否仍在配對池中');
+      showToast(extractApiError(err, '配對失敗，請確認編號是否仍在配對池中'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-4xl px-4 py-8 space-y-8">
+      {toastNode}
       {error && (
         <div
           role="status"
