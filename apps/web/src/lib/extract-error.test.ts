@@ -37,6 +37,6 @@ describe('extractSubmitError', () => {
   });
 
   it('maps 409 to already-submitted copy', () => {
-    expect(extractSubmitError({ response: { status: 409, data: {} } })).toBe('您已填寫過此問卷');
+    expect(extractSubmitError({ response: { status: 409, data: {} } })).toBe('這份問卷你已經填過了');
   });
 });

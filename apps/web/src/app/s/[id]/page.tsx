@@ -117,7 +117,7 @@ export default function PublicSurveyPage() {
   const { data: survey, isLoading } = usePublicLinkSurvey(id);
   const submit = useSubmitPublicResponse(id, anonToken);
 
-  const [done, setDone] = useState<{ flagged: boolean } | null>(null);
+  const [done, setDone] = useState<{ flagged: boolean; alreadySubmitted?: boolean } | null>(null);
   const [surveyModel, setSurveyModel] = useState<SurveyModel | null>(null);
   // 登入偵測放 useEffect，避免 SSR/CSR 不一致造成 hydration mismatch
   const [hasToken, setHasToken] = useState(false);
@@ -238,6 +238,21 @@ export default function PublicSurveyPage() {
   }
 
   if (done || survey.alreadySubmitted) {
+    const isDuplicate = Boolean(done?.alreadySubmitted || (!done && survey.alreadySubmitted));
+    const title = done?.flagged
+      ? 'AI 審核中'
+      : isDuplicate
+        ? '這份問卷你已經填過了'
+        : done
+          ? '填答已送出'
+          : '已完成';
+    const subtitle = done?.flagged
+      ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
+      : isDuplicate
+        ? '每位受訪者只能填答一次，謝謝你的參與。'
+        : done
+          ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
+          : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`;
     return (
       <PublicSurveyShell {...themeProps}>
         <div className="mx-auto mt-12 rounded-[32px] border border-slate-200 bg-white/88 p-6 text-center shadow-[0_24px_80px_rgba(15,23,42,0.08)] backdrop-blur sm:p-8">
@@ -254,19 +269,17 @@ export default function PublicSurveyPage() {
             <CheckCircle2 className="h-6 w-6" strokeWidth={1.8} />
           )}
         </div>
-        <h1 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{done ? (done.flagged ? 'AI 審核中' : '填答已送出') : '已完成'}</h1>
+        <h1 className="text-3xl font-semibold tracking-[-0.03em] text-slate-950">{title}</h1>
         <p className="mx-auto mt-3 max-w-md text-sm leading-7 text-slate-500">
-          {done
-            ? '您的填答正在進行品質審核，審核通過後將發放獎勵。'
-            : `填答完成。獎勵金額：NT$${survey.rewardPoints}。`}
+          {subtitle}
         </p>
         {/* 建立者自訂的感謝頁內容（結束設定） */}
-        {done && survey.thankYouMessage && (
+        {done && !isDuplicate && survey.thankYouMessage && (
           <p className="mx-auto mt-4 max-w-md whitespace-pre-wrap text-sm leading-7 text-slate-700">
             {survey.thankYouMessage}
           </p>
         )}
-        {done && (survey.thankYouImages?.length ?? 0) > 0 && (
+        {done && !isDuplicate && (survey.thankYouImages?.length ?? 0) > 0 && (
           <div className="mx-auto mt-4 max-w-md space-y-3">
             {survey.thankYouImages!.map((url, i) => (
               // eslint-disable-next-line @next/next/no-img-element
@@ -279,7 +292,7 @@ export default function PublicSurveyPage() {
             ))}
           </div>
         )}
-        {done && survey.thankYouRedirectUrl && (
+        {done && !isDuplicate && survey.thankYouRedirectUrl && (
           <a
             href={survey.thankYouRedirectUrl}
             target="_blank"
@@ -327,7 +340,8 @@ export default function PublicSurveyPage() {
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
       if (status === 409) {
-        setDone({ flagged: false });
+        // 重複填答：顯示「已填過」完成頁（對齊 tasks/[id] 與 E2E AC5）
+        setDone({ flagged: false, alreadySubmitted: true });
         return;
       }
       // Re-throw so SurveyRenderer keeps the form editable; error banner uses submit.error

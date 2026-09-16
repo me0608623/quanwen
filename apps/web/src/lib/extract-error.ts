@@ -33,7 +33,7 @@ export function extractSubmitError(
 ): string {
   const status = (err as { response?: { status?: number } })?.response?.status;
   const backendMsg = extractApiError(err, '');
-  if (status === 409) return backendMsg || '您已填寫過此問卷';
+  if (status === 409) return backendMsg || '這份問卷你已經填過了';
   if (status === 401) return backendMsg || '請重新登入後再試';
   if (status === 403) return backendMsg || '目前無法填寫此問卷（權限不足或未符合受眾條件）';
   if (status === 400 || status === 422) return backendMsg || '送出資料有誤，請檢查後重試';
