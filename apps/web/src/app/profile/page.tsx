@@ -14,6 +14,8 @@ import { useMyResponses, useMyAppeals, useCreateAppeal, useMyReputationHistory }
 import type { RespondentProfile } from '@/hooks/use-profile';
 import { profileCompleteness } from '@/lib/profile-completeness';
 import { ReputationTrend } from '@/components/profile/reputation-trend';
+import { extractApiError } from '@/lib/extract-error';
+import { useAppToast } from '@/components/ui/app-toast';
 import {
   AGE_RANGE_LABELS,
   GENDER_LABELS,
@@ -41,6 +43,7 @@ export default function ProfilePage() {
   const updateProfile = useUpdateProfile();
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState('');
+  const { showToast, toastNode } = useAppToast();
 
   if (isLoading) return <LoadingSpinner />;
   if (isError) return (
@@ -55,9 +58,9 @@ export default function ProfilePage() {
     try {
       await updateProfile.mutateAsync({ displayName: nameInput.trim() });
       setEditingName(false);
+      showToast('顯示名稱已更新', 'success');
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '儲存失敗');
+      showToast(extractApiError(err, '儲存失敗'), 'error');
     }
   };
 
@@ -77,6 +80,7 @@ export default function ProfilePage() {
 
   return (
     <main className="mx-auto max-w-lg px-4 py-10 space-y-6">
+      {toastNode}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">我的個人資料</h1>
         <button
@@ -332,6 +336,7 @@ function MyQualitySection({
   const { data: appeals = [] } = useMyAppeals();
   const { data: repHistory = [] } = useMyReputationHistory();
   const createAppeal = useCreateAppeal();
+  const { showToast, toastNode } = useAppToast();
   const [appealTarget, setAppealTarget] = useState<{ responseId: string; surveyTitle: string } | null>(null);
   const [appealReason, setAppealReason] = useState('');
   const closeAppeal = () => { setAppealTarget(null); setAppealReason(''); };
@@ -344,7 +349,7 @@ function MyQualitySection({
   const submitAppeal = async () => {
     if (!appealTarget) return;
     if (appealReason.trim().length < 5) {
-      alert('請輸入至少 5 字的申訴原因');
+      showToast('請輸入至少 5 字的申訴原因', 'error');
       return;
     }
     try {
@@ -354,9 +359,9 @@ function MyQualitySection({
       });
       setAppealTarget(null);
       setAppealReason('');
-      alert('申訴已提交，等待管理員處理');
-    } catch (err: any) {
-      alert(err?.response?.data?.message ?? '申訴提交失敗');
+      showToast('申訴已提交，等待管理員處理', 'success');
+    } catch (err: unknown) {
+      showToast(extractApiError(err, '申訴提交失敗'), 'error');
     }
   };
 
@@ -377,6 +382,7 @@ function MyQualitySection({
 
   return (
     <section className="rounded-xl border border-[#126b8a]/30 bg-gradient-to-br from-[#126b8a]/[0.04] to-[#8B5CF6]/[0.03] p-4">
+      {toastNode}
       <div className="flex items-start justify-between gap-3 mb-3">
         <div>
           <h2 className="text-sm font-bold text-slate-900">📊 我的填答品質</h2>

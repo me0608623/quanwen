@@ -1578,13 +1578,22 @@ export class ResponsesService {
       .groupBy(sql`DATE(submitted_at AT TIME ZONE 'Asia/Taipei')`)
       .orderBy(sql`DATE(submitted_at AT TIME ZONE 'Asia/Taipei')`);
 
-    // 補齊近 30 天的空日期
-    const countByDate = new Map(rows.map((r) => [r.date, r.count]));
+    // 補齊近 30 天的空日期（鍵必須與 SQL 的 Asia/Taipei DATE 對齊，不可用 UTC toISOString）
+    const countByDate = new Map(rows.map((r) => [String(r.date).slice(0, 10), r.count]));
     const result: { date: string; count: number }[] = [];
+    const taipeiKey = (d: Date) =>
+      new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(d);
+    const todayKey = taipeiKey(new Date());
+    // 以台北今日正午為錨，往回推 29 天，避免 DST/邊界偏移
+    const anchor = new Date(`${todayKey}T12:00:00+08:00`);
     for (let i = 29; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+      const d = new Date(anchor.getTime() - i * 86_400_000);
+      const key = taipeiKey(d);
       result.push({ date: key, count: countByDate.get(key) ?? 0 });
     }
     return result;

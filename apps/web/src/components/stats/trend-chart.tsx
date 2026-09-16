@@ -9,6 +9,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from 'recharts';
+import { formatShortDate } from '@/lib/datetime';
 
 export interface TrendPoint {
   date: string;
@@ -16,8 +17,8 @@ export interface TrendPoint {
 }
 
 /**
- * 近 14/30 天填答趨勢 — recharts AreaChart
- * Data comes from GET /surveys/:id/trend
+ * 近 30 天填答趨勢 — recharts AreaChart
+ * Data comes from GET /surveys/:id/trend（Asia/Taipei 日界）
  */
 export function TrendLineChart({ data }: { data: TrendPoint[] }) {
   if (!data || data.length === 0) {
@@ -26,7 +27,8 @@ export function TrendLineChart({ data }: { data: TrendPoint[] }) {
 
   const formatted = data.map((d) => ({
     ...d,
-    label: new Date(d.date).toLocaleDateString('zh-TW', { month: 'short', day: 'numeric' }),
+    // date 多為 YYYY-MM-DD；加正午避免被解析成 UTC 午夜再偏到前一天
+    label: formatShortDate(/^\d{4}-\d{2}-\d{2}$/.test(d.date) ? `${d.date}T12:00:00+08:00` : d.date),
   }));
 
   return (

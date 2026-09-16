@@ -76,7 +76,7 @@ export function StatsPageSkeleton() {
       <StatsPanelSkeleton minHeight={320} label="AI 洞察簡報" />
 
       {/* 趨勢圖 panel */}
-      <StatsPanelSkeleton minHeight={172} label="近 14 天填答趨勢" />
+      <StatsPanelSkeleton minHeight={172} label="近 30 天填答趨勢" />
 
       {/* 進階量化 section — banner + several panels stacked */}
       <div className="space-y-6">
