@@ -26,6 +26,7 @@ import { DEFAULT_ACCENT, DEFAULT_BACKGROUND, darkenHex, fontFamilyClass } from '
 import { resolveAssetUrl } from '@/lib/resolve-asset-url';
 import type { AnswerInput } from '@/hooks/use-responses';
 import { lotteryDisclosure } from '@/lib/lottery-display';
+import { extractSubmitError } from '@/lib/extract-error';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { SidebarNav } from '@/components/survey-glass/sidebar-nav';
 
@@ -251,9 +252,13 @@ export default function SurveyFillPage() {
       setSubmitted(true);
     } catch (err: unknown) {
       const status = (err as { response?: { status?: number } })?.response?.status;
+      // Already submitted → treat as success so the thank-you state shows
       if (status === 409) {
         setSubmitted(true);
+        return;
       }
+      // Re-throw so SurveyRenderer keeps the form editable for retry
+      throw err;
     }
   };
 
@@ -562,20 +567,11 @@ export default function SurveyFillPage() {
             )}
 
             {/* Submit error */}
-            {submitResponse.error && (() => {
-              const err = submitResponse.error as { response?: { data?: { message?: string }; status?: number }; message?: string };
-              const backendMsg = err?.response?.data?.message;
-              const status = err?.response?.status;
-              return (
-                <p className="my-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {status === 409 ? '您已填寫過此問卷'
-                    : status === 401 ? '請重新登入'
-                    : status === 403 ? backendMsg ?? '權限不足'
-                    : status === 400 ? backendMsg ?? '送出資料有誤'
-                    : '提交失敗：' + (backendMsg ?? err?.message ?? '請稍後再試')}
-                </p>
-              );
-            })()}
+            {submitResponse.error && (
+              <p className="my-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600" role="alert">
+                {extractSubmitError(submitResponse.error)}
+              </p>
+            )}
 
             {/* SurveyJS Renderer (light glass themed) */}
             <SurveyRendererSurveyJS

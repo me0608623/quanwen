@@ -15,7 +15,13 @@ interface Props {
   theme?: SurveyTheme;
 }
 
-type PreviewAnswer = { selectedOptionIds?: string[]; ratingValue?: number; textAnswer?: string };
+type PreviewAnswer = {
+  selectedOptionIds?: string[];
+  ratingValue?: number;
+  textAnswer?: string;
+  /** matrix: rowLabel -> column value (single) or column[] (multi) */
+  matrixAnswer?: Record<string, string | string[]>;
+};
 
 export function SurveyPreviewPlayer({ title, description, coverImageUrl, questions, theme }: Props) {
   const [currentIdx, setCurrentIdx] = useState(0);
@@ -56,11 +62,32 @@ export function SurveyPreviewPlayer({ title, description, coverImageUrl, questio
     setAnswers((prev) => ({ ...prev, [currentIdx]: { ...(prev[currentIdx] ?? {}), ...next } }));
   };
 
-  const canNext = !q.isRequired ||
-    (q.type === 'text' ? !!a.textAnswer?.trim() :
-      q.type === 'rating' ? a.ratingValue != null :
-        (q.type === 'single_choice' || q.type === 'multiple_choice') ? (a.selectedOptionIds?.length ?? 0) > 0 :
-          true);
+  const matrixCfg = (q.config?.matrix ?? {}) as { rows?: string[]; columns?: string[]; multiple?: boolean };
+  const matrixRows = matrixCfg.rows ?? [];
+  const matrixColumns = matrixCfg.columns ?? [];
+  const matrixMultiple = matrixCfg.multiple === true;
+  const matrixAnswer = a.matrixAnswer ?? {};
+  const matrixComplete =
+    matrixRows.length === 0
+      ? true
+      : matrixRows.every((row) => {
+          const v = matrixAnswer[row];
+          if (matrixMultiple) return Array.isArray(v) && v.length > 0;
+          return typeof v === 'string' && v.length > 0;
+        });
+
+  const canNext =
+    !q.isRequired ||
+    (q.type === 'text'
+      ? !!a.textAnswer?.trim()
+      : q.type === 'rating'
+        ? a.ratingValue != null
+        : q.type === 'single_choice' || q.type === 'multiple_choice'
+          ? (a.selectedOptionIds?.length ?? 0) > 0
+          : q.type === 'matrix'
+            ? matrixComplete
+            : true);
+  const requiredHint = q.isRequired && !canNext ? '此題為必填，請完成作答後再繼續' : null;
 
   return (
     <div
@@ -149,6 +176,56 @@ export function SurveyPreviewPlayer({ title, description, coverImageUrl, questio
             );
           })}
         </div>
+      )}
+
+      {q.type === 'matrix' && (
+        <div className="overflow-x-auto rounded border border-slate-200">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 text-slate-600">
+                <th className="px-2 py-1.5 text-left font-medium">陳述</th>
+                {matrixColumns.map((col, ci) => (
+                  <th key={ci} className="px-2 py-1.5 text-center font-medium">{col || `選項 ${ci + 1}`}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {matrixRows.map((row, ri) => (
+                <tr key={ri} className="border-t border-slate-100">
+                  <td className="px-2 py-1.5 text-slate-800">{row || `陳述 ${ri + 1}`}</td>
+                  {matrixColumns.map((col, ci) => {
+                    const selected = matrixAnswer[row];
+                    const checked = matrixMultiple
+                      ? Array.isArray(selected) && selected.includes(col)
+                      : selected === col;
+                    return (
+                      <td key={ci} className="px-2 py-1.5 text-center">
+                        <input
+                          type={matrixMultiple ? 'checkbox' : 'radio'}
+                          name={`preview-matrix-${currentIdx}-${ri}`}
+                          checked={!!checked}
+                          onChange={() => {
+                            if (matrixMultiple) {
+                              const prev = Array.isArray(selected) ? selected : [];
+                              const next = prev.includes(col) ? prev.filter((x) => x !== col) : [...prev, col];
+                              setAns({ matrixAnswer: { ...matrixAnswer, [row]: next } });
+                            } else {
+                              setAns({ matrixAnswer: { ...matrixAnswer, [row]: col } });
+                            }
+                          }}
+                        />
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {requiredHint && (
+        <p className="text-xs text-red-600" role="status">{requiredHint}</p>
       )}
 
       <div className="flex items-center justify-between">

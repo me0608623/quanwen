@@ -39,6 +39,13 @@ import { usePricingAdvice } from '@/hooks/use-pricing';
 import { estimateFillMinutes } from '@/lib/fill-time';
 import { lotteryDrawRule } from '@/lib/lottery-display';
 import { SURVEY_TEMPLATES } from '@/lib/survey-templates';
+import { extractApiError } from '@/lib/extract-error';
+import {
+  firstCompletenessMessage,
+  validateSurveyForPublish,
+  validateSurveyQuestions,
+} from '@/lib/survey-completeness';
+import { useAppToast } from '@/components/ui/app-toast';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: '草稿',
@@ -113,6 +120,8 @@ export default function SurveyDetailPage() {
   const [isPreparingPublish, setIsPreparingPublish] = useState(false);
   const [selectedQuestionIndex, setSelectedQuestionIndex] = useState<number | null>(null);
   const [initialized, setInitialized] = useState(false);
+
+  const { showToast, toastNode } = useAppToast();
 
   useEffect(() => {
     if (!survey) return;
@@ -190,11 +199,10 @@ export default function SurveyDetailPage() {
   useUnsavedChangesGuard(dirty);
 
   const showAxiosError = (err: unknown, fallback: string) => {
-    const e = err as { response?: { data?: { message?: string } } };
-    alert(e?.response?.data?.message ?? fallback);
+    showToast(extractApiError(err, fallback), 'error');
   };
 
-  const handleSave = async (): Promise<boolean> => {
+  const handleSave = async (opts?: { silent?: boolean }): Promise<boolean> => {
     const audienceCriteria = {
       ...audience,
       minReputationScore: minReputation > 0 ? minReputation : undefined,
@@ -225,6 +233,22 @@ export default function SurveyDetailPage() {
       autoCloseAfterN: autoCloseAfterN === '' ? null : Number(autoCloseAfterN),
     };
 
+    if (!title.trim()) {
+      showToast('請填寫問卷標題', 'error');
+      return false;
+    }
+
+    // 草稿儲存：題目/選項完整性與後端 Zod 對齊，避免空標題/空選項觸發難讀的 400
+    if (!isPublishedEditing && !(survey?.externalUrl)) {
+      const qIssues = validateSurveyQuestions(questions);
+      const msg = firstCompletenessMessage(qIssues);
+      if (msg) {
+        showToast(msg, 'error');
+        if (qIssues[0]?.questionIndex != null) setSelectedQuestionIndex(qIssues[0].questionIndex);
+        return false;
+      }
+    }
+
     try {
       if (isPublishedEditing) {
         // 已發布問卷：只送資訊類白名單欄位（題目/獎勵/排程鎖定，後端亦會擋）
@@ -244,6 +268,7 @@ export default function SurveyDetailPage() {
         });
       }
       setDirty(false);
+      if (!opts?.silent) showToast('已儲存變更', 'success');
       return true;
     } catch (err) {
       showAxiosError(err, '儲存失敗，請稍後再試。');
@@ -266,10 +291,22 @@ export default function SurveyDetailPage() {
   }, [canEditInfo, dirty, updateSurvey.isPending]);
 
   const openPublishConfirm = async () => {
+    const issues = validateSurveyForPublish({
+      title,
+      questions,
+      isExternal: !!survey?.externalUrl,
+    });
+    const blockMsg = firstCompletenessMessage(issues);
+    if (blockMsg) {
+      showToast(blockMsg, 'error');
+      if (issues[0]?.questionIndex != null) setSelectedQuestionIndex(issues[0].questionIndex);
+      return;
+    }
+
     setIsPreparingPublish(true);
     try {
       if (dirty) {
-        const saved = await handleSave();
+        const saved = await handleSave({ silent: true });
         if (!saved) return;
       }
       await refetchBudgetCheck();
@@ -283,11 +320,12 @@ export default function SurveyDetailPage() {
     try {
       // 發布的是「伺服器上的」問卷 — 有未儲存變更（含一鍵補上的抽獎說明）先存再發布
       if (dirty) {
-        const saved = await handleSave();
+        const saved = await handleSave({ silent: true });
         if (!saved) return;
       }
       await publishSurvey.mutateAsync(id);
       setShowPublishConfirm(false);
+      showToast('問卷已發布', 'success');
       // Don't use alert() — it blocks Playwright and delays React re-render.
       // The UI updates via TanStack query invalidation (status badge changes).
     } catch (err) {
@@ -299,8 +337,7 @@ export default function SurveyDetailPage() {
     try {
       await pauseSurvey.mutateAsync(id);
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '下架失敗，請稍後再試。');
+      showAxiosError(err, '下架失敗，請稍後再試。');
     }
   };
 
@@ -308,8 +345,7 @@ export default function SurveyDetailPage() {
     try {
       await closeSurvey.mutateAsync(id);
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '結案失敗，請稍後再試。');
+      showAxiosError(err, '結案失敗，請稍後再試。');
     }
   };
 
@@ -317,8 +353,7 @@ export default function SurveyDetailPage() {
     try {
       await publishSurvey.mutateAsync(id);
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '重新上架失敗，請稍後再試。');
+      showAxiosError(err, '重新上架失敗，請稍後再試。');
     }
   };
 
@@ -886,6 +921,7 @@ export default function SurveyDetailPage() {
 
   return (
     <>
+      {toastNode}
       <SurveyEditorShell
         surveyTitle={title}
         onTitleChange={(t) => {
@@ -947,6 +983,12 @@ export default function SurveyDetailPage() {
         const PLATFORM_FEE_RATE = 0.10;
         const required = budgetCheck?.requiredAmount ?? 0;
         const noQuestions = questions.length === 0;
+        const publishIssues = validateSurveyForPublish({
+          title,
+          questions,
+          isExternal: !!survey?.externalUrl,
+        });
+        const incomplete = publishIssues.length > 0;
         const balance = budgetCheck?.walletBalance ?? 0;
         const insufficient = required > 0 && !!budgetCheck && !budgetCheck.sufficient;
         const hasReward = survey?.type !== 'mutual' && required > 0;
@@ -1079,6 +1121,16 @@ export default function SurveyDetailPage() {
               {noQuestions && (
                 <p className="mt-3 text-xs text-destructive">問卷至少需要一道題目才能發布。</p>
               )}
+              {publishIssues.length > 0 && (
+                <ul className="mt-3 space-y-1 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
+                  {publishIssues.slice(0, 5).map((issue) => (
+                    <li key={issue.path}>• {issue.message}</li>
+                  ))}
+                  {publishIssues.length > 5 && (
+                    <li>…還有 {publishIssues.length - 5} 項需修正</li>
+                  )}
+                </ul>
+              )}
 
               {hasReward && (
                 <label className="mt-3 flex cursor-pointer items-start gap-2 text-xs">
@@ -1111,7 +1163,7 @@ export default function SurveyDetailPage() {
                 <button
                   type="button"
                   onClick={handlePublish}
-                  disabled={insufficient || noQuestions || needAck || publishSurvey.isPending || updateSurvey.isPending}
+                  disabled={insufficient || noQuestions || incomplete || needAck || publishSurvey.isPending || updateSurvey.isPending}
                   className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-60"
                 >
                   {publishSurvey.isPending || updateSurvey.isPending

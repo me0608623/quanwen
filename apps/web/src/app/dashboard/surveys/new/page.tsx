@@ -14,6 +14,9 @@ import { ImageUploader } from '@/components/survey-editor/image-uploader';
 import { WelcomeImagesEditor } from '@/components/survey-editor/welcome-images-editor';
 import { useDebouncedValue } from '@/hooks/use-debounced-value';
 import { useUnsavedChangesGuard } from '@/hooks/use-unsaved-changes-guard';
+import { extractApiError } from '@/lib/extract-error';
+import { firstCompletenessMessage, validateSurveyQuestions } from '@/lib/survey-completeness';
+import { useAppToast } from '@/components/ui/app-toast';
 
 function localDateTimeInputValue(date: Date): string {
   return new Date(date.getTime() - date.getTimezoneOffset() * 60_000).toISOString().slice(0, 16);
@@ -39,6 +42,7 @@ const defaultQuestion = (): SurveyQuestion => ({
 export default function NewSurveyPage() {
   const router = useRouter();
   const createSurvey = useCreateSurvey();
+  const { showToast, toastNode } = useAppToast();
 
   const [type, setType] = useState<'standard' | 'mutual'>('standard');
   const [category, setCategory] = useState<SurveyCategory | ''>('');
@@ -141,6 +145,13 @@ export default function NewSurveyPage() {
   };
 
   const handleSaveDraft = async () => {
+    if (!(type === 'standard' && isExternal) && questions.length > 0) {
+      const msg = firstCompletenessMessage(validateSurveyQuestions(questions));
+      if (msg) {
+        showToast(msg, 'error');
+        return;
+      }
+    }
     try {
       const survey = await createSurvey.mutateAsync({
         title: title || '未命名問卷',
@@ -175,13 +186,13 @@ export default function NewSurveyPage() {
       savedRef.current = true;
       router.push(`/dashboard/surveys/${survey.id}`);
     } catch (err) {
-      const e = err as { response?: { data?: { message?: string } } };
-      alert(e?.response?.data?.message ?? '儲存失敗，請稍後再試');
+      showToast(extractApiError(err, '儲存失敗，請稍後再試'), 'error');
     }
   };
 
   return (
     <main className="mx-auto max-w-3xl space-y-6">
+      {toastNode}
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">新增問卷</h1>
